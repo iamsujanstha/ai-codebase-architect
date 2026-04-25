@@ -30,6 +30,8 @@ import {
   QuotedLineItem,
 } from './interfaces/payment-quote.interface';
 import { Order, OrderDocument } from './schemas/order.schema';
+import { MailService } from '../mail/mail.service';
+
 
 interface PricedCartLine {
   productId: string;
@@ -106,6 +108,7 @@ export class PaymentsService {
     private readonly productModel: Model<ProductDocument>,
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
+    private readonly mailService: MailService,
   ) {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? '';
     this.stripeClient = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
@@ -816,7 +819,11 @@ export class PaymentsService {
       changedAt: new Date(),
     });
     await order.save();
+
+    // Send confirmation email asynchronously
+    void this.mailService.sendOrderConfirmation(order);
   }
+
 
   private async markOrderAsFailed(
     orderNumber: string | null,

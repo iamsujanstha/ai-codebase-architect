@@ -12,27 +12,28 @@ services:
   # Why keep a local Mongo container even though Atlas is supported?
   # Because teaching projects should still run out of the box.
   # =========================================================
-  mongo:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "mongosh",
-          "--quiet",
-          "--eval",
-          "db.adminCommand('ping').ok"
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
-    networks:
-      - assistant-network
+#  mongo:
+#    image: mongo:7
+#    ports:
+#      - "27017:27017"
+#    volumes:
+#      - mongo_data:/data/db
+#    healthcheck:
+#      test:
+#        [
+#          "CMD",
+#          "mongosh",
+#          "--quiet",
+#          "--eval",
+#          "db.adminCommand('ping').ok"
+#        ]
+#      interval: 15s
+#      timeout: 10s
+#      retries: 5
+#      start_period: 15s
+#    networks:
+#      - assistant-network
+
 
   # =========================================================
   # AI SERVICE (Python / FastAPI or Flask)
@@ -213,8 +214,7 @@ services:
     depends_on:
       ai-service:
         condition: service_healthy
-      mongo:
-        condition: service_healthy
+
 
     # Real runtime command
     command: npm run start:prod

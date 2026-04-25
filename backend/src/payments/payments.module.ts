@@ -5,6 +5,8 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { Order, OrderSchema } from './schemas/order.schema';
 
+import { MailModule } from '../mail/mail.module';
+
 // Payment integrations deserve their own module because they combine:
 // - provider-specific APIs
 // - order persistence
@@ -18,7 +20,9 @@ import { Order, OrderSchema } from './schemas/order.schema';
       { name: Product.name, schema: ProductSchema },
       { name: Order.name, schema: OrderSchema },
     ]),
+    MailModule,
   ],
+
   controllers: [PaymentsController],
   providers: [PaymentsService],
   exports: [PaymentsService],
