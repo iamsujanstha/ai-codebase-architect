@@ -1,126 +1,232 @@
-# AI Code Assistant Platform
+# Atlas Commerce Lab
 
-This repository contains a complete teaching-focused monorepo that demonstrates how to build a small AI SaaS platform with a modern frontend, an orchestration backend, and a dedicated AI microservice.
+Atlas Commerce Lab is a production-style teaching monorepo that combines two realistic product surfaces in one application:
 
-The platform behaves like a mini ChatGPT-style assistant:
+1. a modern ecommerce storefront on `/`
+2. a local Ollama-powered AI concierge on `/chat`
 
-1. A user enters a prompt in the React frontend.
-2. The NestJS backend validates the request and acts as the API gateway.
-3. The FastAPI AI service generates a structured response.
-4. The backend returns the response to the frontend for display.
+The stack uses:
 
-## Why this project exists
+- `frontend`: React + Vite
+- `backend`: NestJS API gateway
+- `database`: MongoDB via Mongoose (Atlas-ready, local Mongo included for zero-config Docker runs)
+- `ai-service`: FastAPI service that talks to local Ollama
+- `docker-compose`: local orchestration
 
-This codebase is intentionally written like a senior engineer mentoring a junior engineer:
+The goal is to show how a real SaaS could combine commerce, backend orchestration, and AI capabilities inside one clean architecture.
 
-- Source files contain extensive teaching comments.
-- Architecture decisions are explained, not just implemented.
-- The system uses clean boundaries so each layer has a clear responsibility.
-- Docker Compose makes the project runnable as a multi-service platform.
+## What this project demonstrates
 
-## Architecture Overview
+- route-based React application design with a shared product shell
+- NestJS as the orchestration layer between browser, MongoDB, and AI services
+- MongoDB catalog modeling with Mongoose
+- MongoDB Atlas-ready configuration through environment variables
+- local-LLM integration through Ollama
+- streaming chat UX with token/timing metadata
+- production-style containerization and service boundaries
+
+## Product experience
+
+### `/`
+
+The home route is now a premium ecommerce storefront with:
+
+- hero merchandising section
+- category filters
+- Mongo-backed product catalog
+- product detail pages
+- persistent cart drawer
+- light and dark theme support
+
+### `/chat`
+
+The chat route preserves the local-model experience with:
+
+- model picker sourced from Ollama
+- conversation history
+- streamed token-by-token responses
+- code blocks rendered like an editor with copy actions
+- usage/timing metadata
+
+## Architecture diagram
 
 ```text
-┌──────────────────────────┐
-│       React Frontend     │
-│  Vite + Nginx container  │
-│  Port: 8080             │
-└────────────┬─────────────┘
-             │ HTTP request from browser
-             ▼
-┌──────────────────────────┐
-│     NestJS Backend       │
-│   API Gateway / BFF      │
-│   Port: 3000             │
-└────────────┬─────────────┘
-             │ Internal service-to-service HTTP
-             ▼
-┌──────────────────────────┐
-│    FastAPI AI Service    │
-│  Ollama-backed AI engine │
-│  Port: 8000              │
-└──────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                    React Frontend (Vite)                  │
+│  Routes: `/`, `/products/:slug`, `/chat`                 │
+│  Responsibilities: UX, routing, cart state, rendering    │
+└───────────────┬───────────────────────────────┬────────────┘
+                │                               │
+                │ /catalog/*                    │ /ai/*
+                ▼                               ▼
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│     NestJS Catalog/API       │   │      NestJS AI Gateway       │
+│  Mongo-backed ecommerce API  │   │  FastAPI orchestration proxy │
+└───────────────┬──────────────┘   └───────────────┬──────────────┘
+                │                                  │
+                ▼                                  ▼
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│ MongoDB / MongoDB Atlas      │   │ FastAPI AI Service           │
+│ Products, categories, seed   │   │ Talks to local Ollama        │
+└──────────────────────────────┘   └───────────────┬──────────────┘
+                                                   ▼
+                                      ┌──────────────────────────────┐
+                                      │ Ollama running locally       │
+                                      │ Installed local models       │
+                                      └──────────────────────────────┘
 ```
 
-## Folder Structure
+## Folder structure
 
 ```text
 .
-├── frontend/              # React + Vite user interface
-├── backend/               # NestJS API gateway
-├── ai-service/            # FastAPI AI engine
-├── docker-compose.yml     # Multi-container orchestration
-└── README.md              # This guide
+├── frontend/
+│   ├── src/app/                     # App shell, routing, global CSS
+│   ├── src/core/api/                # HTTP clients for AI + catalog APIs
+│   ├── src/core/types/              # Frontend API contracts
+│   ├── src/features/chat/           # `/chat` experience
+│   ├── src/features/store/          # Ecommerce pages, cart state, UI
+│   ├── src/features/models/         # Local model sidebar
+│   ├── src/shared/                  # Theme + shared UI utilities
+│   └── nginx.conf                   # SPA serving + API proxy config
+├── backend/
+│   ├── src/ai/                      # AI gateway routes and services
+│   ├── src/catalog/                 # Mongo-backed ecommerce module
+│   │   ├── data/                    # Seed catalog + marketing content
+│   │   ├── dto/                     # Query validation contracts
+│   │   ├── interfaces/              # Stable response contracts
+│   │   └── schemas/                 # Mongoose models
+│   └── src/common/                  # Shared backend filters/interfaces
+├── ai-service/
+│   └── app/                         # FastAPI AI engine + Ollama client
+├── docker-compose.yml               # Full local stack orchestration
+├── .env.example                     # Atlas + Ollama environment template
+└── README.md                        # This guide
 ```
 
-## Key Design Principles
+## Why the backend is the orchestration layer
 
-### 1. Frontend is responsible for experience
+The browser does **not** talk directly to MongoDB or Ollama.
 
-The frontend owns:
+That separation is intentional and mirrors production systems:
 
-- collecting user input
-- showing loading and error states
-- rendering the AI response clearly
+- the backend validates requests
+- the backend owns database access rules
+- the backend hides internal service topology
+- the backend is the right home for auth, rate limiting, audit logs, and billing later
 
-It does **not** own AI logic or business orchestration.
+This is why the architecture stays maintainable as the app grows.
 
-### 2. Backend is responsible for orchestration
+## Catalog API overview
 
-The backend exists because real SaaS systems rarely let browsers call internal AI engines directly.
+### `GET /catalog/home`
 
-It handles:
+Returns the full storefront landing payload:
 
-- request validation
-- consistent API contracts
-- downstream service coordination
-- centralized error handling
-- a future home for authentication, rate limiting, billing, and observability
+- announcement banner
+- hero copy and stats
+- categories
+- featured products
+- new arrivals
+- catalog products
+- value props
+- testimonials
 
-### 3. AI service is responsible for AI-specific behavior
+### `GET /catalog/categories`
 
-The AI service is isolated so it can evolve independently.
+Returns category summaries with product counts.
 
-This version uses a real local Ollama model by default.
+### `GET /catalog/products`
 
-That means the platform now behaves more like a practical local-AI stack:
+Query parameters:
 
-- the browser talks only to the backend
-- the backend talks to the AI microservice
-- the AI microservice talks to Ollama running on your machine
-- the frontend still receives one stable response contract
+- `category`
+- `search`
+- `featured`
+- `limit`
 
-## Running the Platform with Docker
+Example:
+
+```bash
+curl "http://localhost:3000/catalog/products?category=audio&limit=4"
+```
+
+### `GET /catalog/products/:slug`
+
+Returns:
+
+- a single product detail payload
+- related products from the same category
+
+## AI API overview
+
+### `GET /ai/models`
+
+Lists models discovered from local Ollama.
+
+### `POST /ai/generate`
+
+One-shot AI generation.
+
+### `POST /ai/generate/stream`
+
+Streaming NDJSON chat endpoint used by the `/chat` page.
+
+Example stream shape:
+
+```json
+{"type":"start","requestId":"...","provider":"ollama-local","model":"deepseek-coder:6.7b","generatedAt":"2026-04-25T12:34:56.000Z"}
+{"type":"delta","requestId":"...","delta":"Here is how I would design the service..."}
+{"type":"done","requestId":"...","provider":"ollama-local","model":"deepseek-coder:6.7b","generatedAt":"2026-04-25T12:35:18.000Z","usage":{"inputTokens":62,"outputTokens":250,"totalTokens":312},"timings":{"totalDurationMs":21969,"loadDurationMs":4271,"promptEvalDurationMs":1383,"completionDurationMs":15395},"doneReason":"stop"}
+```
+
+## MongoDB Atlas configuration
+
+This repository supports **both**:
+
+- local Mongo through Docker Compose
+- MongoDB Atlas through `MONGODB_URI`
+
+### Local Docker default
+
+If you do nothing, the backend uses the `mongo` container from `docker-compose.yml`.
+
+### Atlas setup
+
+1. Copy `.env.example` to `.env`
+2. Set `MONGODB_URI` to your Atlas connection string
+3. Optionally keep `MONGODB_DB_NAME=ai_commerce_platform`
+4. Run `docker compose up --build`
+
+Example Atlas URI:
+
+```env
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority&appName=atlas-commerce-lab
+```
+
+## Running with Docker
 
 ### Prerequisites
 
 - Docker Desktop or Docker Engine with Compose support
 - Ollama installed locally
-- At least one local Ollama model
-
-Recommended model for this repo:
+- at least one Ollama model, for example:
 
 ```bash
 ollama pull deepseek-coder:6.7b
 ```
 
-### Start everything
+### Start the full stack
 
 ```bash
 docker compose up --build
 ```
 
-### Open the application
+### Open the app
 
-- Frontend UI: `http://localhost:8080`
-- Backend health endpoint: `http://localhost:3000/health`
-- AI service health endpoint: `http://localhost:8000/health`
-
-Docker note:
-
-- the `ai-service` container uses `http://host.docker.internal:11434` to reach your local Ollama daemon
-- this is the usual Docker Desktop path on macOS and Windows
-- on Linux, you may need to override `OLLAMA_BASE_URL`
+- Frontend: `http://localhost:8080`
+- Store API root health: `http://localhost:3000/health`
+- AI service health: `http://localhost:8000/health`
 
 ### Stop the stack
 
@@ -128,9 +234,30 @@ Docker note:
 docker compose down
 ```
 
-## Local Development Without Docker
+### Notes
 
-### 1. Start the AI service
+- The frontend container proxies `/catalog` and `/ai` to the NestJS backend.
+- The backend uses local Mongo by default, unless `MONGODB_URI` is provided.
+- The AI service uses `host.docker.internal` to reach local Ollama on macOS/Windows.
+- On Linux, you may need to override `OLLAMA_BASE_URL`.
+
+## Local development without Docker
+
+### 1. Start MongoDB
+
+Use either:
+
+- your local Mongo server, or
+- MongoDB Atlas, or
+- a local Docker Mongo container
+
+Example local Mongo container:
+
+```bash
+docker run --name atlas-commerce-mongo -p 27017:27017 mongo:7
+```
+
+### 2. Start the AI service
 
 ```bash
 cd ai-service
@@ -139,15 +266,28 @@ export OLLAMA_MODEL=deepseek-coder:6.7b
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 2. Start the backend
+### 3. Start the backend
 
 ```bash
 cd backend
 npm install
-AI_SERVICE_URL=http://localhost:8000 npm run start:dev
+MONGODB_URI=mongodb://localhost:27017 \
+MONGODB_DB_NAME=ai_commerce_platform \
+AI_SERVICE_URL=http://localhost:8000 \
+npm run start:dev
 ```
 
-### 3. Start the frontend
+If using Atlas:
+
+```bash
+cd backend
+MONGODB_URI="mongodb+srv://..." \
+MONGODB_DB_NAME=ai_commerce_platform \
+AI_SERVICE_URL=http://localhost:8000 \
+npm run start:dev
+```
+
+### 4. Start the frontend
 
 ```bash
 cd frontend
@@ -155,156 +295,77 @@ npm install
 npm run dev
 ```
 
-Then open the Vite development URL shown in the terminal, usually `http://localhost:5173`.
+Then open `http://localhost:5173`.
 
-## API Documentation
+## Validation commands
 
-### Backend: `POST /ai/generate`
+These are the most useful checks while iterating:
 
-This remains the structured one-shot endpoint.
-
-#### Request body
-
-```json
-{
-  "prompt": "Explain microservices"
-}
+```bash
+cd frontend && npm run build
+cd backend && npm run build
+cd ai-service && python3 -m py_compile app/main.py app/api/routes/generate.py app/services/ollama_client.py
 ```
 
-#### Example response
+## Production-style reasoning behind the design
 
-```json
-{
-  "requestId": "6c09f719-4211-4334-9ad4-51826f913cb5",
-  "prompt": "Explain microservices",
-  "summary": "Microservices split a large system into smaller, independently deployable services.",
-  "answer": "## Understanding microservices\n\nMicroservices are an architectural style...",
-  "keyPoints": [
-    "Each service owns a focused business capability.",
-    "Teams can deploy services independently.",
-    "The tradeoff is added operational complexity.",
-    "Gateways often unify many services for clients."
-  ],
-  "suggestedFollowUpPrompts": [
-    "Compare monoliths and microservices",
-    "Explain API gateways in microservice systems",
-    "How do microservices communicate securely?"
-  ],
-  "provider": "ollama-local",
-  "model": "deepseek-coder:6.7b",
-  "upstreamProcessingTimeMs": 120,
-  "gatewayProcessingTimeMs": 135,
-  "generatedAt": "2026-04-25T12:34:56.000Z"
-}
+### Frontend
+
+- React Router separates the storefront and AI workspace cleanly.
+- Cart state is kept in a context with local persistence because checkout/auth are not yet implemented.
+- The chat view streams incremental AI tokens for a more realistic assistant UX.
+
+### Backend
+
+- NestJS exposes a catalog module and an AI module as separate business capabilities.
+- Mongoose schemas model a real catalog instead of loose JSON blobs.
+- Seed data gives first-run environments useful content immediately.
+
+### AI service
+
+- FastAPI stays focused on AI responsibilities.
+- Ollama access is isolated in a provider client.
+- Streaming and one-shot responses are normalized into stable contracts.
+
+## Learning outcomes
+
+By studying this repository, you can learn how to:
+
+- structure a monorepo with multiple frontend/backend services
+- design route-based React applications with a shared shell
+- build a Mongo-backed NestJS feature module with Mongoose
+- expose frontend-friendly API contracts from backend services
+- integrate local Ollama models through a dedicated FastAPI layer
+- stream AI responses into a polished chat UI
+- containerize a multi-service app for local product development
+
+## Future improvements
+
+Natural next steps for a real product include:
+
+- authentication and saved carts
+- checkout and payments
+- admin product management dashboard
+- order history and fulfillment APIs
+- image uploads via object storage
+- semantic search over the catalog using embeddings
+- AI shopping assistant that can reference products directly
+- rate limiting and usage analytics
+- OpenTelemetry tracing
+- Redis caching for hot catalog queries
+- CDN-backed asset delivery
+
+## Quick demo flow
+
+1. Open `/`
+2. Browse products loaded from MongoDB
+3. Add items to the cart drawer
+4. Open `/products/:slug` for a detail page
+5. Switch to `/chat`
+6. Ask the local model something like:
+
+```text
+Compare ergonomic mice for a software engineer working 10 hours a day.
 ```
 
-### Backend: `POST /ai/generate/stream`
-
-This is the chat-style streaming endpoint used by the new frontend experience.
-
-It returns newline-delimited JSON events over one HTTP response:
-
-```json
-{"type":"start","requestId":"...","provider":"ollama-local","model":"deepseek-coder:6.7b","generatedAt":"2026-04-25T12:34:56.000Z"}
-{"type":"delta","requestId":"...","delta":"Microservices "}
-{"type":"delta","requestId":"...","delta":"split systems into smaller services..."}
-{"type":"done","requestId":"...","provider":"ollama-local","model":"deepseek-coder:6.7b","generatedAt":"2026-04-25T12:35:18.000Z","usage":{"inputTokens":62,"outputTokens":250,"totalTokens":312},"timings":{"totalDurationMs":21969,"loadDurationMs":4271,"promptEvalDurationMs":1383,"completionDurationMs":15395},"doneReason":"stop"}
-```
-
-### Backend: `GET /ai/models`
-
-This endpoint powers the local model picker in the frontend.
-
-Example response:
-
-```json
-{
-  "defaultModel": "deepseek-coder:6.7b",
-  "models": [
-    {
-      "name": "deepseek-coder:6.7b",
-      "sizeBytes": 4080218931,
-      "sizeLabel": "3.8 GB",
-      "modifiedAt": "2026-04-18T00:00:00Z",
-      "family": "deepseek",
-      "parameterSize": "6.7B",
-      "quantizationLevel": "Q4_K_M"
-    }
-  ]
-}
-```
-
-### AI Service: `POST /generate`
-
-This is the internal service-to-service endpoint consumed by the NestJS backend.
-
-#### Request body
-
-```json
-{
-  "prompt": "Explain microservices",
-  "request_id": "6c09f719-4211-4334-9ad4-51826f913cb5",
-  "model": "deepseek-coder:6.7b"
-}
-```
-
-## Docker Architecture Notes
-
-The Docker setup intentionally models a production-style boundary:
-
-- `frontend` is a presentation container that serves static assets via Nginx.
-- `backend` is the public application API.
-- `ai-service` is an internal specialized microservice that translates app prompts into Ollama requests.
-- Docker networking allows services to call each other by service name such as `backend` and `ai-service`.
-
-This is exactly how many real platforms evolve:
-
-- one service owns the UI
-- one service owns orchestration
-- one service owns AI/model behavior
-
-## Learning Outcomes
-
-If you study this project carefully, you will learn:
-
-- how frontend, backend, and AI services collaborate
-- why API gateways exist in AI products
-- how request validation improves safety and reliability
-- how service boundaries reduce coupling
-- how Docker Compose models multi-container systems
-- how to design code for future LLM integration
-
-## Future Improvements
-
-This project is intentionally complete for learning, but also intentionally extensible.
-
-Great next steps include:
-
-1. **Additional LLM integrations**
-   - add OpenAI, Anthropic, or provider routing alongside Ollama
-2. **Conversation memory**
-   - persist messages in PostgreSQL or Redis
-3. **Vector search**
-   - add pgvector, Qdrant, or Weaviate
-4. **Authentication**
-   - add JWT, session cookies, or OAuth
-5. **Authorization and billing**
-   - add plans, quotas, and usage controls
-6. **Observability**
-   - add structured logs, tracing, and metrics
-7. **Async workloads**
-   - offload long prompts to a queue worker
-8. **Scaling**
-   - independently scale the frontend, gateway, and AI service
-
-## Recommended Demo Prompt
-
-After you start the stack, try this:
-
-> Explain microservices with a real-world example from Netflix, and explain why API gateways matter in AI SaaS platforms
-
-You will see the full flow:
-
-Frontend → Backend → AI Service → Backend → Frontend
-
-That is the core learning goal of this repository.
+That flow is what makes this project feel like a real integrated platform rather than an isolated demo.

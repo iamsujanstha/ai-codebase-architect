@@ -18,7 +18,7 @@ describe('AppController', () => {
     it('should describe the gateway service', () => {
       expect(appController.getOverview()).toEqual(
         expect.objectContaining({
-          service: 'AI Code Assistant Backend Gateway',
+          service: 'AI Commerce + Local LLM Backend Gateway',
         }),
       );
     });

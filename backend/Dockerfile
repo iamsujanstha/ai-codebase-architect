@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy manifests first to maximize Docker layer caching.
 COPY package*.json ./
 
-# Install all dependencies, including dev dependencies needed for TypeScript compilation.
-RUN npm install
+# Install all dependencies with retry for network stability.
+RUN npm install || (sleep 5 && npm install) || (sleep 10 && npm install)
 
 # Copy the source after dependencies to avoid invalidating the cache too early.
 COPY . .
@@ -25,7 +25,8 @@ ENV NODE_ENV=production
 
 # Install only runtime dependencies in the final image.
 COPY package*.json ./
-RUN npm install --omit=dev
+# Install only runtime dependencies with retry.
+RUN npm install --omit=dev || (sleep 5 && npm install --omit=dev) || (sleep 10 && npm install --omit=dev)
 
 # Copy the compiled application from the build stage.
 COPY --from=build /app/dist ./dist

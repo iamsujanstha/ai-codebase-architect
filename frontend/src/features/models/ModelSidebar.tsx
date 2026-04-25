@@ -38,8 +38,11 @@ export function ModelSidebar({
   return (
     <>
       <div className="brand-block">
-        <p className="section-kicker">Enterprise AI</p>
-        <h2>Control Plane</h2>
+        <p className="section-kicker">Local models</p>
+        <h2>AI Studio</h2>
+        <p className="sidebar-copy">
+          Keep the full storefront on `/` and the local-model workspace on `/chat`.
+        </p>
       </div>
 
       <button className="primary-button new-chat-button" onClick={onNewChat}>
