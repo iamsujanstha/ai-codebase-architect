@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles.css';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 // This is the true runtime entry point for the browser application.
 // Think of it as the bootstrap function of the frontend.
@@ -11,7 +12,9 @@ import './styles.css';
 // - It encourages safer React code that behaves more predictably in production.
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
   </React.StrictMode>,
 );
 

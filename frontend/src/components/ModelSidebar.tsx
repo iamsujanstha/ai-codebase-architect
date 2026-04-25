@@ -25,7 +25,7 @@ export function ModelSidebar({
       : 'Ready';
 
   return (
-    <aside className="sidebar">
+    <>
       <div className="brand-block">
         <p className="section-kicker">Production Demo</p>
         <h2>AI Control Plane</h2>
@@ -99,6 +99,6 @@ export function ModelSidebar({
           })}
         </div>
       </section>
-    </aside>
+    </>
   );
 }

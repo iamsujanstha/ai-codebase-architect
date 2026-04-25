@@ -3,10 +3,9 @@ import { ChatWindow } from './components/ChatWindow';
 import { ModelSidebar } from './components/ModelSidebar';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useAiAssistant } from './hooks/useAiAssistant';
-import { useTheme } from './hooks/useTheme';
+import { MainLayout } from './components/layout/MainLayout';
 
 export default function App(): JSX.Element {
-  const { theme, setTheme } = useTheme();
   const {
     draft,
     setDraft,
@@ -23,74 +22,70 @@ export default function App(): JSX.Element {
     refreshModels,
   } = useAiAssistant();
 
+  const sidebar = (
+    <ModelSidebar
+      models={models}
+      selectedModel={selectedModel}
+      isLoadingModels={isLoadingModels}
+      modelError={modelError}
+      onSelectModel={setSelectedModel}
+      onRefreshModels={refreshModels}
+    />
+  );
+
   return (
-    <main className="app-shell">
-      <ModelSidebar
-        models={models}
-        selectedModel={selectedModel}
-        isLoadingModels={isLoadingModels}
-        modelError={modelError}
-        onSelectModel={setSelectedModel}
-        onRefreshModels={refreshModels}
+    <MainLayout sidebar={sidebar}>
+      <header className="chat-header">
+        <div>
+          <p className="section-kicker">Local AI Workspace</p>
+          <h1>Chat with your models</h1>
+          <p className="chat-subtitle">
+            Responses stream token-by-token, powered by local infrastructure.
+          </p>
+        </div>
+
+        <div className="chat-toolbar">
+          <label className="toolbar-field" htmlFor="header-model-select">
+            <span>Model</span>
+            <select
+              id="header-model-select"
+              value={selectedModel}
+              onChange={(event) => setSelectedModel(event.target.value)}
+              disabled={isLoadingModels || models.length === 0}
+            >
+              {models.map((model) => (
+                <option key={model.name} value={model.name}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="status-chip">
+            {isLoadingModels ? 'Loading...' : `${models.length} models`}
+          </div>
+
+          <ThemeToggle />
+        </div>
+      </header>
+
+      <ChatWindow
+        messages={messages}
+        isStreaming={isStreaming}
+        error={error}
+        onStarterPrompt={handleSubmit}
       />
 
-      <section className="chat-shell">
-        <header className="chat-header">
-          <div>
-            <p className="section-kicker">Local AI Workspace</p>
-            <h1>Chat with your Ollama models</h1>
-            <p className="chat-subtitle">
-              Responses stream token-by-token through the backend gateway, just
-              like a production AI application should feel.
-            </p>
-          </div>
-
-          <div className="chat-toolbar">
-            <label className="toolbar-field" htmlFor="header-model-select">
-              <span>Model</span>
-              <select
-                id="header-model-select"
-                value={selectedModel}
-                onChange={(event) => setSelectedModel(event.target.value)}
-                disabled={isLoadingModels || models.length === 0}
-              >
-                {models.map((model) => (
-                  <option key={model.name} value={model.name}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="status-chip">
-              {isLoadingModels ? 'Loading models' : `${models.length} local models`}
-            </div>
-
-            <ThemeToggle
-              theme={theme}
-              onThemeChange={setTheme}
-            />
-          </div>
-        </header>
-
-        <ChatWindow
-          messages={messages}
-          isStreaming={isStreaming}
-          error={error}
-          onStarterPrompt={handleSubmit}
-        />
-
-        <ChatComposer
-          draft={draft}
-          selectedModel={selectedModel}
-          isStreaming={isStreaming}
-          isLoadingModels={isLoadingModels}
-          modelCount={models.length}
-          onDraftChange={setDraft}
-          onSubmit={() => handleSubmit()}
-          onStop={stopStreaming}
-        />
-      </section>
-    </main>
+      <ChatComposer
+        draft={draft}
+        selectedModel={selectedModel}
+        isStreaming={isStreaming}
+        isLoadingModels={isLoadingModels}
+        modelCount={models.length}
+        onDraftChange={setDraft}
+        onSubmit={() => handleSubmit()}
+        onStop={stopStreaming}
+      />
+    </MainLayout>
   );
 }
