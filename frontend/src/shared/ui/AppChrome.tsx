@@ -14,6 +14,8 @@ export function AppChrome(): JSX.Element {
 
   const routeLabel = location.pathname.startsWith('/chat')
     ? 'Local AI concierge'
+    : location.pathname.startsWith('/checkout')
+      ? 'Payments orchestration'
     : 'Mongo-backed storefront';
 
   return (

@@ -22,6 +22,11 @@ export class AppService {
         catalogProducts: 'GET /catalog/products',
         catalogProductDetail: 'GET /catalog/products/:slug',
         catalogCategories: 'GET /catalog/categories',
+        paymentQuote: 'POST /payments/quote',
+        stripeCheckout: 'POST /payments/stripe/checkout-session',
+        stripeWebhook: 'POST /payments/stripe/webhook',
+        esewaInitiate: 'POST /payments/esewa/initiate',
+        orderStatus: 'GET /payments/orders/:orderNumber',
         aiModels: 'GET /ai/models',
         aiGenerate: 'POST /ai/generate',
         aiGenerateStream: 'POST /ai/generate/stream',
@@ -56,6 +61,12 @@ export class AppService {
           'ai_commerce_platform',
         state:
           mongoReadyStateMap[this.mongoConnection?.readyState ?? 0] ?? 'unknown',
+      },
+      payments: {
+        stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
+        esewaConfigured: Boolean(
+          process.env.ESEWA_PRODUCT_CODE && process.env.ESEWA_SECRET_KEY,
+        ),
       },
     };
   }

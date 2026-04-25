@@ -1,9 +1,10 @@
 import type { CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '@/features/store/CartContext';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 
 export function CartDrawer(): JSX.Element {
+  const navigate = useNavigate();
   const {
     items,
     itemCount,
@@ -120,7 +121,14 @@ export function CartDrawer(): JSX.Element {
                 <button className="ghost-button" type="button" onClick={clearCart}>
                   Clear cart
                 </button>
-                <button className="primary-button" type="button">
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => {
+                    closeCart();
+                    navigate('/checkout');
+                  }}
+                >
                   Continue to checkout
                 </button>
               </div>

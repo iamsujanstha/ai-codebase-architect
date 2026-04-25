@@ -71,6 +71,12 @@ export class Product {
   @Prop({ required: true, trim: true, default: 'USD' })
   currency!: string;
 
+  // eSewa operates in a Nepal-specific payment context, so we store an explicit
+  // NPR selling price rather than performing ad-hoc FX conversion at checkout time.
+  // Production systems often keep regional price books for exactly this reason.
+  @Prop({ type: Number, min: 0, default: null })
+  nprPrice!: number | null;
+
   @Prop({ required: true, min: 0, max: 5 })
   rating!: number;
 

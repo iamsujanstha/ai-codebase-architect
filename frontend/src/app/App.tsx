@@ -1,5 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ChatPage } from '@/features/chat/ChatPage';
+import { CheckoutPage } from '@/features/store/CheckoutPage';
+import { CheckoutResultPage } from '@/features/store/CheckoutResultPage';
 import { ProductDetailsPage } from '@/features/store/ProductDetailsPage';
 import { StorefrontPage } from '@/features/store/StorefrontPage';
 import { CartProvider } from '@/features/store/CartContext';
@@ -22,6 +24,8 @@ export default function App(): JSX.Element {
         <Routes>
           <Route element={<AppChrome />}>
             <Route path="/" element={<StorefrontPage />} />
+            <Route path="/checkout" element={<CheckoutPage />} />
+            <Route path="/checkout/result" element={<CheckoutResultPage />} />
             <Route path="/products/:slug" element={<ProductDetailsPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="*" element={<Navigate replace to="/" />} />
