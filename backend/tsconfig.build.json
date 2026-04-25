@@ -1,0 +1,5 @@
+{
+  // Build config excludes tests and generated artifacts so production builds stay lean.
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+}

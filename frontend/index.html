@@ -1,0 +1,33 @@
+<!--
+  This HTML file is intentionally small because, in a modern React/Vite app,
+  most of the real UI work happens inside the React component tree.
+
+  Why keep this file?
+  - It provides the root DOM node where React mounts.
+  - It defines metadata that browsers and search tools use.
+  - It remains a useful teaching point: SPAs still begin with a normal HTML page.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <meta
+      name="description"
+      content="AI Code Assistant Platform built with React, NestJS, FastAPI, and Docker Compose."
+    />
+    <title>AI Code Assistant Platform</title>
+  </head>
+  <body>
+    <!--
+      React renders the application into this root element.
+      You can think of this as the "dock" where the JavaScript app attaches itself.
+    -->
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

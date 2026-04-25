@@ -1,0 +1,7 @@
+# Ignoring local and generated artifacts keeps Docker builds deterministic and efficient.
+
+node_modules
+dist
+coverage
+.DS_Store
+

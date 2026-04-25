@@ -1,0 +1,14 @@
+{
+  // This config covers Node-based tooling files such as vite.config.ts.
+  // Separating toolchain typing from browser typing prevents subtle environment confusion.
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowSyntheticDefaultImports": true,
+    "strict": true
+  },
+  "include": ["vite.config.ts"]
+}
+

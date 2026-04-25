@@ -1,0 +1,17 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './styles.css';
+
+// This is the true runtime entry point for the browser application.
+// Think of it as the bootstrap function of the frontend.
+//
+// Why use StrictMode?
+// - It helps catch lifecycle and side-effect mistakes during development.
+// - It encourages safer React code that behaves more predictably in production.
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
+

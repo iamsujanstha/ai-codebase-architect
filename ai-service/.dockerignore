@@ -1,0 +1,8 @@
+# Keeping the Docker build context small makes builds faster and more predictable.
+
+__pycache__
+*.pyc
+.venv
+.pytest_cache
+.DS_Store
+

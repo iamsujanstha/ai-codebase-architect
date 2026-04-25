@@ -1,0 +1,10 @@
+{
+  // This root TypeScript config uses project references.
+  // That is a scalable pattern because app code and tool-specific code can evolve independently.
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
+

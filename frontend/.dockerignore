@@ -1,0 +1,7 @@
+# Docker should only receive the files needed to build the frontend image.
+# Ignoring local artifacts keeps builds faster and reduces accidental context bloat.
+
+node_modules
+dist
+.DS_Store
+

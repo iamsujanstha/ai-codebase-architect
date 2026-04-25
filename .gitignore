@@ -1,0 +1,22 @@
+# This repository mixes JavaScript/TypeScript and Python services.
+# We ignore generated artifacts so the source-of-truth stays readable for learners.
+
+# Node.js build artifacts
+node_modules/
+dist/
+coverage/
+
+# Frontend build output
+frontend/dist/
+
+# Python caches and virtual environments
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Operating system/editor noise
+.DS_Store
+.idea/
+.vscode/
+

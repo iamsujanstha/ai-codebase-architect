@@ -1,0 +1,164 @@
+version: "3.9"
+
+# Project name shown in Docker Desktop and used for container grouping
+name: ai-code-assistant-platform
+
+services:
+  # =========================================================
+  # AI SERVICE (Python / FastAPI or Flask)
+  # =========================================================
+  # This service handles AI-related processing such as:
+  # - prompt analysis
+  # - architecture suggestions
+  # - code explanation
+  # - simulated or real LLM orchestration
+  #
+  # In production, this could be replaced by:
+  # - OpenAI wrapper service
+  # - LangGraph orchestration layer
+  # - internal inference engine
+  # =========================================================
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+
+    container_name: ai-code-assistant-ai-service
+
+    environment:
+      APP_NAME: AI Code Assistant Engine
+      PROVIDER_NAME: ollama-local
+      OLLAMA_MODEL: deepseek-coder:6.7b
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_TIMEOUT_SECONDS: 120
+      PORT: 8000
+
+    ports:
+      - "8000:8000"
+
+    # Real runtime command
+    # This starts the Python service normally
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+    # Health check ensures the service is actually responding
+    # before dependent services start
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - assistant-network
+
+  # =========================================================
+  # BACKEND (NestJS / Node.js)
+  # =========================================================
+  # This is the orchestration layer between:
+  # frontend <-> backend <-> ai-service
+  #
+  # Responsibilities:
+  # - validate requests
+  # - call AI service
+  # - format responses
+  # - business rules
+  # - API security
+  # =========================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    container_name: ai-code-assistant-backend
+
+    environment:
+      PORT: 3000
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_SERVICE_TIMEOUT_MS: 120000
+      AI_SERVICE_STREAM_TIMEOUT_MS: 300000
+      CORS_ORIGIN: http://localhost:8080,http://localhost:5173
+
+    ports:
+      - "3000:3000"
+
+    # Wait until AI service is healthy
+    depends_on:
+      ai-service:
+        condition: service_healthy
+
+    # Real runtime command
+    # Production-safe backend startup
+    command: npm run start:prod
+
+    # Health check using Node built-in fetch (Node 20+)
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    networks:
+      - assistant-network
+
+  # =========================================================
+  # FRONTEND (React + Nginx)
+  # =========================================================
+  # Frontend is built into static files and served by Nginx.
+  #
+  # Benefits:
+  # - fast static delivery
+  # - production-ready serving
+  # - API proxy support
+  # - browser caching
+  #
+  # This is better than running "npm run dev"
+  # for real deployment scenarios.
+  # =========================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    container_name: ai-code-assistant-frontend
+
+    ports:
+      - "8080:80"
+
+    # Wait until backend is healthy
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    networks:
+      - assistant-network
+
+# =========================================================
+# NETWORK
+# =========================================================
+# Dedicated bridge network for clean internal communication
+#
+# This allows services to communicate using service names:
+#
+# backend -> http://ai-service:8000
+#
+# instead of hardcoded localhost IPs
+#
+# This mirrors real production architecture.
+# =========================================================
+networks:
+  assistant-network:
+    driver: bridge
