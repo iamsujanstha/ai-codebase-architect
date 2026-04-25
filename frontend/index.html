@@ -20,6 +20,17 @@
       content="AI Code Assistant Platform built with React, NestJS, FastAPI, and Docker Compose."
     />
     <title>AI Code Assistant Platform</title>
+    <script>
+      (function() {
+        try {
+          var storedTheme = window.localStorage.getItem('ai-code-assistant:theme');
+          var theme = storedTheme === 'light' || storedTheme === 'dark' 
+            ? storedTheme 
+            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.dataset.theme = theme;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <!--
