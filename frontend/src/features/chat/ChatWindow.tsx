@@ -152,10 +152,22 @@ export function ChatWindow({
                 </div>
 
                 {message.role === 'assistant' ? (
-                  <MarkdownRenderer content={message.content} />
+                  message.content.trim() === '' && message.status === 'streaming' ? (
+                    <div className="thinking-wrapper">
+                      <div className="thinking-dots">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                      <span className="thinking-text">Thinking...</span>
+                    </div>
+                  ) : (
+                    <MarkdownRenderer content={message.content} />
+                  )
                 ) : (
                   <div className="message-plain-content">{message.content}</div>
                 )}
+
 
                 {message.role === 'assistant' && message.usage ? (
                   <div className="message-footer">

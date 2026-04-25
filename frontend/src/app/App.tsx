@@ -28,6 +28,8 @@ export default function App(): JSX.Element {
             <Route path="/checkout/result" element={<CheckoutResultPage />} />
             <Route path="/products/:slug" element={<ProductDetailsPage />} />
             <Route path="/chat" element={<ChatPage />} />
+            <Route path="/chat/:threadId" element={<ChatPage />} />
+
             <Route path="*" element={<Navigate replace to="/" />} />
           </Route>
         </Routes>

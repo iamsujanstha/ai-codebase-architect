@@ -158,9 +158,10 @@ export function useAiAssistant() {
     }
   };
 
-  const selectThread = (id: string) => {
+  const selectThread = (id: string | null) => {
     setCurrentThreadId(id);
   };
+
 
   async function handleSubmit(promptOverride?: string) {
     if (isStreaming) {
