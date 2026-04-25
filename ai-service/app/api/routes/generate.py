@@ -20,39 +20,30 @@ router = APIRouter(tags=["generation"])
 
 
 @router.get("/models", response_model=ModelsResponse)
-def list_models() -> ModelsResponse:
+async def list_models() -> ModelsResponse:
     """
     Return the set of local models currently available through Ollama.
-
-    This route is useful for the frontend model picker and for quick operational checks.
     """
 
     try:
-        return list_available_models()
+        return await list_available_models()
     except OllamaClientError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
+
 
 
 @router.post("/generate", response_model=GenerateResponse)
-def generate_response(payload: GenerateRequest) -> GenerateResponse:
+async def generate_response(payload: GenerateRequest) -> GenerateResponse:
     """
-    Accept a prompt and return a structured AI-style answer.
-
-    In a real platform this endpoint would likely call:
-    - OpenAI
-    - Ollama
-    - Anthropic
-    - an internal model gateway
-
-    The rest of the application is intentionally structured so that the implementation
-    can change without forcing a redesign of the API contract.
+    Accept a prompt and return a structured AI-style answer with RAG.
     """
 
     try:
-        return generate_structured_response(payload)
+        return await generate_structured_response(payload)
+
     except OllamaClientError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -60,24 +51,43 @@ def generate_response(payload: GenerateRequest) -> GenerateResponse:
         ) from exc
 
 
-@router.post("/generate/stream")
-def generate_response_stream(payload: GenerateRequest) -> StreamingResponse:
-    """
-    Stream a response as newline-delimited JSON events.
+from app.services.memory_service import memory_service
+from app.services.queue_service import request_queue
 
-    Event flow:
-    - `start`: metadata about the request and selected model
-    - `delta`: one incremental chunk of assistant text
-    - `done`: final usage and timing metadata
-    - `error`: a recoverable stream-level failure event
+
+@router.post("/generate/stream")
+async def generate_response_stream(payload: GenerateRequest) -> StreamingResponse:
     """
+    Stream a response as newline-delimited JSON events with RAG support.
+    """
+
+    async def get_stream():
+        # Retrieve context from memory (RAG) - now async and inside the generator
+        context = await memory_service.search_relevant_context(payload.prompt)
+        context_str = "\n".join(context) if context else ""
+        
+        # Augmented prompt for the AI
+        final_prompt = payload.prompt
+        if context_str:
+            final_prompt = (
+                f"Relevant information from past conversations:\n{context_str}\n\n"
+                f"New question: {payload.prompt}"
+            )
+
+        # Use the RequestQueue to manage concurrency (Queue-aware)
+        async with request_queue.semaphore:
+            # Async stream directly from Ollama
+            async for chunk in stream_chat_completion(
+                user_prompt=final_prompt,
+                messages=payload.messages,
+                request_id=payload.request_id,
+                model_name=payload.model,
+            ):
+                yield chunk
 
     return StreamingResponse(
-        stream_chat_completion(
-            user_prompt=payload.prompt,
-            messages=payload.messages,
-            request_id=payload.request_id,
-            model_name=payload.model,
-        ),
+        get_stream(),
         media_type="application/x-ndjson",
     )
+
+

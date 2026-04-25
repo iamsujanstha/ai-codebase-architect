@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
-from typing import Any, Iterator
-from urllib import error, request
+import httpx
+from typing import Any, AsyncIterator
 from uuid import uuid4
 
 from app.config import settings
@@ -23,20 +23,13 @@ class OllamaClientError(Exception):
     """Raised when the Ollama provider cannot fulfill a request."""
 
 
-def generate_structured_completion(
+async def generate_structured_completion(
     user_prompt: str,
     messages: list[ChatMessage] | None = None,
     model_name: str | None = None,
 ) -> LlmStructuredPayload:
-    """
-    Send the prompt to Ollama and return a validated structured payload.
-
-    We ask the model for JSON because the frontend expects a structured response.
-    We still keep a fallback path because smaller local models sometimes drift away
-    from perfect JSON even when asked clearly.
-    """
-
-    response_payload = _post_chat_request(user_prompt, messages=messages, model_name=model_name)
+    """Send the prompt to Ollama and return a validated structured payload."""
+    response_payload = await _post_chat_request(user_prompt, messages=messages, model_name=model_name)
     message = response_payload.get("message", {})
     raw_content = str(message.get("content", "")).strip()
 
@@ -44,306 +37,165 @@ def generate_structured_completion(
         raise OllamaClientError("Ollama returned an empty message body.")
 
     structured_payload = _try_parse_structured_payload(raw_content)
-
     if structured_payload is not None:
         return structured_payload
 
     return _build_fallback_payload(user_prompt, raw_content)
 
 
-def _post_chat_request(
+async def _post_chat_request(
     user_prompt: str,
     messages: list[ChatMessage] | None = None,
     model_name: str | None = None,
 ) -> dict[str, Any]:
     """Execute a single non-streaming chat request against Ollama."""
-
     resolved_model_name = model_name or settings.model_name
-
-    ollama_messages = []
-    
-    # Always ensure a system prompt is present to maintain the structured JSON contract
-    ollama_messages.append({
+    ollama_messages = [{
         "role": "system",
         "content": (
-            "You are the model layer for an AI code assistant platform. "
-            "Return only valid JSON with this exact shape: "
-            "{\"summary\":\"string\",\"answer\":\"string\",\"key_points\":[\"string\",\"string\",\"string\",\"string\"],"
-            "\"suggested_follow_up_prompts\":[\"string\",\"string\",\"string\"]}. "
-            "Write an answer that is practical, technically accurate, and easy to read. "
-            "Always include at least one real-world example or production scenario."
+            "You are a structured AI assistant. Return ONLY valid JSON with this shape: "
+            "{\"summary\":\"string\",\"answer\":\"string\",\"key_points\":[\"string\"],\"suggested_follow_up_prompts\":[\"string\"]}"
         )
-    })
+    }]
+
 
     if messages:
-        # If history is provided, append it (skipping any existing system prompts to avoid conflicts)
         for m in messages:
             if m.role != "system":
                 ollama_messages.append({"role": m.role, "content": m.content})
-    
-    # Always append the current prompt as the final user message
     ollama_messages.append({"role": "user", "content": user_prompt})
 
-    request_body = {
-        "model": resolved_model_name,
-        "stream": False,
-        "format": "json",
-        "messages": ollama_messages,
-        "options": {
-            "temperature": 0.2,
-        },
-    }
-
-    encoded_body = json.dumps(request_body).encode("utf-8")
-
-    http_request = request.Request(
-        url=f"{settings.ollama_base_url}/api/chat",
-        data=encoded_body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(
-            http_request,
-            timeout=settings.ollama_timeout_seconds,
-        ) as http_response:
-            return json.loads(http_response.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        response_body = exc.read().decode("utf-8", errors="replace")
-        raise OllamaClientError(
-            f"Ollama returned HTTP {exc.code}. Response: {response_body}"
-        ) from exc
-    except error.URLError as exc:
-        raise OllamaClientError(
-            "The AI service could not reach Ollama. Make sure the Ollama app or "
-            "`ollama serve` is running and that the configured base URL is correct."
-        ) from exc
-    except TimeoutError as exc:
-        raise OllamaClientError(
-            "The request to Ollama timed out before the model finished responding."
-        ) from exc
-    except json.JSONDecodeError as exc:
-        raise OllamaClientError(
-            "Ollama returned a response that was not valid JSON."
-        ) from exc
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"{settings.ollama_base_url}/api/chat",
+                json={
+                    "model": resolved_model_name,
+                    "stream": False,
+                    "format": "json",
+                    "messages": ollama_messages,
+                },
+                timeout=settings.ollama_timeout_seconds,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as exc:
+            raise OllamaClientError(f"Ollama request failed: {str(exc)}")
 
 
-def list_available_models() -> ModelsResponse:
+async def list_available_models() -> ModelsResponse:
     """Query Ollama for all locally available models."""
-
-    http_request = request.Request(
-        url=f"{settings.ollama_base_url}/api/tags",
-        method="GET",
-    )
-
-    try:
-        with request.urlopen(
-            http_request,
-            timeout=settings.ollama_timeout_seconds,
-        ) as http_response:
-            payload = json.loads(http_response.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        response_body = exc.read().decode("utf-8", errors="replace")
-        raise OllamaClientError(
-            f"Ollama returned HTTP {exc.code} while listing models. Response: {response_body}"
-        ) from exc
-    except error.URLError as exc:
-        raise OllamaClientError(
-            "The AI service could not reach Ollama while loading local models."
-        ) from exc
-    except json.JSONDecodeError as exc:
-        raise OllamaClientError(
-            "Ollama returned an unreadable model list response."
-        ) from exc
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{settings.ollama_base_url}/api/tags")
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as exc:
+            raise OllamaClientError(f"Failed to list models: {str(exc)}")
 
     models = []
-
     for raw_model in payload.get("models", []):
-        if not isinstance(raw_model, dict):
-            continue
-
         details = raw_model.get("details", {})
-        details = details if isinstance(details, dict) else {}
         size_bytes = int(raw_model.get("size", 0))
-
-        models.append(
-            AvailableModel(
-                name=str(raw_model.get("name") or raw_model.get("model") or "unknown"),
-                size_bytes=size_bytes,
-                size_label=_format_size_label(size_bytes),
-                modified_at=str(raw_model.get("modified_at") or ""),
-                digest=str(raw_model.get("digest") or "") or None,
-                family=str(details.get("family") or "") or None,
-                parameter_size=str(details.get("parameter_size") or "") or None,
-                quantization_level=str(details.get("quantization_level") or "") or None,
-            )
-        )
-
-    return ModelsResponse(
-        default_model=settings.model_name,
-        models=models,
-    )
+        models.append(AvailableModel(
+            name=str(raw_model.get("name")),
+            size_bytes=size_bytes,
+            size_label=_format_size_label(size_bytes),
+            modified_at=str(raw_model.get("modified_at")),
+            family=str(details.get("family")),
+            parameter_size=str(details.get("parameter_size")),
+            quantization_level=str(details.get("quantization_level")),
+        ))
+    return ModelsResponse(default_model=settings.model_name, models=models)
 
 
-def stream_chat_completion(
+async def stream_chat_completion(
     user_prompt: str,
     messages: list[ChatMessage] | None = None,
     request_id: str | None = None,
     model_name: str | None = None,
-) -> Iterator[str]:
-    """
-    Stream a chat response from Ollama as newline-delimited JSON events.
-
-    NDJSON is a practical choice here because:
-    - it works cleanly over plain HTTP POST
-    - the backend can proxy it without understanding every event
-    - the frontend can parse it incrementally using the Fetch stream reader
-    """
-
+) -> AsyncIterator[str]:
+    """Stream a chat response from Ollama as newline-delimited JSON events."""
     resolved_request_id = request_id or str(uuid4())
     resolved_model_name = model_name or settings.model_name
     generated_at = datetime.now(timezone.utc).isoformat()
 
-    yield _encode_stream_event(
-        {
-            "type": "start",
-            "requestId": resolved_request_id,
-            "provider": settings.provider_name,
-            "model": resolved_model_name,
-            "generatedAt": generated_at,
-        }
-    )
-
-    ollama_messages = []
-    
-    ollama_messages.append({
-        "role": "system",
-        "content": (
-            "You are the assistant model behind a production-style local AI chat application. "
-            "Answer in polished Markdown with concise sections when useful. "
-            "Lead with the direct answer, then expand with practical detail. "
-            "Do not return JSON."
-        )
+    yield _encode_stream_event({
+        "type": "start",
+        "requestId": resolved_request_id,
+        "provider": settings.provider_name,
+        "model": resolved_model_name,
+        "generatedAt": generated_at,
     })
 
+    ollama_messages = [{"role": "system", "content": "You are a helpful AI assistant. Answer in Markdown."}]
     if messages:
         for m in messages:
             if m.role != "system":
                 ollama_messages.append({"role": m.role, "content": m.content})
-    
-    # Always append the current prompt as the final user message
     ollama_messages.append({"role": "user", "content": user_prompt})
 
-    request_body = {
-        "model": resolved_model_name,
-        "stream": True,
-        "messages": ollama_messages,
-        "options": {
-            "temperature": 0.2,
-        },
-    }
-
-    encoded_body = json.dumps(request_body).encode("utf-8")
-    http_request = request.Request(
-        url=f"{settings.ollama_base_url}/api/chat",
-        data=encoded_body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(
-            http_request,
-            timeout=settings.ollama_timeout_seconds,
-        ) as http_response:
-            for raw_line in http_response:
-                line = raw_line.decode("utf-8").strip()
-
-                if not line:
-                    continue
-
-                payload = json.loads(line)
-                message = payload.get("message", {})
-                delta = str(message.get("content", ""))
-
-                if delta:
-                    yield _encode_stream_event(
-                        {
+    async with httpx.AsyncClient() as client:
+        try:
+            async with client.stream(
+                "POST",
+                f"{settings.ollama_base_url}/api/chat",
+                json={
+                    "model": resolved_model_name,
+                    "stream": True,
+                    "messages": ollama_messages,
+                },
+                timeout=settings.ollama_timeout_seconds,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    
+                    payload = json.loads(line)
+                    delta = payload.get("message", {}).get("content", "")
+                    
+                    if delta:
+                        yield _encode_stream_event({
                             "type": "delta",
                             "requestId": resolved_request_id,
                             "delta": delta,
-                        }
-                    )
-
-                if payload.get("done"):
-                    prompt_tokens = int(payload.get("prompt_eval_count", 0) or 0)
-                    completion_tokens = int(payload.get("eval_count", 0) or 0)
-
-                    yield _encode_stream_event(
-                        {
-                            "type": "done",
+                        })
+                    
+                    if payload.get("done"):
+                        yield _encode_stream_event({
+                            "type": "done", 
                             "requestId": resolved_request_id,
-                            "provider": settings.provider_name,
-                            "model": resolved_model_name,
                             "generatedAt": datetime.now(timezone.utc).isoformat(),
-                            "usage": {
-                                "inputTokens": prompt_tokens,
-                                "outputTokens": completion_tokens,
-                                "totalTokens": prompt_tokens + completion_tokens,
-                            },
-                            "timings": {
-                                "totalDurationMs": _nanoseconds_to_milliseconds(payload.get("total_duration")),
-                                "loadDurationMs": _nanoseconds_to_milliseconds(payload.get("load_duration")),
-                                "promptEvalDurationMs": _nanoseconds_to_milliseconds(payload.get("prompt_eval_duration")),
-                                "completionDurationMs": _nanoseconds_to_milliseconds(payload.get("eval_duration")),
-                            },
-                            "doneReason": str(payload.get("done_reason") or "stop"),
-                        }
-                    )
-    except error.HTTPError as exc:
-        response_body = exc.read().decode("utf-8", errors="replace")
-        yield _encode_stream_event(
-            {
+                        })
+        except Exception as exc:
+            yield _encode_stream_event({
                 "type": "error",
                 "requestId": resolved_request_id,
-                "message": f"Ollama returned HTTP {exc.code}. Response: {response_body}",
+                "message": f"Ollama streaming failed: {str(exc)}",
                 "generatedAt": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-    except error.URLError:
-        yield _encode_stream_event(
-            {
-                "type": "error",
-                "requestId": resolved_request_id,
-                "message": (
-                    "The AI service could not reach Ollama. Make sure the Ollama app "
-                    "or `ollama serve` is running."
-                ),
-                "generatedAt": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-    except TimeoutError:
-        yield _encode_stream_event(
-            {
-                "type": "error",
-                "requestId": resolved_request_id,
-                "message": "The local model timed out before finishing the answer.",
-                "generatedAt": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-    except json.JSONDecodeError:
-        yield _encode_stream_event(
-            {
-                "type": "error",
-                "requestId": resolved_request_id,
-                "message": "Ollama returned a stream chunk that could not be parsed.",
-                "generatedAt": datetime.now(timezone.utc).isoformat(),
-            }
-        )
+            })
+
+
+
+async def get_embeddings(text: str, model_name: str | None = None) -> list[float]:
+    """Generate vector embeddings for the given text using Ollama."""
+    resolved_model_name = model_name or settings.model_name
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"{settings.ollama_base_url}/api/embeddings",
+                json={"model": resolved_model_name, "prompt": text},
+                timeout=settings.ollama_timeout_seconds,
+            )
+            response.raise_for_status()
+            return response.json().get("embedding", [])
+        except Exception as exc:
+            raise OllamaClientError(f"Embedding failed: {str(exc)}")
 
 
 def _try_parse_structured_payload(raw_content: str) -> LlmStructuredPayload | None:
+
     """Attempt to parse the model output directly as JSON or from an embedded JSON block."""
 
     try:

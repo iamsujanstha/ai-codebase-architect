@@ -18,6 +18,9 @@ services:
   # - LangGraph orchestration layer
   # - internal inference engine
   # =========================================================
+  # =========================================================
+  # AI SERVICE (Python / FastAPI or Flask)
+  # =========================================================
   ai-service:
     build:
       context: ./ai-service
@@ -31,17 +34,24 @@ services:
       OLLAMA_MODEL: deepseek-coder:6.7b
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_TIMEOUT_SECONDS: 120
+      QDRANT_HOST: vector-db
+      QDRANT_PORT: 6333
+      MEMORY_COLLECTION: conversations
+      REDIS_URL: redis://redis:6379/0
       PORT: 8000
 
     ports:
       - "8000:8000"
 
     # Real runtime command
-    # This starts the Python service normally
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
+    # Wait until Vector DB and Redis are started
+    depends_on:
+      - vector-db
+      - redis
+
     # Health check ensures the service is actually responding
-    # before dependent services start
     healthcheck:
       test:
         [
@@ -59,17 +69,90 @@ services:
       - assistant-network
 
   # =========================================================
-  # BACKEND (NestJS / Node.js)
+  # AI WORKER (The 'Job Brain')
   # =========================================================
-  # This is the orchestration layer between:
-  # frontend <-> backend <-> ai-service
-  #
-  # Responsibilities:
-  # - validate requests
-  # - call AI service
-  # - format responses
-  # - business rules
-  # - API security
+  # This service runs the same code as ai-service but acts as
+  # a background processor for heavy tasks (like bulk embeddings).
+  # =========================================================
+  ai-worker:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+
+    container_name: ai-code-assistant-worker
+
+    environment:
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      QDRANT_HOST: vector-db
+      QDRANT_PORT: 6333
+      REDIS_URL: redis://redis:6379/0
+
+    # Start the RQ worker process instead of the FastAPI app
+    command: rq worker ai_tasks --url redis://redis:6379/0
+
+    depends_on:
+      - redis
+      - vector-db
+
+    networks:
+      - assistant-network
+
+
+  # =========================================================
+  # REDIS (Task Queue / Cache)
+  # =========================================================
+  # Used for async background jobs like bulk embeddings.
+  # =========================================================
+  redis:
+    image: redis:alpine
+    container_name: ai-code-assistant-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - assistant-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================================
+  # MONITORING (Dozzle)
+  # =========================================================
+  # Lightweight real-time log viewer for all containers.
+  # Access at http://localhost:8888
+  # =========================================================
+  monitoring:
+    image: amir20/dozzle:latest
+    container_name: ai-code-assistant-monitoring
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8888:8080"
+    networks:
+      - assistant-network
+
+  # =========================================================
+  # VECTOR DATABASE (Qdrant)
+  # =========================================================
+  # Used for the "AI Memory Layer".
+  # Stores embeddings of conversation history and knowledge
+  # for Retrieval-Augmented Generation (RAG).
+  # =========================================================
+  vector-db:
+    image: qdrant/qdrant:latest
+    container_name: ai-code-assistant-vector-db
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage:z
+    networks:
+      - assistant-network
+
+  # =========================================================
+
+
+  # BACKEND (NestJS / Node.js)
   # =========================================================
   backend:
     build:
@@ -94,7 +177,6 @@ services:
         condition: service_healthy
 
     # Real runtime command
-    # Production-safe backend startup
     command: npm run start:prod
 
     # Health check using Node built-in fetch (Node 20+)
@@ -117,17 +199,6 @@ services:
   # =========================================================
   # FRONTEND (React + Nginx)
   # =========================================================
-  # Frontend is built into static files and served by Nginx.
-  #
-  # Benefits:
-  # - fast static delivery
-  # - production-ready serving
-  # - API proxy support
-  # - browser caching
-  #
-  # This is better than running "npm run dev"
-  # for real deployment scenarios.
-  # =========================================================
   frontend:
     build:
       context: ./frontend
@@ -147,18 +218,11 @@ services:
       - assistant-network
 
 # =========================================================
-# NETWORK
-# =========================================================
-# Dedicated bridge network for clean internal communication
-#
-# This allows services to communicate using service names:
-#
-# backend -> http://ai-service:8000
-#
-# instead of hardcoded localhost IPs
-#
-# This mirrors real production architecture.
+# NETWORK & VOLUMES
 # =========================================================
 networks:
   assistant-network:
     driver: bridge
+
+volumes:
+  qdrant_data:

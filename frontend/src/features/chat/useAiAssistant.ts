@@ -108,12 +108,20 @@ export function useAiAssistant() {
         (model) => model.name === storedModel,
       );
 
+      // If we have a stored model and it's still available, use it.
+      // Otherwise, pick the default from backend or the first one in the list.
       const nextModel = hasStoredModel
-        ? storedModel ?? ''
+        ? (storedModel as string)
         : modelsResponse.defaultModel || modelsResponse.models[0]?.name || '';
 
-      setSelectedModel(nextModel);
+      if (nextModel) {
+        setSelectedModel(nextModel);
+        setModelError(null);
+      } else {
+        setModelError('No models detected in Ollama. Please pull a model first (e.g. ollama pull deepseek-coder).');
+      }
     } catch (caughtError) {
+
       if (caughtError instanceof ApiError) {
         setModelError(caughtError.message);
       } else {

@@ -17,21 +17,42 @@ from app.models.ai_models import GenerateRequest, GenerateResponse
 from app.services.ollama_client import generate_structured_completion
 
 
-def generate_structured_response(payload: GenerateRequest) -> GenerateResponse:
-    """
-    Generate a structured response using a real local LLM.
+from app.services.memory_service import memory_service
+from app.services.queue_service import request_queue
 
-    The downstream consumer still receives the same stable response fields as before.
-    That is exactly why service boundaries are so useful in production systems.
+
+async def generate_structured_response(payload: GenerateRequest) -> GenerateResponse:
+    """
+    Generate a structured response with long-term memory support.
     """
 
     started_at = perf_counter()
     resolved_model_name = payload.model or settings.model_name
-    llm_payload = generate_structured_completion(
-        payload.prompt,
-        messages=payload.messages,
-        model_name=payload.model,
-    )
+    
+    # RAG: Retrieve context from long-term memory
+    context = memory_service.search_relevant_context(payload.prompt)
+    context_str = "\n".join(context) if context else ""
+    
+    final_prompt = payload.prompt
+    if context_str:
+        final_prompt = (
+            f"Background info from memory:\n{context_str}\n\n"
+            f"Current task: {payload.prompt}"
+        )
+
+    # Queue-aware generation
+    async with request_queue.semaphore:
+        llm_payload = generate_structured_completion(
+            final_prompt,
+            messages=payload.messages,
+            model_name=payload.model,
+        )
+    
+    # Asynchronously store the exchange in memory for future RAG
+    # In a real app, we might use a background task for this
+    memory_service.store_message("user", payload.prompt)
+    memory_service.store_message("assistant", llm_payload.answer)
+
     processing_time_ms = int((perf_counter() - started_at) * 1000)
 
     return GenerateResponse(
@@ -46,3 +67,4 @@ def generate_structured_response(payload: GenerateRequest) -> GenerateResponse:
         processing_time_ms=processing_time_ms,
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
+

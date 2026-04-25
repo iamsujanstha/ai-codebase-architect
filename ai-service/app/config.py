@@ -26,5 +26,15 @@ class Settings:
     ).rstrip("/")
     ollama_timeout_seconds: int = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
 
+    # Memory Layer
+    qdrant_host: str = os.getenv("QDRANT_HOST", "localhost")
+    qdrant_port: int = int(os.getenv("QDRANT_PORT", "6333"))
+    memory_collection: str = os.getenv("MEMORY_COLLECTION", "conversations")
+
+    # Redis Queue
+    redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+
+
 
 settings = Settings()
