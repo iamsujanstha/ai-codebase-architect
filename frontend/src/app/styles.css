@@ -363,7 +363,6 @@ button, input, textarea, select {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  scroll-behavior: smooth;
 }
 
 .empty-state {

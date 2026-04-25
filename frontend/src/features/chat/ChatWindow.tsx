@@ -35,14 +35,37 @@ export function ChatWindow({
   error,
   onStarterPrompt,
 }: ChatWindowProps): JSX.Element {
+  const scrollContainerRef = useRef<HTMLElement>(null);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const isAutoScrollEnabled = useRef(true);
+  const prevMessageCountRef = useRef(messages.length);
+
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    // If we are within 150px of the bottom, enable auto-scroll
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+    isAutoScrollEnabled.current = isNearBottom;
+  };
 
   useEffect(() => {
-    scrollAnchorRef.current?.scrollIntoView({
-      behavior: isStreaming ? 'auto' : 'smooth',
-      block: 'end',
-    });
+    const isNewMessage = messages.length > prevMessageCountRef.current;
+    prevMessageCountRef.current = messages.length;
+
+    if (isAutoScrollEnabled.current || isNewMessage) {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTo({
+          top: scrollContainerRef.current.scrollHeight,
+          behavior: isStreaming && !isNewMessage ? 'auto' : 'smooth',
+        });
+      }
+      if (isNewMessage) {
+        isAutoScrollEnabled.current = true;
+      }
+    }
   }, [messages, isStreaming]);
 
   async function copyMessage(message: ChatMessage) {
@@ -56,7 +79,7 @@ export function ChatWindow({
   }
 
   return (
-    <section className="chat-thread">
+    <section className="chat-thread" ref={scrollContainerRef} onScroll={handleScroll}>
       {messages.length === 0 ? (
         <div className="empty-state">
           <div className="empty-copy">
