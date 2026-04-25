@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { MarkdownRenderer } from './MarkdownRenderer';
-import { STARTER_PROMPTS } from '../hooks/useAiAssistant';
-import type { ChatMessage } from '../types/chat';
+import { MarkdownRenderer } from '@/features/chat/MarkdownRenderer';
+import { STARTER_PROMPTS } from '@/features/chat/useAiAssistant';
+import type { ChatMessage } from '@/core/types/chat';
 
 interface ChatWindowProps {
   messages: ChatMessage[];
@@ -102,43 +102,49 @@ export function ChatWindow({
                 message.status === 'streaming' ? 'streaming' : ''
               } ${message.status === 'error' ? 'error' : ''}`}
             >
-              <div className="message-meta">
-                <div className="message-meta-primary">
-                  <span>{message.role === 'user' ? 'You' : 'Assistant'}</span>
-                  <span>{formatTime(message.createdAt)}</span>
-                  {message.model ? <span>{message.model}</span> : null}
-                  {message.provider ? <span>{message.provider}</span> : null}
+              <div className={`message-avatar ${message.role}`}>
+                {message.role === 'user' ? 'U' : 'AI'}
+              </div>
+
+              <div className="message-content-wrapper">
+                <div className="message-meta">
+                  <div className="message-meta-primary">
+                    <span>{message.role === 'user' ? 'You' : 'Assistant'}</span>
+                    <span>{formatTime(message.createdAt)}</span>
+                    {message.model ? <span>{message.model}</span> : null}
+                    {message.provider ? <span>{message.provider}</span> : null}
+                  </div>
+
+                  {message.role === 'assistant' ? (
+                    <button
+                      className="message-copy-button"
+                      type="button"
+                      onClick={() => {
+                        void copyMessage(message);
+                      }}
+                    >
+                      {copiedMessageId === message.id ? 'Copied' : 'Copy'}
+                    </button>
+                  ) : null}
                 </div>
 
                 {message.role === 'assistant' ? (
-                  <button
-                    className="message-copy-button"
-                    type="button"
-                    onClick={() => {
-                      void copyMessage(message);
-                    }}
-                  >
-                    {copiedMessageId === message.id ? 'Copied' : 'Copy'}
-                  </button>
+                  <MarkdownRenderer content={message.content} />
+                ) : (
+                  <div className="message-plain-content">{message.content}</div>
+                )}
+
+                {message.role === 'assistant' && message.usage ? (
+                  <div className="message-footer">
+                    <span>{message.usage.inputTokens} input tokens</span>
+                    <span>{message.usage.outputTokens} output tokens</span>
+                    <span>{message.usage.totalTokens} total tokens</span>
+                    {message.timings?.totalDurationMs ? (
+                      <span>{formatDuration(message.timings.totalDurationMs)}</span>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
-
-              {message.role === 'assistant' ? (
-                <MarkdownRenderer content={message.content} />
-              ) : (
-                <div className="message-plain-content">{message.content}</div>
-              )}
-
-              {message.role === 'assistant' && message.usage ? (
-                <div className="message-footer">
-                  <span>{message.usage.inputTokens} input tokens</span>
-                  <span>{message.usage.outputTokens} output tokens</span>
-                  <span>{message.usage.totalTokens} total tokens</span>
-                  {message.timings?.totalDurationMs ? (
-                    <span>{formatDuration(message.timings.totalDurationMs)}</span>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
           </article>
         ))}

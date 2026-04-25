@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { LocalModel } from '../types/api';
+import type { LocalModel } from '@/core/types/api';
 
 interface ModelSidebarProps {
   models: LocalModel[];

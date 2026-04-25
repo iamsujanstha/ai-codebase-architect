@@ -3,7 +3,7 @@ import type {
   GenerateAiResponse,
   ModelsResponse,
   StreamEvent,
-} from '../types/api';
+} from '@/core/types/api';
 
 // Separating data access into a service module gives us a clean seam between UI and networking.
 // This is useful because networking code tends to evolve differently from visual components.

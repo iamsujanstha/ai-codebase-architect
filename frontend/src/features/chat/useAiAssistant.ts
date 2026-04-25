@@ -8,9 +8,9 @@ import {
   ApiError,
   fetchAvailableModels,
   streamAiResponse,
-} from '../services/aiApi';
-import type { ChatMessage } from '../types/chat';
-import type { LocalModel, StreamEvent } from '../types/api';
+} from '@/core/api/aiApi';
+import type { ChatMessage } from '@/core/types/chat';
+import type { LocalModel, StreamEvent } from '@/core/types/api';
 
 const MODEL_STORAGE_KEY = 'ai-code-assistant:selected-model';
 

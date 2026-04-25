@@ -1,9 +1,9 @@
-import { ChatComposer } from './components/ChatComposer';
-import { ChatWindow } from './components/ChatWindow';
-import { ModelSidebar } from './components/ModelSidebar';
-import { ThemeToggle } from './components/ThemeToggle';
-import { useAiAssistant } from './hooks/useAiAssistant';
-import { MainLayout } from './components/layout/MainLayout';
+import { ChatComposer } from '@/features/chat/ChatComposer';
+import { ChatWindow } from '@/features/chat/ChatWindow';
+import { ModelSidebar } from '@/features/models/ModelSidebar';
+import { ThemeToggle } from '@/shared/ui/ThemeToggle';
+import { useAiAssistant } from '@/features/chat/useAiAssistant';
+import { MainLayout } from '@/shared/ui/MainLayout';
 
 export default function App(): JSX.Element {
   const {

@@ -1,4 +1,4 @@
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from '@/shared/theme/ThemeContext';
 
 export function ThemeToggle(): JSX.Element {
   const { theme, toggleTheme } = useTheme();

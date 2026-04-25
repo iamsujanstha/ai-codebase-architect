@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 // This Vite config stays intentionally small, but it still teaches an important lesson:
 // build tools are part of architecture too.
 //
@@ -7,6 +8,11 @@ import react from '@vitejs/plugin-react';
 // In Docker/production, Nginx handles that responsibility instead.
 export default defineConfig({
     plugins: [react()],
+    resolve: {
+        alias: {
+            '@': path.resolve(__dirname, './src'),
+        },
+    },
     server: {
         host: '0.0.0.0',
         port: 5173,
