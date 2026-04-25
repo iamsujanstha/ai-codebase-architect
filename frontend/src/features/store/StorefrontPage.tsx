@@ -65,11 +65,20 @@ export function StorefrontPage(): JSX.Element {
     };
   }, []);
 
+  // Infinite scroll logic
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+
   useEffect(() => {
     let isMounted = true;
 
     async function loadProducts() {
-      setIsLoadingProducts(true);
+      if (currentPage === 1) {
+        setIsLoadingProducts(true);
+      } else {
+        setIsFetchingMore(true);
+      }
+      
       setError(null);
 
       try {
@@ -77,10 +86,18 @@ export function StorefrontPage(): JSX.Element {
           category: selectedCategory === 'all' ? undefined : selectedCategory,
           search: committedSearch || undefined,
           limit: 12,
+          skip: (currentPage - 1) * 12,
         });
 
         if (isMounted) {
-          setProductData(response);
+          if (currentPage === 1) {
+            setProductData(response);
+          } else {
+            setProductData(prev => prev ? {
+              ...response,
+              items: [...prev.items, ...response.items]
+            } : response);
+          }
         }
       } catch (caughtError) {
         if (!isMounted) {
@@ -95,6 +112,7 @@ export function StorefrontPage(): JSX.Element {
       } finally {
         if (isMounted) {
           setIsLoadingProducts(false);
+          setIsFetchingMore(false);
         }
       }
     }
@@ -104,7 +122,13 @@ export function StorefrontPage(): JSX.Element {
     return () => {
       isMounted = false;
     };
+  }, [committedSearch, selectedCategory, currentPage]);
+
+  // Reset page when search or category changes
+  useEffect(() => {
+    setCurrentPage(1);
   }, [committedSearch, selectedCategory]);
+
 
   const heroProduct = useMemo(() => homeData?.featuredProducts[0] ?? null, [homeData]);
 
@@ -214,6 +238,28 @@ export function StorefrontPage(): JSX.Element {
         </div>
       </section>
 
+      <section className="featured-section">
+        <div className="section-heading">
+          <div>
+            <p className="section-kicker">Featured</p>
+            <h2>Best-in-class setup upgrades</h2>
+          </div>
+          <Link className="text-link" to="/chat">
+            Need help choosing? Ask the AI concierge
+          </Link>
+        </div>
+
+        <div className="product-grid">
+          {(homeData?.featuredProducts ?? []).map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              onAddToCart={handleAddToCart}
+            />
+          ))}
+        </div>
+      </section>
+
       <section className="category-section panel-surface">
         <div className="section-heading">
           <div>
@@ -254,27 +300,6 @@ export function StorefrontPage(): JSX.Element {
         </div>
       </section>
 
-      <section className="featured-section">
-        <div className="section-heading">
-          <div>
-            <p className="section-kicker">Featured</p>
-            <h2>Best-in-class setup upgrades</h2>
-          </div>
-          <Link className="text-link" to="/chat">
-            Need help choosing? Ask the AI concierge
-          </Link>
-        </div>
-
-        <div className="product-grid">
-          {(homeData?.featuredProducts ?? []).map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onAddToCart={handleAddToCart}
-            />
-          ))}
-        </div>
-      </section>
 
       <section id="catalog" className="catalog-section">
         <div className="section-heading">
@@ -335,6 +360,19 @@ export function StorefrontPage(): JSX.Element {
             ))
           )}
         </div>
+
+        {productData && productData.items.length < productData.total && (
+          <div className="infinite-scroll-trigger">
+            <button 
+              className="secondary-button" 
+              disabled={isFetchingMore}
+              onClick={() => setCurrentPage(prev => prev + 1)}
+            >
+              {isFetchingMore ? 'Loading more...' : 'Load more items'}
+            </button>
+          </div>
+        )}
+
       </section>
 
       <section className="value-props-grid">

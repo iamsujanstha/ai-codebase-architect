@@ -165,8 +165,9 @@ export function useAiAssistant() {
 
   async function handleSubmit(promptOverride?: string) {
     if (isStreaming) {
-      return;
+      stopStreaming();
     }
+
 
     const normalizedPrompt = (promptOverride ?? draft).trim();
 

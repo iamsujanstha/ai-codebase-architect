@@ -7,5 +7,7 @@ export interface CatalogProductsResponse {
     category?: string;
     search?: string;
     featured?: boolean;
+    skip?: number;
   };
+
 }

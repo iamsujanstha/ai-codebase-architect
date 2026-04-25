@@ -82,13 +82,16 @@ export class CatalogService {
   ): Promise<CatalogProductsResponse> {
     const filter = this.buildProductFilter(query);
     const limit = query.limit ?? 24;
+    const skip = query.skip ?? 0;
 
     const [items, total] = await Promise.all([
       this.productModel
         .find(filter)
         .sort({ featured: -1, bestSeller: -1, rating: -1, createdAt: -1 })
+        .skip(skip)
         .limit(limit)
         .lean(),
+
       this.productModel.countDocuments(filter),
     ]);
 
@@ -99,7 +102,9 @@ export class CatalogService {
         category: query.category,
         search: query.search,
         featured: query.featured,
+        skip: query.skip,
       },
+
     };
   }
 

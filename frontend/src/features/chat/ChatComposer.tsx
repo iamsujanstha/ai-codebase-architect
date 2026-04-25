@@ -1,8 +1,11 @@
 import type { Dispatch, KeyboardEvent, SetStateAction } from 'react';
+import type { LocalModel } from '@/core/types/api';
 
 interface ChatComposerProps {
   draft: string;
+  models: LocalModel[];
   selectedModel: string;
+  onSelectModel: (name: string) => void;
   isStreaming: boolean;
   isLoadingModels: boolean;
   modelCount: number;
@@ -13,7 +16,9 @@ interface ChatComposerProps {
 
 export function ChatComposer({
   draft,
+  models,
   selectedModel,
+  onSelectModel,
   isStreaming,
   isLoadingModels,
   modelCount,
@@ -30,44 +35,56 @@ export function ChatComposer({
 
   return (
     <section className="composer-shell">
-      <div className="composer">
+      <div className="composer panel-surface">
         <textarea
           value={draft}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask your local model about architecture, code, debugging, or system design."
+          placeholder="Ask your local model..."
+          rows={1}
         />
 
         <div className="composer-footer">
           <div className="composer-pills">
-            <span className="status-chip">
-              {selectedModel || 'No model selected'}
-            </span>
-            <span className="status-chip">
-              {isLoadingModels ? 'Loading local models' : `${modelCount} models available`}
+            <select
+              className="model-select-compact"
+              value={selectedModel}
+              onChange={(e) => onSelectModel(e.target.value)}
+              disabled={isLoadingModels}
+            >
+              {models.map(m => (
+                <option key={m.name} value={m.name}>{m.name}</option>
+              ))}
+            </select>
+            <span className="status-chip-compact">
+              {isLoadingModels ? 'Loading...' : `${modelCount} models`}
             </span>
           </div>
 
           <div className="composer-actions">
             {isStreaming ? (
               <button
-                className="secondary-button"
+                className="stop-button"
                 type="button"
                 onClick={onStop}
+                title="Stop generation"
               >
-                Stop
+                <div className="stop-icon" />
               </button>
             ) : null}
 
             <button
-              className="primary-button"
+              className="send-button-circle"
               type="button"
               onClick={() => {
                 void onSubmit();
               }}
-              disabled={isStreaming || !draft.trim()}
+              disabled={!draft.trim()}
+              title="Send message"
             >
-              {isStreaming ? 'Streaming' : 'Send'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+              </svg>
             </button>
           </div>
         </div>
@@ -75,3 +92,4 @@ export function ChatComposer({
     </section>
   );
 }
+

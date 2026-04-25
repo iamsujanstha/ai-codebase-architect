@@ -74,6 +74,7 @@ export function fetchCatalogProducts(options?: {
   search?: string;
   featured?: boolean;
   limit?: number;
+  skip?: number;
 }): Promise<CatalogProductsResponse> {
   const queryParams = new URLSearchParams();
 
@@ -92,6 +93,11 @@ export function fetchCatalogProducts(options?: {
   if (options?.limit !== undefined) {
     queryParams.set('limit', String(options.limit));
   }
+
+  if (options?.skip !== undefined) {
+    queryParams.set('skip', String(options.skip));
+  }
+
 
   const suffix = queryParams.toString();
   const path = suffix ? `/catalog/products?${suffix}` : '/catalog/products';

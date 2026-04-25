@@ -22,13 +22,12 @@ export function ChatPage(): JSX.Element {
     isStreaming,
     isLoadingModels,
     error,
-    modelError,
     handleSubmit,
     stopStreaming,
-    refreshModels,
     createNewThread,
     selectThread,
     deleteThread,
+
   } = useAiAssistant();
 
   // Sync internal state with URL
@@ -58,75 +57,41 @@ export function ChatPage(): JSX.Element {
 
   const sidebar = (
     <ModelSidebar
-      models={models}
-      selectedModel={selectedModel}
-      isLoadingModels={isLoadingModels}
-      modelError={modelError}
-      onSelectModel={setSelectedModel}
-      onRefreshModels={refreshModels}
       threads={threads}
       currentThreadId={currentThreadId}
       onSelectThread={handleSelectThread}
       onDeleteThread={deleteThread}
       onNewChat={handleNewChat}
-
     />
+
   );
 
   return (
     <div className="chat-page">
       <MainLayout sidebar={sidebar}>
-        <header className="chat-header">
-          <div>
-            <p className="section-kicker">Local AI route</p>
-            <h1>Chat with your installed models</h1>
-            <p className="chat-subtitle">
-              Stream responses token-by-token, inspect model metadata, and use the
-              same platform alongside the storefront.
-            </p>
-          </div>
+        <div className="chat-content-container">
+          <ChatWindow
+            messages={messages}
+            isStreaming={isStreaming}
+            error={error}
+            onStarterPrompt={handleSubmit}
+          />
 
-          <div className="chat-toolbar">
-            <label className="toolbar-field" htmlFor="header-model-select">
-              <span>Model</span>
-              <select
-                id="header-model-select"
-                value={selectedModel}
-                onChange={(event) => setSelectedModel(event.target.value)}
-                disabled={isLoadingModels || models.length === 0}
-              >
-                {models.map((model) => (
-                  <option key={model.name} value={model.name}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="status-chip">
-              {isLoadingModels ? 'Loading...' : `${models.length} models`}
-            </div>
-          </div>
-        </header>
-
-        <ChatWindow
-          messages={messages}
-          isStreaming={isStreaming}
-          error={error}
-          onStarterPrompt={handleSubmit}
-        />
-
-        <ChatComposer
-          draft={draft}
-          selectedModel={selectedModel}
-          isStreaming={isStreaming}
-          isLoadingModels={isLoadingModels}
-          modelCount={models.length}
-          onDraftChange={setDraft}
-          onSubmit={() => handleSubmit()}
-          onStop={stopStreaming}
-        />
+          <ChatComposer
+            draft={draft}
+            models={models}
+            selectedModel={selectedModel}
+            onSelectModel={setSelectedModel}
+            isStreaming={isStreaming}
+            isLoadingModels={isLoadingModels}
+            modelCount={models.length}
+            onDraftChange={setDraft}
+            onSubmit={() => handleSubmit()}
+            onStop={stopStreaming}
+          />
+        </div>
       </MainLayout>
     </div>
   );
+
 }
