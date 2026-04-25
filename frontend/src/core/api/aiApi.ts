@@ -30,6 +30,7 @@ export class ApiError extends Error {
 
 interface StreamAiResponseOptions {
   prompt: string;
+  messages?: Array<{ role: string; content: string }>;
   model?: string;
   signal?: AbortSignal;
   onEvent: (event: StreamEvent) => void;
@@ -57,6 +58,7 @@ function extractErrorMessage(errorPayload: Partial<ApiErrorResponse> | null): st
 
 export async function requestAiResponse(
   prompt: string,
+  messages?: Array<{ role: string; content: string }>,
 ): Promise<GenerateAiResponse> {
   const controller = new AbortController();
 
@@ -73,7 +75,7 @@ export async function requestAiResponse(
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, messages }),
       signal: controller.signal,
     });
 
@@ -143,6 +145,7 @@ export async function fetchAvailableModels(): Promise<ModelsResponse> {
 
 export async function streamAiResponse({
   prompt,
+  messages,
   model,
   signal,
   onEvent,
@@ -154,6 +157,7 @@ export async function streamAiResponse({
     },
     body: JSON.stringify({
       prompt,
+      messages,
       model,
     }),
     signal,

@@ -1,5 +1,4 @@
 import {
-  startTransition,
   useEffect,
   useRef,
   useState,
@@ -9,10 +8,12 @@ import {
   fetchAvailableModels,
   streamAiResponse,
 } from '@/core/api/aiApi';
-import type { ChatMessage } from '@/core/types/chat';
+import type { ChatMessage, ChatThread } from '@/core/types/chat';
 import type { LocalModel, StreamEvent } from '@/core/types/api';
 
 const MODEL_STORAGE_KEY = 'ai-code-assistant:selected-model';
+const THREADS_STORAGE_KEY = 'ai-code-assistant:threads';
+const CURRENT_THREAD_ID_KEY = 'ai-code-assistant:current-thread-id';
 
 export const STARTER_PROMPTS = [
   'Explain microservices with a real-world example from Netflix.',
@@ -38,10 +39,10 @@ function createMessage(
 }
 
 export function useAiAssistant() {
-  const [draft, setDraft] = useState(
-    'Explain microservices with a real-world example from Netflix, and explain why API gateways matter in AI SaaS platforms.',
-  );
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [draft, setDraft] = useState('');
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+
   const [models, setModels] = useState<LocalModel[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +51,49 @@ export function useAiAssistant() {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
   const streamAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Derived state
+  const currentThread = threads.find(t => t.id === currentThreadId);
+  const messages = currentThread?.messages ?? [];
+
+  // Load threads and models on mount
+  useEffect(() => {
+    // 1. Load models
+    void loadModels();
+
+    // 2. Load threads from localStorage
+    const savedThreads = window.localStorage.getItem(THREADS_STORAGE_KEY);
+    if (savedThreads) {
+      try {
+        const parsed = JSON.parse(savedThreads) as ChatThread[];
+        setThreads(parsed);
+      } catch (e) {
+        console.error('Failed to parse saved threads', e);
+      }
+    }
+
+    // 3. Load current thread ID
+    const savedId = window.localStorage.getItem(CURRENT_THREAD_ID_KEY);
+    if (savedId) {
+      setCurrentThreadId(savedId);
+    }
+  }, []);
+
+  // Persist threads to localStorage whenever they change
+  useEffect(() => {
+    if (threads.length > 0) {
+      window.localStorage.setItem(THREADS_STORAGE_KEY, JSON.stringify(threads));
+    }
+  }, [threads]);
+
+  // Persist current thread ID
+  useEffect(() => {
+    if (currentThreadId) {
+      window.localStorage.setItem(CURRENT_THREAD_ID_KEY, currentThreadId);
+    } else {
+      window.localStorage.removeItem(CURRENT_THREAD_ID_KEY);
+    }
+  }, [currentThreadId]);
 
   async function loadModels() {
     setIsLoadingModels(true);
@@ -81,16 +125,34 @@ export function useAiAssistant() {
   }
 
   useEffect(() => {
-    void loadModels();
-  }, []);
-
-  useEffect(() => {
     if (!selectedModel) {
       return;
     }
-
     window.localStorage.setItem(MODEL_STORAGE_KEY, selectedModel);
   }, [selectedModel]);
+
+  const createNewThread = () => {
+    const newThread: ChatThread = {
+      id: crypto.randomUUID(),
+      title: 'New Conversation',
+      messages: [],
+      lastMessageAt: new Date().toISOString(),
+    };
+    setThreads(prev => [newThread, ...prev]);
+    setCurrentThreadId(newThread.id);
+    return newThread;
+  };
+
+  const deleteThread = (id: string) => {
+    setThreads(prev => prev.filter(t => t.id !== id));
+    if (currentThreadId === id) {
+      setCurrentThreadId(null);
+    }
+  };
+
+  const selectThread = (id: string) => {
+    setCurrentThreadId(id);
+  };
 
   async function handleSubmit(promptOverride?: string) {
     if (isStreaming) {
@@ -111,14 +173,33 @@ export function useAiAssistant() {
       provider: 'ollama-local',
     });
 
-    setMessages((previousMessages) => [
-      ...previousMessages,
-      userMessage,
-      assistantMessage,
-    ]);
+    // Ensure we have a thread to work with
+    let activeThread = currentThread;
+    if (!activeThread) {
+      activeThread = createNewThread();
+    }
+
+    const isFirstMessage = activeThread.messages.length === 0;
+    const threadTitle = isFirstMessage ? (normalizedPrompt.length > 30 ? normalizedPrompt.slice(0, 30) + '...' : normalizedPrompt) : activeThread.title;
+
+    // Update thread state immediately with user message and empty assistant placeholder
+    setThreads(prev => prev.map(t =>
+      t.id === activeThread!.id
+        ? {
+          ...t,
+          title: threadTitle,
+          messages: [...t.messages, userMessage, assistantMessage],
+          lastMessageAt: new Date().toISOString()
+        }
+        : t
+    ));
+
+    // Prepare history for AI, filtering out empty placeholders
+    const history = activeThread.messages
+      .filter(m => m.content.trim().length > 0)
+      .map(m => ({ role: m.role, content: m.content }));
 
     setDraft('');
-
     setIsStreaming(true);
     const abortController = new AbortController();
     streamAbortControllerRef.current = abortController;
@@ -126,133 +207,85 @@ export function useAiAssistant() {
     try {
       await streamAiResponse({
         prompt: normalizedPrompt,
+        messages: history, // Send history for context
         model: selectedModel || undefined,
         signal: abortController.signal,
         onEvent: (event: StreamEvent) => {
-          if (event.type === 'start') {
-            startTransition(() => {
-              setMessages((previousMessages) =>
-                previousMessages.map((message) =>
-                  message.id === assistantMessage.id
-                    ? {
-                        ...message,
-                        requestId: event.requestId,
-                        provider: event.provider,
-                        model: event.model,
-                        createdAt: event.generatedAt,
-                      }
-                    : message,
-                ),
-              );
+          setThreads(prev => prev.map(t => {
+            if (t.id !== activeThread!.id) return t;
+
+            const updatedMessages = t.messages.map(m => {
+              if (m.id !== assistantMessage.id) return m;
+
+              if (event.type === 'start') {
+                return {
+                  ...m,
+                  requestId: event.requestId,
+                  provider: event.provider,
+                  model: event.model,
+                  createdAt: event.generatedAt,
+                };
+              }
+
+              if (event.type === 'delta') {
+                return {
+                  ...m,
+                  content: `${m.content}${event.delta}`,
+                };
+              }
+
+              if (event.type === 'done') {
+                return {
+                  ...m,
+                  status: 'complete' as const,
+                  requestId: event.requestId,
+                  provider: event.provider,
+                  model: event.model,
+                  usage: event.usage,
+                  timings: event.timings,
+                  createdAt: event.generatedAt,
+                };
+              }
+
+              if (event.type === 'error') {
+                setError(event.message);
+                return {
+                  ...m,
+                  status: 'error' as const,
+                  requestId: event.requestId,
+                  createdAt: event.generatedAt,
+                  content: m.content.trim() || 'The local model could not complete this response.',
+                };
+              }
+
+              return m;
             });
 
-            return;
-          }
-
-          if (event.type === 'delta') {
-            startTransition(() => {
-              setMessages((previousMessages) =>
-                previousMessages.map((message) =>
-                  message.id === assistantMessage.id
-                    ? {
-                        ...message,
-                        content: `${message.content}${event.delta}`,
-                      }
-                    : message,
-                ),
-              );
-            });
-
-            return;
-          }
-
-          if (event.type === 'done') {
-            setMessages((previousMessages) =>
-              previousMessages.map((message) =>
-                message.id === assistantMessage.id
-                  ? {
-                      ...message,
-                      status: 'complete',
-                      requestId: event.requestId,
-                      provider: event.provider,
-                      model: event.model,
-                      usage: event.usage,
-                      timings: event.timings,
-                      createdAt: event.generatedAt,
-                    }
-                  : message,
-              ),
-            );
-
-            return;
-          }
-
-          setError(event.message);
-          setMessages((previousMessages) =>
-            previousMessages.map((message) =>
-              message.id === assistantMessage.id
-                ? {
-                    ...message,
-                    status: 'error',
-                    requestId: event.requestId,
-                    createdAt: event.generatedAt,
-                    content:
-                      message.content.trim() || 'The local model could not complete this response.',
-                  }
-                : message,
-            ),
-          );
+            return { ...t, messages: updatedMessages };
+          }));
         },
       });
     } catch (caughtError) {
-      if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
-        setMessages((previousMessages) =>
-          previousMessages.map((message) =>
-            message.id === assistantMessage.id
-              ? {
-                  ...message,
-                  status: 'complete',
-                  content:
-                    message.content.trim() || 'Generation stopped before content arrived.',
-                }
-              : message,
-          ),
-        );
-      } else if (caughtError instanceof ApiError) {
-        setError(caughtError.message);
-        setMessages((previousMessages) =>
-          previousMessages.map((message) =>
-            message.id === assistantMessage.id
-              ? {
-                  ...message,
-                  status: 'error',
-                  content:
-                    message.content.trim() || caughtError.message,
-                }
-              : message,
-          ),
-        );
-      } else {
-        setError('The frontend hit an unexpected streaming error.');
-        setMessages((previousMessages) =>
-          previousMessages.map((message) =>
-            message.id === assistantMessage.id
-              ? {
-                  ...message,
-                  status: 'error',
-                  content:
-                    message.content.trim() ||
-                    'The frontend hit an unexpected streaming error.',
-                }
-              : message,
-          ),
-        );
-      }
+      // Handle abort and API errors by updating the message status
+      setThreads(prev => prev.map(t => {
+        if (t.id !== activeThread!.id) return t;
+        const updatedMessages = t.messages.map(m => {
+          if (m.id !== assistantMessage.id) return m;
+
+          if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
+            return { ...m, status: 'complete' as const, content: m.content.trim() || 'Generation stopped.' };
+          }
+
+          const errorMsg = caughtError instanceof ApiError ? caughtError.message : 'Unexpected streaming error.';
+          setError(errorMsg);
+          return { ...m, status: 'error' as const, content: m.content.trim() || errorMsg };
+        });
+        return { ...t, messages: updatedMessages };
+      }));
     } finally {
       if (streamAbortControllerRef.current === abortController) {
         streamAbortControllerRef.current = null;
       }
-
       setIsStreaming(false);
     }
   }
@@ -265,6 +298,8 @@ export function useAiAssistant() {
     draft,
     setDraft,
     messages,
+    threads,
+    currentThreadId,
     models,
     selectedModel,
     setSelectedModel,
@@ -275,5 +310,8 @@ export function useAiAssistant() {
     handleSubmit,
     stopStreaming,
     refreshModels: loadModels,
+    createNewThread,
+    selectThread,
+    deleteThread,
   };
 }

@@ -25,6 +25,7 @@ class OllamaClientError(Exception):
 
 def generate_structured_completion(
     user_prompt: str,
+    messages: list[ChatMessage] | None = None,
     model_name: str | None = None,
 ) -> LlmStructuredPayload:
     """
@@ -35,7 +36,7 @@ def generate_structured_completion(
     from perfect JSON even when asked clearly.
     """
 
-    response_payload = _post_chat_request(user_prompt, model_name=model_name)
+    response_payload = _post_chat_request(user_prompt, messages=messages, model_name=model_name)
     message = response_payload.get("message", {})
     raw_content = str(message.get("content", "")).strip()
 
@@ -52,34 +53,42 @@ def generate_structured_completion(
 
 def _post_chat_request(
     user_prompt: str,
+    messages: list[ChatMessage] | None = None,
     model_name: str | None = None,
 ) -> dict[str, Any]:
     """Execute a single non-streaming chat request against Ollama."""
 
     resolved_model_name = model_name or settings.model_name
 
+    ollama_messages = []
+    
+    # Always ensure a system prompt is present to maintain the structured JSON contract
+    ollama_messages.append({
+        "role": "system",
+        "content": (
+            "You are the model layer for an AI code assistant platform. "
+            "Return only valid JSON with this exact shape: "
+            "{\"summary\":\"string\",\"answer\":\"string\",\"key_points\":[\"string\",\"string\",\"string\",\"string\"],"
+            "\"suggested_follow_up_prompts\":[\"string\",\"string\",\"string\"]}. "
+            "Write an answer that is practical, technically accurate, and easy to read. "
+            "Always include at least one real-world example or production scenario."
+        )
+    })
+
+    if messages:
+        # If history is provided, append it (skipping any existing system prompts to avoid conflicts)
+        for m in messages:
+            if m.role != "system":
+                ollama_messages.append({"role": m.role, "content": m.content})
+    
+    # Always append the current prompt as the final user message
+    ollama_messages.append({"role": "user", "content": user_prompt})
+
     request_body = {
         "model": resolved_model_name,
         "stream": False,
         "format": "json",
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are the model layer for an AI code assistant platform. "
-                    "Return only valid JSON with this exact shape: "
-                    "{\"summary\":\"string\",\"answer\":\"string\",\"key_points\":[\"string\",\"string\",\"string\",\"string\"],"
-                    "\"suggested_follow_up_prompts\":[\"string\",\"string\",\"string\"]}. "
-                    "Write an answer that is practical, technically accurate, and easy to read. "
-                    "Always include at least one real-world example or production scenario. "
-                    "For coding or architecture topics, prefer concrete systems such as Netflix, Amazon, Uber, Stripe, or GitHub when appropriate."
-                ),
-            },
-            {
-                "role": "user",
-                "content": user_prompt,
-            },
-        ],
+        "messages": ollama_messages,
         "options": {
             "temperature": 0.2,
         },
@@ -179,6 +188,7 @@ def list_available_models() -> ModelsResponse:
 
 def stream_chat_completion(
     user_prompt: str,
+    messages: list[ChatMessage] | None = None,
     request_id: str | None = None,
     model_name: str | None = None,
 ) -> Iterator[str]:
@@ -205,25 +215,30 @@ def stream_chat_completion(
         }
     )
 
+    ollama_messages = []
+    
+    ollama_messages.append({
+        "role": "system",
+        "content": (
+            "You are the assistant model behind a production-style local AI chat application. "
+            "Answer in polished Markdown with concise sections when useful. "
+            "Lead with the direct answer, then expand with practical detail. "
+            "Do not return JSON."
+        )
+    })
+
+    if messages:
+        for m in messages:
+            if m.role != "system":
+                ollama_messages.append({"role": m.role, "content": m.content})
+    
+    # Always append the current prompt as the final user message
+    ollama_messages.append({"role": "user", "content": user_prompt})
+
     request_body = {
         "model": resolved_model_name,
         "stream": True,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are the assistant model behind a production-style local AI chat application. "
-                    "Answer in polished Markdown with concise sections when useful. "
-                    "Lead with the direct answer, then expand with practical detail. "
-                    "When the topic is architectural or engineering-related, include a real-world example. "
-                    "Do not return JSON."
-                ),
-            },
-            {
-                "role": "user",
-                "content": user_prompt,
-            },
-        ],
+        "messages": ollama_messages,
         "options": {
             "temperature": 0.2,
         },

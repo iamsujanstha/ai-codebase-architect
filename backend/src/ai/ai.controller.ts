@@ -28,7 +28,11 @@ export class AiController {
 
   @Post('generate')
   async generate(@Body() request: GenerateAiRequestDto) {
-    return this.aiGatewayService.generateResponse(request.prompt, request.model);
+    return this.aiGatewayService.generateResponse(
+      request.prompt,
+      request.messages,
+      request.model,
+    );
   }
 
   @Post('generate/stream')
@@ -39,6 +43,7 @@ export class AiController {
     try {
       await this.aiGatewayService.streamResponse(
         request.prompt,
+        request.messages,
         request.model,
         response,
       );

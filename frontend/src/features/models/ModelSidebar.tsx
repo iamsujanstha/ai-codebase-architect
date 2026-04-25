@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { LocalModel } from '@/core/types/api';
+import type { ChatThread } from '@/core/types/chat';
 
 interface ModelSidebarProps {
   models: LocalModel[];
@@ -8,6 +9,11 @@ interface ModelSidebarProps {
   modelError: string | null;
   onSelectModel: Dispatch<SetStateAction<string>>;
   onRefreshModels: () => Promise<void>;
+  threads: ChatThread[];
+  currentThreadId: string | null;
+  onSelectThread: (id: string) => void;
+  onDeleteThread: (id: string) => void;
+  onNewChat: () => void;
 }
 
 export function ModelSidebar({
@@ -17,6 +23,11 @@ export function ModelSidebar({
   modelError,
   onSelectModel,
   onRefreshModels,
+  threads,
+  currentThreadId,
+  onSelectThread,
+  onDeleteThread,
+  onNewChat,
 }: ModelSidebarProps): JSX.Element {
   const runtimeStatus = isLoadingModels
     ? 'Discovering models'
@@ -27,13 +38,49 @@ export function ModelSidebar({
   return (
     <>
       <div className="brand-block">
-        <p className="section-kicker">Production Demo</p>
-        <h2>AI Control Plane</h2>
-        <p className="sidebar-copy">
-          The frontend talks only to the gateway. The gateway talks to the AI
-          service. The AI service talks to your local Ollama runtime.
-        </p>
+        <p className="section-kicker">Enterprise AI</p>
+        <h2>Control Plane</h2>
       </div>
+
+      <button className="primary-button new-chat-button" onClick={onNewChat}>
+        <span className="plus-icon">+</span> New Chat
+      </button>
+
+      <section className="sidebar-section history-section">
+        <div className="sidebar-section-header">
+          <h3>Chat History</h3>
+        </div>
+        <div className="thread-list">
+          {threads.length === 0 ? (
+            <p className="sidebar-copy empty-history">No conversations yet.</p>
+          ) : (
+            threads.map((thread) => (
+              <div
+                key={thread.id}
+                className={`thread-item ${thread.id === currentThreadId ? 'selected' : ''}`}
+                onClick={() => onSelectThread(thread.id)}
+              >
+                <div className="thread-content">
+                  <span className="thread-title">{thread.title}</span>
+                  <span className="thread-date">
+                    {new Date(thread.lastMessageAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <button
+                  className="delete-thread-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteThread(thread.id);
+                  }}
+                  title="Delete chat"
+                >
+                  ×
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
 
       <section className="sidebar-section">
         <div className="sidebar-section-header">

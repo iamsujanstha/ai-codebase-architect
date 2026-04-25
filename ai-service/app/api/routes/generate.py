@@ -75,6 +75,7 @@ def generate_response_stream(payload: GenerateRequest) -> StreamingResponse:
     return StreamingResponse(
         stream_chat_completion(
             user_prompt=payload.prompt,
+            messages=payload.messages,
             request_id=payload.request_id,
             model_name=payload.model,
         ),

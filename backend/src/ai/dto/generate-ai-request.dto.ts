@@ -1,4 +1,20 @@
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class ChatMessageDto {
+  @IsString()
+  role!: string;
+
+  @IsString()
+  content!: string;
+}
 
 // DTOs are more than just TypeScript types in NestJS.
 // They are executable API contracts when combined with ValidationPipe.
@@ -16,6 +32,12 @@ export class GenerateAiRequestDto {
     message: 'Prompt must be 4000 characters or fewer.',
   })
   prompt!: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ChatMessageDto)
+  messages?: ChatMessageDto[];
 
   @IsOptional()
   @IsString()

@@ -10,6 +10,8 @@ export default function App(): JSX.Element {
     draft,
     setDraft,
     messages,
+    threads,
+    currentThreadId,
     models,
     selectedModel,
     setSelectedModel,
@@ -20,6 +22,9 @@ export default function App(): JSX.Element {
     handleSubmit,
     stopStreaming,
     refreshModels,
+    createNewThread,
+    selectThread,
+    deleteThread,
   } = useAiAssistant();
 
   const sidebar = (
@@ -30,6 +35,11 @@ export default function App(): JSX.Element {
       modelError={modelError}
       onSelectModel={setSelectedModel}
       onRefreshModels={refreshModels}
+      threads={threads}
+      currentThreadId={currentThreadId}
+      onSelectThread={selectThread}
+      onDeleteThread={deleteThread}
+      onNewChat={createNewThread}
     />
   );
 

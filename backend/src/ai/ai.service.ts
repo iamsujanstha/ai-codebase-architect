@@ -58,6 +58,7 @@ export class AiGatewayService {
 
   async generateResponse(
     prompt: string,
+    messages?: any[],
     model?: string,
   ): Promise<GatewayAiResponse> {
     const gatewayStartedAt = Date.now();
@@ -68,6 +69,7 @@ export class AiGatewayService {
         `${this.aiServiceUrl}/generate`,
         {
           prompt,
+          messages,
           request_id: requestId,
           model,
         },
@@ -99,6 +101,7 @@ export class AiGatewayService {
 
   async streamResponse(
     prompt: string,
+    messages: any[] | undefined,
     model: string | undefined,
     response: Response,
   ): Promise<void> {
@@ -109,6 +112,7 @@ export class AiGatewayService {
         `${this.aiServiceUrl}/generate/stream`,
         {
           prompt,
+          messages,
           request_id: requestId,
           model,
         },

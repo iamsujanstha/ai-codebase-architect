@@ -152,6 +152,121 @@ button, input, textarea, select {
   margin-top: 8px;
 }
 
+/* =========================================================
+   HISTORY & NEW CHAT
+   ========================================================= */
+
+.new-chat-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  font-size: 1rem;
+  margin-bottom: 8px;
+}
+
+.plus-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  font-weight: 400;
+}
+
+.history-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.thread-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 -8px;
+  padding: 0 8px;
+}
+
+.empty-history {
+  text-align: center;
+  padding: 20px;
+  opacity: 0.6;
+}
+
+.thread-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.thread-item:hover {
+  background: var(--border-color);
+}
+
+.thread-item.selected {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.thread-item.selected .thread-title {
+  color: #3b82f6;
+}
+
+.thread-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.thread-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.thread-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.delete-thread-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+  margin-left: 8px;
+}
+
+.thread-item:hover .delete-thread-btn {
+  opacity: 1;
+}
+
+.delete-thread-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
 .sidebar-section {
   padding-top: 24px;
   border-top: 1px solid var(--border-color);

@@ -29,6 +29,7 @@ def generate_structured_response(payload: GenerateRequest) -> GenerateResponse:
     resolved_model_name = payload.model or settings.model_name
     llm_payload = generate_structured_completion(
         payload.prompt,
+        messages=payload.messages,
         model_name=payload.model,
     )
     processing_time_ms = int((perf_counter() - started_at) * 1000)

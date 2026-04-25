@@ -11,6 +11,13 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 
+class ChatMessage(BaseModel):
+    """Represents a single message in a conversation thread."""
+
+    role: str = Field(..., pattern="^(user|assistant|system)$")
+    content: str = Field(default="", description="The text content of the message.")
+
+
 class GenerateRequest(BaseModel):
     """Incoming request model from the backend gateway."""
 
@@ -19,6 +26,10 @@ class GenerateRequest(BaseModel):
         min_length=3,
         max_length=4000,
         description="The user prompt to send into the AI engine.",
+    )
+    messages: Optional[list[ChatMessage]] = Field(
+        default=None,
+        description="Optional full conversation history for context-aware generation.",
     )
     request_id: Optional[str] = Field(
         default=None,
