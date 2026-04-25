@@ -27,9 +27,12 @@ async def generate_structured_completion(
     user_prompt: str,
     messages: list[ChatMessage] | None = None,
     model_name: str | None = None,
+    system_instruction: str | None = None,
+
 ) -> LlmStructuredPayload:
     """Send the prompt to Ollama and return a validated structured payload."""
-    response_payload = await _post_chat_request(user_prompt, messages=messages, model_name=model_name)
+    response_payload = await _post_chat_request(user_prompt, messages=messages, model_name=model_name, system_instruction=system_instruction)
+
     message = response_payload.get("message", {})
     raw_content = str(message.get("content", "")).strip()
 
@@ -47,16 +50,20 @@ async def _post_chat_request(
     user_prompt: str,
     messages: list[ChatMessage] | None = None,
     model_name: str | None = None,
+    system_instruction: str | None = None,
+
 ) -> dict[str, Any]:
     """Execute a single non-streaming chat request against Ollama."""
     resolved_model_name = model_name or settings.model_name
+    default_system = (
+        "You are a structured AI assistant. Return ONLY valid JSON with this shape: "
+        "{\"summary\":\"string\",\"answer\":\"string\",\"key_points\":[\"string\"],\"suggested_follow_up_prompts\":[\"string\"]}"
+    )
     ollama_messages = [{
         "role": "system",
-        "content": (
-            "You are a structured AI assistant. Return ONLY valid JSON with this shape: "
-            "{\"summary\":\"string\",\"answer\":\"string\",\"key_points\":[\"string\"],\"suggested_follow_up_prompts\":[\"string\"]}"
-        )
+        "content": f"{system_instruction}\n\n{default_system}" if system_instruction else default_system
     }]
+
 
 
     if messages:
@@ -114,6 +121,8 @@ async def stream_chat_completion(
     messages: list[ChatMessage] | None = None,
     request_id: str | None = None,
     model_name: str | None = None,
+    system_instruction: str | None = None,
+
 ) -> AsyncIterator[str]:
     """Stream a chat response from Ollama as newline-delimited JSON events."""
     resolved_request_id = request_id or str(uuid4())
@@ -128,7 +137,12 @@ async def stream_chat_completion(
         "generatedAt": generated_at,
     })
 
-    ollama_messages = [{"role": "system", "content": "You are a helpful AI assistant. Answer in Markdown."}]
+    default_system = "You are a helpful AI assistant. Answer in Markdown."
+    ollama_messages = [{
+        "role": "system",
+        "content": f"{system_instruction}\n\n{default_system}" if system_instruction else default_system
+    }]
+
     if messages:
         for m in messages:
             if m.role != "system":

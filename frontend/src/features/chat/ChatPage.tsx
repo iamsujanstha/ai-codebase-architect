@@ -1,12 +1,15 @@
+import { useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ChatComposer } from '@/features/chat/ChatComposer';
 import { ChatWindow } from '@/features/chat/ChatWindow';
 import { useAiAssistant } from '@/features/chat/useAiAssistant';
 import { ModelSidebar } from '@/features/models/ModelSidebar';
 import { MainLayout } from '@/shared/ui/MainLayout';
 
-// The chat route preserves the existing local-model experience,
-// but now lives beside the ecommerce storefront rather than replacing it.
 export function ChatPage(): JSX.Element {
+  const { threadId } = useParams<{ threadId: string }>();
+  const navigate = useNavigate();
+  
   const {
     draft,
     setDraft,
@@ -28,6 +31,31 @@ export function ChatPage(): JSX.Element {
     deleteThread,
   } = useAiAssistant();
 
+  // Sync internal state with URL
+  useEffect(() => {
+    if (threadId && threadId !== currentThreadId) {
+      selectThread(threadId);
+    }
+  }, [threadId, currentThreadId, selectThread]);
+
+  // If we are at /chat but have a saved threadId, redirect to it
+  useEffect(() => {
+    if (!threadId && currentThreadId) {
+      navigate(`/chat/${currentThreadId}`, { replace: true });
+    }
+  }, [threadId, currentThreadId, navigate]);
+
+
+  const handleSelectThread = (id: string) => {
+    navigate(`/chat/${id}`);
+  };
+
+  const handleNewChat = () => {
+    const newThread = createNewThread();
+    navigate(`/chat/${newThread.id}`);
+  };
+
+
   const sidebar = (
     <ModelSidebar
       models={models}
@@ -38,9 +66,10 @@ export function ChatPage(): JSX.Element {
       onRefreshModels={refreshModels}
       threads={threads}
       currentThreadId={currentThreadId}
-      onSelectThread={selectThread}
+      onSelectThread={handleSelectThread}
       onDeleteThread={deleteThread}
-      onNewChat={createNewThread}
+      onNewChat={handleNewChat}
+
     />
   );
 

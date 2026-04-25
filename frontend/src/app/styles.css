@@ -2211,3 +2211,50 @@ img {
   70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
   100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 }
+
+/* =========================================================
+   CHAT PRODUCT CARD
+   ========================================================= */
+
+.chat-product-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  margin: 12px 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-elevated);
+  animation: thinking-fade-in 400ms ease-out forwards;
+}
+
+.chat-product-info {
+  flex: 1;
+}
+
+.chat-product-info h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
+}
+
+.chat-product-price {
+  font-weight: 800;
+  color: var(--success);
+  margin: 4px 0;
+}
+
+.chat-product-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.chat-product-add {
+  min-width: 120px;
+}
+
+.chat-product-add.success {
+  background: var(--success);
+}

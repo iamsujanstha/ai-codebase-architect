@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { MarkdownRenderer } from '@/features/chat/MarkdownRenderer';
 import { STARTER_PROMPTS } from '@/features/chat/useAiAssistant';
-import type { ChatMessage } from '@/core/types/chat';
+import { ChatMessage } from '@/core/types/chat';
+import { ChatProductCard } from '@/features/chat/ChatProductCard';
+
 
 interface ChatWindowProps {
   messages: ChatMessage[];
@@ -151,6 +153,8 @@ export function ChatWindow({
                   ) : null}
                 </div>
 
+
+
                 {message.role === 'assistant' ? (
                   message.content.trim() === '' && message.status === 'streaming' ? (
                     <div className="thinking-wrapper">
@@ -162,11 +166,20 @@ export function ChatWindow({
                       <span className="thinking-text">Thinking...</span>
                     </div>
                   ) : (
-                    <MarkdownRenderer content={message.content} />
+                    <div className="assistant-message-content">
+                      {message.content.split(/(\[PRODUCT:[a-f0-9]+\])/g).map((part, index) => {
+                        const match = part.match(/\[PRODUCT:([a-f0-9]+)\]/);
+                        if (match) {
+                          return <ChatProductCard key={index} productId={match[1]} />;
+                        }
+                        return <MarkdownRenderer key={index} content={part} />;
+                      })}
+                    </div>
                   )
                 ) : (
                   <div className="message-plain-content">{message.content}</div>
                 )}
+
 
 
                 {message.role === 'assistant' && message.usage ? (
