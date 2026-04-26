@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PackagePlus, LayoutDashboard } from 'lucide-react';
+import { PackagePlus, LayoutDashboard, Palette, DollarSign, Tag, AlignLeft, FileText, Info } from 'lucide-react';
 import styles from './Dashboard.module.css';
 import axios from 'axios';
 import { useAuth } from '../auth/AuthContext';
@@ -67,19 +67,24 @@ export const DashboardPage: React.FC = () => {
   };
 
   if (!user) {
-    return <div className={styles.dashboardContainer}>Please log in to access the dashboard.</div>;
+    return (
+      <div className={styles.dashboardContainer} style={{ textAlign: 'center', paddingTop: '5rem' }}>
+        <Info size={48} color="var(--text-muted)" style={{ marginBottom: '1.5rem' }} />
+        <h2 style={{ color: 'var(--text-secondary)' }}>Please log in to access the dashboard.</h2>
+      </div>
+    );
   }
 
   return (
-    <div className={styles.dashboardContainer}>
+    <main className={styles.dashboardContainer}>
       <header className={styles.dashboardHeader}>
         <div>
           <h1>Admin Dashboard</h1>
           <p>Manage your products and store content</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <LayoutDashboard size={24} />
-          <span>Welcome, {user.name}</span>
+        <div className="user-profile-nav">
+          <LayoutDashboard size={20} />
+          <span className="user-name">Welcome, {user.name}</span>
         </div>
       </header>
 
@@ -89,40 +94,40 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      <div className={styles.formCard}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-          <PackagePlus size={24} color="#3b82f6" />
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Add New Product</h2>
+      <section className={styles.formCard}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2.5rem' }}>
+          <PackagePlus size={28} color="var(--success)" />
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, letterSpacing: '-0.03em' }}>Add New Product</h2>
         </div>
 
         <form className={styles.productForm} onSubmit={handleSubmit}>
           <div className={styles.inputGroup}>
-            <label>Product Name</label>
+            <label><Tag size={14} style={{ marginRight: '4px' }} /> Product Name</label>
             <input name="name" type="text" placeholder="e.g. Ultra Monitor" required onChange={handleChange} />
           </div>
 
           <div className={styles.inputGroup}>
-            <label>Subtitle</label>
+            <label><Info size={14} style={{ marginRight: '4px' }} /> Subtitle</label>
             <input name="subtitle" type="text" placeholder="e.g. 4K HDR Resolution" required onChange={handleChange} />
           </div>
 
           <div className={`${styles.inputGroup} ${styles.fullWidth}`}>
-            <label>Short Description</label>
+            <label><AlignLeft size={14} style={{ marginRight: '4px' }} /> Short Description</label>
             <input name="shortDescription" type="text" placeholder="One sentence summary" required onChange={handleChange} />
           </div>
 
           <div className={`${styles.inputGroup} ${styles.fullWidth}`}>
-            <label>Full Description</label>
+            <label><FileText size={14} style={{ marginRight: '4px' }} /> Full Description</label>
             <textarea name="description" placeholder="Detailed product specifications..." required onChange={handleChange}></textarea>
           </div>
 
           <div className={styles.inputGroup}>
-            <label>Price (USD)</label>
+            <label><DollarSign size={14} style={{ marginRight: '4px' }} /> Price (USD)</label>
             <input name="price" type="number" step="0.01" placeholder="99.99" required onChange={handleChange} />
           </div>
 
           <div className={styles.inputGroup}>
-            <label>Category</label>
+            <label><Tag size={14} style={{ marginRight: '4px' }} /> Category</label>
             <select name="categorySlug" onChange={(e) => {
               const slug = e.target.value;
               const name = e.target.options[e.target.selectedIndex].text;
@@ -135,7 +140,10 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <div className={styles.visualGrid}>
-            <div className={styles.visualTitle}>Visual Styling</div>
+            <div className={styles.visualTitle}>
+              <Palette size={18} color="var(--text-muted)" />
+              Visual Styling
+            </div>
             <div className={styles.inputGroup}>
               <label>Gradient From</label>
               <input name="visual.gradientFrom" type="color" defaultValue="#3b82f6" onChange={handleChange} />
@@ -155,10 +163,11 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <button type="submit" className={styles.submitButton} disabled={isLoading}>
-            {isLoading ? 'Adding Product...' : 'Create Product'}
+            {isLoading ? 'Processing...' : 'Create Product'}
           </button>
         </form>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 };
+

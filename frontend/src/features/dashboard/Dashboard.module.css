@@ -1,34 +1,53 @@
 .dashboardContainer {
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 2rem 0;
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .dashboardHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: 2.5rem;
+  padding: 0 1rem;
 }
 
 .dashboardHeader h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #1a1a1a;
+  font-size: clamp(1.5rem, 5vw, 2.5rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  margin: 0;
+  background: var(--surface-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dashboardHeader p {
+  color: var(--text-secondary);
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
 }
 
 .formCard {
-  background: white;
-  border-radius: 1rem;
-  padding: 2rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  border: 1px solid #eee;
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-color);
+  max-width: 900px;
+  margin: 0 auto;
 }
 
 .productForm {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
+  gap: 1.75rem;
 }
 
 @media (max-width: 768px) {
@@ -40,7 +59,7 @@
 .inputGroup {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .fullWidth {
@@ -48,67 +67,98 @@
 }
 
 .inputGroup label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #4b5563;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
 }
 
 .inputGroup input,
 .inputGroup select,
 .inputGroup textarea {
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid #d1d5db;
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--surface-muted);
   font-size: 1rem;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.inputGroup input:focus,
+.inputGroup select:focus,
+.inputGroup textarea:focus {
+  outline: none;
+  border-color: var(--border-strong);
+  background: var(--surface-strong);
+  box-shadow: 0 0 0 4px var(--surface-accent-soft);
 }
 
 .inputGroup textarea {
-  min-height: 100px;
+  min-height: 120px;
   resize: vertical;
 }
 
 .submitButton {
   grid-column: 1 / -1;
-  background: #1a1a1a;
-  color: white;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  font-size: 1rem;
-  font-weight: 600;
+  background: var(--surface-accent);
+  color: var(--text-on-accent);
+  padding: 1.125rem;
+  border-radius: 999px;
+  font-size: 1.1rem;
+  font-weight: 700;
   border: none;
   cursor: pointer;
-  transition: background 0.2s;
-  margin-top: 1rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-top: 1.5rem;
+  box-shadow: var(--shadow-md);
 }
 
-.submitButton:hover {
-  background: #333;
+.submitButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  filter: brightness(1.1);
+}
+
+.submitButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .visualGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.5rem;
   grid-column: 1 / -1;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 0.75rem;
-  border: 1px dashed #d1d5db;
+  padding: 2rem;
+  background: var(--surface-muted);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-color);
 }
 
 .visualTitle {
   grid-column: 1 / -1;
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: #111827;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .successMessage {
-  background: #ecfdf5;
-  color: #065f46;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid #a7f3d0;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+  padding: 1.25rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 2rem;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  text-align: center;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
 }

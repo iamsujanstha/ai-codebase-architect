@@ -17,6 +17,12 @@ The stack uses:
 
 The goal is to show how a real SaaS can combine commerce, backend orchestration, AI capabilities, and payment providers inside one clean architecture.
 
+## 📖 Detailed Documentation
+For a deep dive into specific systems, refer to the following guides in the `docs/` folder:
+- [AI Infrastructure (Redis & Qdrant)](./docs/ai_infrastructure.md)
+- [Authentication & Google OAuth Flow](./docs/authentication_flow.md)
+- [Product Management Dashboard](./docs/product_dashboard.md)
+
 ## What this project demonstrates
 
 - route-based React application design with a shared product shell
