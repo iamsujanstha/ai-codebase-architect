@@ -49,6 +49,7 @@ export function useAiAssistant() {
   const [modelError, setModelError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [productsCreatedCount, setProductsCreatedCount] = useState<number | null>(null);
 
   const streamAbortControllerRef = useRef<AbortController | null>(null);
 
@@ -268,6 +269,12 @@ export function useAiAssistant() {
                 };
               }
 
+              if (event.type === 'products_created') {
+                setProductsCreatedCount(event.count);
+                setTimeout(() => setProductsCreatedCount(null), 5000);
+                return m;
+              }
+
               return m;
             });
 
@@ -317,6 +324,7 @@ export function useAiAssistant() {
     isLoadingModels,
     error,
     modelError,
+    productsCreatedCount,
     handleSubmit,
     stopStreaming,
     refreshModels: loadModels,

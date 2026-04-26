@@ -68,6 +68,7 @@ services:
       MEMORY_COLLECTION: conversations
       REDIS_URL: redis://redis:6379/0
       PORT: 8000
+      BACKEND_URL: http://backend:3000
 
     ports:
       - "8000:8000"

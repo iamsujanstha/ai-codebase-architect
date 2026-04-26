@@ -5,11 +5,12 @@ import { ChatWindow } from '@/features/chat/ChatWindow';
 import { useAiAssistant } from '@/features/chat/useAiAssistant';
 import { ModelSidebar } from '@/features/models/ModelSidebar';
 import { MainLayout } from '@/shared/ui/MainLayout';
+import { PackagePlus } from 'lucide-react';
 
 export function ChatPage(): JSX.Element {
   const { threadId } = useParams<{ threadId: string }>();
   const navigate = useNavigate();
-  
+
   const {
     draft,
     setDraft,
@@ -22,12 +23,12 @@ export function ChatPage(): JSX.Element {
     isStreaming,
     isLoadingModels,
     error,
+    productsCreatedCount,
     handleSubmit,
     stopStreaming,
     createNewThread,
     selectThread,
     deleteThread,
-
   } = useAiAssistant();
 
   // Sync internal state with URL
@@ -44,7 +45,6 @@ export function ChatPage(): JSX.Element {
     }
   }, [threadId, currentThreadId, navigate]);
 
-
   const handleSelectThread = (id: string) => {
     navigate(`/chat/${id}`);
   };
@@ -54,7 +54,6 @@ export function ChatPage(): JSX.Element {
     navigate(`/chat/${newThread.id}`);
   };
 
-
   const sidebar = (
     <ModelSidebar
       threads={threads}
@@ -63,11 +62,23 @@ export function ChatPage(): JSX.Element {
       onDeleteThread={deleteThread}
       onNewChat={handleNewChat}
     />
-
   );
 
   return (
     <div className="chat-page">
+      {/* Products-created toast */}
+      {productsCreatedCount !== null && (
+        <div className="products-created-toast">
+          <PackagePlus size={18} />
+          <span>
+            <strong>{productsCreatedCount} product{productsCreatedCount > 1 ? 's' : ''}</strong> added to the catalog!
+            <a href="/" style={{ marginLeft: '0.5rem', textDecoration: 'underline', color: 'inherit' }}>
+              View store →
+            </a>
+          </span>
+        </div>
+      )}
+
       <MainLayout sidebar={sidebar}>
         <div className="chat-content-container">
           <ChatWindow
@@ -93,5 +104,4 @@ export function ChatPage(): JSX.Element {
       </MainLayout>
     </div>
   );
-
 }

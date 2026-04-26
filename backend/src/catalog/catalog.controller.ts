@@ -32,4 +32,9 @@ export class CatalogController {
   async createProduct(@Body() createProductDto: any) {
     return this.catalogService.createProduct(createProductDto);
   }
+
+  @Post('seed')
+  async seedProducts(@Body('count') count?: number) {
+    return this.catalogService.seedProducts(count);
+  }
 }

@@ -139,16 +139,56 @@ export class CatalogService {
     const newProduct = new this.productModel({
       ...createProductDto,
       slug,
-      rating: 5,
-      reviewCount: 0,
-      inventoryCount: 10,
-      featured: true,
-      bestSeller: false,
-      newArrival: true,
+      rating: createProductDto.rating ?? 5,
+      reviewCount: createProductDto.reviewCount ?? 0,
+      inventoryCount: createProductDto.inventoryCount ?? 10,
+      featured: createProductDto.featured ?? true,
+      bestSeller: createProductDto.bestSeller ?? false,
+      newArrival: createProductDto.newArrival ?? true,
+      tags: createProductDto.tags ?? [],
+      keyHighlights: createProductDto.keyHighlights ?? [],
+      specs: createProductDto.specs ?? [],
     });
 
     const savedProduct = await newProduct.save();
     return this.mapProduct(savedProduct);
+  }
+
+  async seedProducts(count: number = 4): Promise<CatalogProduct[]> {
+    const products: CatalogProduct[] = [];
+
+    const categories = await this.listCategories();
+    
+    if (categories.length === 0) return [];
+
+    const adjectives = ['Ultra', 'Smart', 'Elite', 'Pro', 'NextGen', 'Cloud', 'Hyper'];
+    const nouns = ['Monitor', 'Keyboard', 'CPU', 'Controller', 'Node', 'Gateway', 'Interface'];
+
+    for (let i = 0; i < count; i++) {
+      const category = categories[Math.floor(Math.random() * categories.length)];
+      const name = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]} ${Math.floor(Math.random() * 900) + 100}`;
+      
+      const productData = {
+        name,
+        subtitle: `Performance optimized ${category.name}`,
+        shortDescription: `The ultimate tool for your ${category.name.toLowerCase()} workflow.`,
+        description: `Experience unparalleled efficiency with the ${name}. Engineered for professionals who demand the best in ${category.name.toLowerCase()} technology.`,
+        price: Math.floor(Math.random() * 800) + 99,
+        categorySlug: category.slug,
+        categoryName: category.name,
+        heroBadge: 'New Release',
+        visual: {
+          gradientFrom: '#3b82f6',
+          gradientTo: '#8b5cf6',
+          accent: '#3b82f6',
+          glyph: nouns[Math.floor(Math.random() * nouns.length)].toLowerCase(),
+        }
+      };
+
+      products.push(await this.createProduct(productData));
+    }
+
+    return products;
   }
 
   private buildProductFilter(

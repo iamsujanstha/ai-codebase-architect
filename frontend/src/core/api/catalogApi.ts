@@ -117,3 +117,49 @@ export function fetchCatalogProduct(
 export function fetchCategories(): Promise<CatalogCategory[]> {
   return fetchWithTimeout<CatalogCategory[]>('/catalog/categories');
 }
+
+export async function seedProducts(count = 4): Promise<unknown[]> {
+  const controller = new AbortController();
+  const timeoutHandle = window.setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch('/catalog/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const err = (await response.json()) as ApiErrorResponse;
+      throw new ApiError(extractErrorMessage(err), response.status);
+    }
+    return (await response.json()) as unknown[];
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Failed to seed products.', 503);
+  } finally {
+    window.clearTimeout(timeoutHandle);
+  }
+}
+
+export async function createProduct(data: Record<string, unknown>): Promise<unknown> {
+  const controller = new AbortController();
+  const timeoutHandle = window.setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch('/catalog/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const err = (await response.json()) as ApiErrorResponse;
+      throw new ApiError(extractErrorMessage(err), response.status);
+    }
+    return await response.json();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Failed to create product.', 503);
+  } finally {
+    window.clearTimeout(timeoutHandle);
+  }
+}
