@@ -85,4 +85,29 @@ export class MailService {
       this.logger.log('--- MOCK EMAIL END ---');
     }
   }
+
+  async sendPasswordResetEmail(email: string, token: string): Promise<void> {
+    const resetLink = `http://localhost:5173/reset-password?token=${token}`;
+    const subject = 'Password Reset Request';
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h2 style="color: #333;">Password Reset Request</h2>
+        <p>You requested a password reset. Click the button below to set a new password:</p>
+        <a href="${resetLink}" style="display: inline-block; padding: 10px 20px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px;">Reset Password</a>
+        <p style="margin-top: 20px; color: #777; font-size: 14px;">If you did not request this, please ignore this email.</p>
+      </div>
+    `;
+
+    if (this.transporter) {
+      await this.transporter.sendMail({
+        from: this.configService.get<string>('MAIL_FROM') || '"AI Commerce Platform" <noreply@example.com>',
+        to: email,
+        subject,
+        html,
+      });
+    } else {
+      this.logger.log(`--- MOCK PASSWORD RESET EMAIL to ${email} ---`);
+      this.logger.log(`Reset link: ${resetLink}`);
+    }
+  }
 }

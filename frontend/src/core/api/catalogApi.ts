@@ -4,6 +4,7 @@ import type {
   CatalogHomeResponse,
   CatalogProductDetailResponse,
   CatalogProductsResponse,
+  CatalogCategory,
 } from '@/core/types/catalog';
 
 const REQUEST_TIMEOUT_MS = 15000;
@@ -111,4 +112,8 @@ export function fetchCatalogProduct(
   return fetchWithTimeout<CatalogProductDetailResponse>(
     `/catalog/products/${slug}`,
   );
+}
+
+export function fetchCategories(): Promise<CatalogCategory[]> {
+  return fetchWithTimeout<CatalogCategory[]>('/catalog/categories');
 }

@@ -396,6 +396,55 @@ img {
   font-size: 0.8rem;
 }
 
+.user-profile-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-color);
+}
+
+.user-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.auth-links a {
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 8px 16px;
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+
+.auth-links a:hover {
+  background: var(--surface-muted);
+}
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: background 0.2s, color 0.2s;
+}
+
+.icon-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--danger);
+}
+
+[data-theme='dark'] .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 /* =========================================================
    THEME TOGGLE
    ========================================================= */

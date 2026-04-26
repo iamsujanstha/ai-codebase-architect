@@ -6,6 +6,8 @@ import { AppService } from './app.service';
 import { AiModule } from './ai/ai.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { PaymentsModule } from './payments/payments.module';
+import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   // AppModule is the root dependency graph for the NestJS service.
@@ -32,6 +34,8 @@ import { PaymentsModule } from './payments/payments.module';
     AiModule,
     CatalogModule,
     PaymentsModule,
+    UsersModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

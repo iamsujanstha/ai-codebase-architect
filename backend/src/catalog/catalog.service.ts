@@ -130,6 +130,27 @@ export class CatalogService {
     };
   }
 
+  async createProduct(createProductDto: any): Promise<CatalogProduct> {
+    const slug = createProductDto.name
+      .toLowerCase()
+      .replace(/ /g, '-')
+      .replace(/[^\w-]+/g, '');
+
+    const newProduct = new this.productModel({
+      ...createProductDto,
+      slug,
+      rating: 5,
+      reviewCount: 0,
+      inventoryCount: 10,
+      featured: true,
+      bestSeller: false,
+      newArrival: true,
+    });
+
+    const savedProduct = await newProduct.save();
+    return this.mapProduct(savedProduct);
+  }
+
   private buildProductFilter(
     query: ListProductsQueryDto,
   ): FilterQuery<ProductDocument> {
