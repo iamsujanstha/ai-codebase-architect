@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import { OrderStatus } from '../enums/order-status.enum';
 import { PaymentProvider } from '../enums/payment-provider.enum';
+import mongoose from 'mongoose';
 
 @Schema({ _id: false })
 export class OrderCustomerSnapshot {
@@ -106,6 +107,11 @@ export class OrderHistoryEntry {
 export class Order {
   @Prop({ required: true, trim: true, unique: true, index: true })
   orderNumber!: string;
+
+  // userId links this order to an authenticated user account.
+  // Null for anonymous/legacy orders — backward compatible.
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true })
+  userId!: mongoose.Types.ObjectId | null;
 
   @Prop({
     required: true,

@@ -136,6 +136,7 @@ export class PaymentsService {
 
   async createStripeCheckoutSession(
     request: CreatePaymentSessionDto,
+    userId?: string,
   ): Promise<CreateStripeCheckoutSessionResponse> {
     if (!this.stripeClient) {
       throw new BadRequestException(
@@ -157,6 +158,7 @@ export class PaymentsService {
       request.customer,
       pricedCart,
       quote,
+      userId,
     );
 
     try {
@@ -229,6 +231,7 @@ export class PaymentsService {
 
   async createEsewaCheckout(
     request: CreatePaymentSessionDto,
+    userId?: string,
   ): Promise<EsewaCheckoutResponse> {
     const pricedCart = await this.buildPricedCart(request.items);
     const quote = this.buildEsewaQuote(pricedCart);
@@ -244,6 +247,7 @@ export class PaymentsService {
       request.customer,
       pricedCart,
       quote,
+      userId,
     );
 
     const fields = {
@@ -391,6 +395,16 @@ export class PaymentsService {
   async getOrderSummary(orderNumber: string): Promise<OrderSummaryResponse> {
     const order = await this.getOrderByOrderNumber(orderNumber);
     return this.mapOrderSummary(order);
+  }
+
+  async getOrdersForUser(userId: string): Promise<OrderSummaryResponse[]> {
+    const orders = await this.orderModel
+      .find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    return orders.map((order) => this.mapOrderSummary(order as any));
   }
 
   async handleEsewaSuccessRedirect(
@@ -697,11 +711,13 @@ export class PaymentsService {
     customer: CheckoutCustomerDto,
     pricedCart: PricedCartLine[],
     quote: ProviderQuote,
+    userId?: string,
   ): Promise<OrderDocument> {
     const orderNumber = this.generateOrderNumber();
 
     return this.orderModel.create({
       orderNumber,
+      userId: userId ?? null,
       paymentProvider: provider,
       status: OrderStatus.PENDING_PAYMENT,
       customer: {

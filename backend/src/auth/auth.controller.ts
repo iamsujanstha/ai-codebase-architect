@@ -42,10 +42,14 @@ export class AuthController {
   async googleAuthRedirect(@Req() req: any, @Res() res: Response) {
     const result = await this.authService.googleLogin(req.user);
     const frontendUrl = this.configService.get('FRONTEND_PUBLIC_URL') || 'http://localhost:8080';
-    
+
     const token = result.access_token;
     const userStr = JSON.stringify(result.user);
-    
-    return res.redirect(`${frontendUrl}/auth/callback?token=${token}&user=${encodeURIComponent(userStr)}`);
+    // Forward the redirect destination so the frontend callback page can navigate correctly.
+    const redirectTo = (req.query?.state as string) ?? '/';
+
+    return res.redirect(
+      `${frontendUrl}/auth/callback?token=${token}&user=${encodeURIComponent(userStr)}&redirect=${encodeURIComponent(redirectTo)}`,
+    );
   }
 }

@@ -2710,3 +2710,123 @@ img {
   from { opacity: 1; }
   to   { opacity: 0; transform: translateY(-8px); }
 }
+
+/* =========================================================
+   ORDER HISTORY PAGE
+   ========================================================= */
+
+.order-history-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+  width: 100%;
+}
+
+.order-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.order-history-card {
+  border-radius: var(--radius-md);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.order-history-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.order-number {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.order-date {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+.order-history-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.order-history-item-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.order-history-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.order-history-totals {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.order-history-totals strong {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+.order-history-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+/* Status chip colour overrides for order statuses */
+.order-status-paid {
+  background: rgba(5, 150, 105, 0.1);
+  color: var(--success);
+  border-color: rgba(5, 150, 105, 0.2);
+}
+
+.order-status-pending {
+  background: rgba(234, 88, 12, 0.1);
+  color: var(--warning);
+  border-color: rgba(234, 88, 12, 0.2);
+}
+
+.order-status-failed {
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--danger);
+  border-color: rgba(220, 38, 38, 0.14);
+}
+
+@media (max-width: 600px) {
+  .order-history-card-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

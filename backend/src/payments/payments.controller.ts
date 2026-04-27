@@ -7,8 +7,11 @@ import {
   Post,
   Query,
   RawBody,
+  Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
 import { CreatePaymentSessionDto } from './dto/create-payment-session.dto';
 import { PaymentQuoteRequestDto } from './dto/payment-quote-request.dto';
@@ -23,9 +26,15 @@ export class PaymentsController {
     return this.paymentsService.getQuote(request);
   }
 
+  // Requires authentication — userId is extracted from the JWT and stored on the order.
+  @UseGuards(AuthGuard('jwt'))
   @Post('stripe/checkout-session')
-  async createStripeCheckoutSession(@Body() request: CreatePaymentSessionDto) {
-    return this.paymentsService.createStripeCheckoutSession(request);
+  async createStripeCheckoutSession(
+    @Body() request: CreatePaymentSessionDto,
+    @Req() req: any,
+  ) {
+    const userId = req.user?._id?.toString() ?? req.user?.id?.toString();
+    return this.paymentsService.createStripeCheckoutSession(request, userId);
   }
 
   @Post('stripe/webhook')
@@ -44,9 +53,15 @@ export class PaymentsController {
     return this.paymentsService.syncStripeSessionStatus(sessionId, orderNumber);
   }
 
+  // Requires authentication — userId is extracted from the JWT and stored on the order.
+  @UseGuards(AuthGuard('jwt'))
   @Post('esewa/initiate')
-  async initiateEsewaCheckout(@Body() request: CreatePaymentSessionDto) {
-    return this.paymentsService.createEsewaCheckout(request);
+  async initiateEsewaCheckout(
+    @Body() request: CreatePaymentSessionDto,
+    @Req() req: any,
+  ) {
+    const userId = req.user?._id?.toString() ?? req.user?.id?.toString();
+    return this.paymentsService.createEsewaCheckout(request, userId);
   }
 
   @Get('esewa/success')
@@ -72,6 +87,14 @@ export class PaymentsController {
       await this.paymentsService.handleEsewaFailureRedirect(orderNumber);
 
     return response.redirect(302, redirectUrl);
+  }
+
+  // Returns all orders for the authenticated user, sorted newest first.
+  @UseGuards(AuthGuard('jwt'))
+  @Get('my-orders')
+  async getMyOrders(@Req() req: any) {
+    const userId = req.user?._id?.toString() ?? req.user?.id?.toString();
+    return this.paymentsService.getOrdersForUser(userId);
   }
 
   @Get('orders/:orderNumber')

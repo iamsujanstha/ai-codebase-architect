@@ -10,12 +10,14 @@ export const AuthCallbackPage: React.FC = () => {
   useEffect(() => {
     const token = searchParams.get('token');
     const userStr = searchParams.get('user');
+    // Honour the redirect destination that was passed through the Google OAuth flow.
+    const redirectTo = searchParams.get('redirect') ?? '/';
 
     if (token && userStr) {
       try {
         const user = JSON.parse(decodeURIComponent(userStr));
         login(token, user);
-        navigate('/');
+        navigate(redirectTo, { replace: true });
       } catch (err) {
         console.error('Failed to parse user data from Google login', err);
         navigate('/login');

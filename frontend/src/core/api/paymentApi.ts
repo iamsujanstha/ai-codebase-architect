@@ -35,18 +35,28 @@ function extractErrorMessage(errorPayload: Partial<ApiErrorResponse> | null): st
 async function requestJson<T>(
   input: string,
   init: RequestInit,
+  authenticated = false,
 ): Promise<T> {
   const controller = new AbortController();
   const timeoutHandle = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init.headers as Record<string, string> ?? {}),
+  };
+
+  if (authenticated) {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
 
   try {
     const response = await fetch(input, {
       ...init,
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init.headers ?? {}),
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -95,6 +105,7 @@ export function createStripeCheckoutSession(input: {
       method: 'POST',
       body: JSON.stringify(input),
     },
+    true, // requires auth
   );
 }
 
@@ -105,7 +116,17 @@ export function createEsewaCheckout(input: {
   return requestJson<EsewaCheckoutResponse>('/payments/esewa/initiate', {
     method: 'POST',
     body: JSON.stringify(input),
-  });
+  },
+  true, // requires auth
+  );
+}
+
+export function fetchMyOrders(): Promise<OrderSummaryResponse[]> {
+  return requestJson<OrderSummaryResponse[]>(
+    '/payments/my-orders',
+    { method: 'GET' },
+    true, // requires auth
+  );
 }
 
 export function fetchOrderSummary(

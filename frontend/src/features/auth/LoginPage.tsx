@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import styles from './Auth.module.css';
 import axios from 'axios';
@@ -11,6 +11,10 @@ export const LoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // After login, go back to wherever the user was trying to reach (e.g. /checkout).
+  const redirectTo = searchParams.get('redirect') ?? '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,12 +22,9 @@ export const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await axios.post('/auth/login', {
-        email,
-        password,
-      });
+      const response = await axios.post('/auth/login', { email, password });
       login(response.data.access_token, response.data.user);
-      navigate('/');
+      navigate(redirectTo, { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -32,7 +33,8 @@ export const LoginPage: React.FC = () => {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = '/auth/google';
+    // Pass the redirect destination through so the callback page can honour it.
+    window.location.href = `/auth/google?redirect=${encodeURIComponent(redirectTo)}`;
   };
 
   return (
@@ -40,7 +42,13 @@ export const LoginPage: React.FC = () => {
       <div className={styles.authCard}>
         <h1 className={styles.authTitle}>Welcome Back</h1>
         <p className={styles.authSubtitle}>Enter your details to access your account</p>
-        
+
+        {redirectTo === '/checkout' && (
+          <p className={styles.authSubtitle} style={{ color: 'var(--accent)', marginBottom: '1rem' }}>
+            Please sign in to continue to checkout.
+          </p>
+        )}
+
         <form className={styles.authForm} onSubmit={handleSubmit}>
           <div className={styles.inputGroup}>
             <label htmlFor="email">Email</label>
@@ -53,7 +61,7 @@ export const LoginPage: React.FC = () => {
               required
             />
           </div>
-          
+
           <div className={styles.inputGroup}>
             <label htmlFor="password">Password</label>
             <input
@@ -83,7 +91,9 @@ export const LoginPage: React.FC = () => {
         <p className={styles.authFooter}>
           Don't have an account? <Link to="/register">Sign Up</Link>
           <br />
-          <Link to="/forgot-password" style={{ fontSize: '0.75rem', marginTop: '0.5rem', display: 'inline-block' }}>Forgot Password?</Link>
+          <Link to="/forgot-password" style={{ fontSize: '0.75rem', marginTop: '0.5rem', display: 'inline-block' }}>
+            Forgot Password?
+          </Link>
         </p>
       </div>
     </div>
