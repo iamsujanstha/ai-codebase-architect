@@ -7,6 +7,7 @@ import {
 } from '@/core/api/paymentApi';
 import type { OrderSummaryResponse } from '@/core/types/payment';
 import { useCart } from '@/features/store/CartContext';
+import { useAuth } from '@/features/auth/AuthContext';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 
 function getStatusCopy(status: string | null): {
@@ -46,6 +47,7 @@ function getStatusCopy(status: string | null): {
 export function CheckoutResultPage(): JSX.Element {
   const [searchParams] = useSearchParams();
   const { clearCart } = useCart();
+  const { user } = useAuth();
   const [order, setOrder] = useState<OrderSummaryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -228,6 +230,32 @@ export function CheckoutResultPage(): JSX.Element {
                 </Link>
               )}
             </div>
+
+            {/* Sign-in nudge for unauthenticated users who land here via payment redirect */}
+            {!user && order.status === 'paid' && (
+              <div className="result-signin-nudge">
+                <p>
+                  <strong>Want to track this order?</strong> Sign in to save it to your order history.
+                </p>
+                <Link
+                  className="primary-button"
+                  to={`/login?redirect=/orders`}
+                >
+                  Sign in to view order history
+                </Link>
+              </div>
+            )}
+
+            {user && order.status === 'paid' && (
+              <div className="result-signin-nudge result-signin-nudge--success">
+                <p>
+                  ✓ This order has been saved to your account.
+                </p>
+                <Link className="secondary-link-button" to="/orders">
+                  View all orders →
+                </Link>
+              </div>
+            )}
           </>
         ) : null}
       </section>

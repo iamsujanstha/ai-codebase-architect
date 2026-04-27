@@ -6,27 +6,37 @@ interface ProtectedRouteProps {
 }
 
 /**
- * Wraps a route so only authenticated users can access it.
- * Unauthenticated visitors are redirected to /login with a ?redirect= param
- * so they land back on the intended page after signing in.
+ * Real-world auth guard — mirrors how Amazon/Shopify protect account pages.
+ *
+ * - While auth state is being restored from localStorage: shows a full-screen
+ *   loading state so there's no flash-redirect to /login on hard refresh.
+ * - Unauthenticated: redirects to /login with ?redirect= so the user lands
+ *   back on the intended page after signing in.
+ * - Authenticated: renders the page normally.
  */
 export function ProtectedRoute({ children }: ProtectedRouteProps): JSX.Element {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
-  // While the auth state is being restored from localStorage, render nothing
-  // to avoid a flash of the login redirect.
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-        <div className="loading-hint">Loading...</div>
+      <div className="auth-loading-screen">
+        <div className="auth-loading-spinner" aria-label="Checking authentication…" />
       </div>
     );
   }
 
   if (!user) {
-    const redirectPath = location.pathname + location.search;
-    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+    // Preserve the full path + query string so the user returns exactly where
+    // they were trying to go after logging in.
+    const returnTo = location.pathname + location.search;
+    return (
+      <Navigate
+        to={`/login?redirect=${encodeURIComponent(returnTo)}`}
+        replace
+        state={{ from: location }}
+      />
+    );
   }
 
   return children;

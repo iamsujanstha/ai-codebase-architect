@@ -1,10 +1,12 @@
 import type { CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '@/features/store/CartContext';
+import { useAuth } from '@/features/auth/AuthContext';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 
 export function CartDrawer(): JSX.Element {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const {
     items,
     itemCount,
@@ -15,6 +17,16 @@ export function CartDrawer(): JSX.Element {
     updateQuantity,
     clearCart,
   } = useCart();
+
+  function handleCheckout() {
+    closeCart();
+    if (!user) {
+      // Mirror Amazon: redirect to login with /checkout as the return destination
+      navigate('/login?redirect=%2Fcheckout');
+    } else {
+      navigate('/checkout');
+    }
+  }
 
   return (
     <>
@@ -124,17 +136,13 @@ export function CartDrawer(): JSX.Element {
                 <button
                   className="primary-button"
                   type="button"
-                  onClick={() => {
-                    closeCart();
-                    navigate('/checkout');
-                  }}
+                  onClick={handleCheckout}
                 >
-                  Continue to checkout
+                  {user ? 'Continue to checkout' : 'Sign in to checkout'}
                 </button>
               </div>
               <p className="cart-note">
-                Checkout is intentionally UI-only in this iteration. The catalog
-                is production-shaped; payments and auth are the next natural layer.
+                Server-priced checkout via Stripe or eSewa. Sign in to place an order.
               </p>
             </div>
           </>
