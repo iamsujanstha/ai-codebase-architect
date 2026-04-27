@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import styles from './Auth.module.css';
 import axios from 'axios';
+import { ROUTES } from '@/app/constants/routes';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -14,7 +15,7 @@ export const LoginPage: React.FC = () => {
   const [searchParams] = useSearchParams();
 
   // After login, go back to wherever the user was trying to reach (e.g. /checkout).
-  const redirectTo = searchParams.get('redirect') ?? '/';
+  const redirectTo = searchParams.get('redirect') ?? ROUTES.HOME;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,9 +90,9 @@ export const LoginPage: React.FC = () => {
         </button>
 
         <p className={styles.authFooter}>
-          Don't have an account? <Link to="/register">Sign Up</Link>
+          Don't have an account? <Link to={ROUTES.REGISTER}>Sign Up</Link>
           <br />
-          <Link to="/forgot-password" style={{ fontSize: '0.75rem', marginTop: '0.5rem', display: 'inline-block' }}>
+          <Link to={ROUTES.FORGOT_PASSWORD} style={{ fontSize: '0.75rem', marginTop: '0.5rem', display: 'inline-block' }}>
             Forgot Password?
           </Link>
         </p>

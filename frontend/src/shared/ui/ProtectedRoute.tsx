@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth/AuthContext';
+import { loginWithRedirect } from '@/app/constants/routes';
 
 interface ProtectedRouteProps {
   children: JSX.Element;
@@ -27,12 +28,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps): JSX.Element {
   }
 
   if (!user) {
-    // Preserve the full path + query string so the user returns exactly where
-    // they were trying to go after logging in.
     const returnTo = location.pathname + location.search;
     return (
       <Navigate
-        to={`/login?redirect=${encodeURIComponent(returnTo)}`}
+        to={loginWithRedirect(returnTo)}
         replace
         state={{ from: location }}
       />

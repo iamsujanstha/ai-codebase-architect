@@ -43,13 +43,15 @@ export class AuthController {
     const result = await this.authService.googleLogin(req.user);
     const frontendUrl = this.configService.get('FRONTEND_PUBLIC_URL') || 'http://localhost:8080';
 
-    const token = result.access_token;
+    const token   = result.access_token;
     const userStr = JSON.stringify(result.user);
-    // Forward the redirect destination so the frontend callback page can navigate correctly.
-    const redirectTo = (req.query?.state as string) ?? '/';
+
+    // After Google OAuth, always land on home unless a specific redirect was
+    // passed through the state param. Default to '/' (home page).
+    const redirectTo = (req.query?.state as string) || '/';
 
     return res.redirect(
-      `${frontendUrl}/auth/callback?token=${token}&user=${encodeURIComponent(userStr)}&redirect=${encodeURIComponent(redirectTo)}`,
+      `${frontendUrl}/auth/callback?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userStr)}&redirect=${encodeURIComponent(redirectTo)}`,
     );
   }
 }

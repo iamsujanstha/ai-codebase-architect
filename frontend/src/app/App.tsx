@@ -1,21 +1,26 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { ChatPage } from '@/features/chat/ChatPage';
-import { CheckoutPage } from '@/features/store/CheckoutPage';
-import { CheckoutResultPage } from '@/features/store/CheckoutResultPage';
-import { OrderHistoryPage } from '@/features/store/OrderHistoryPage';
-import { ProductDetailsPage } from '@/features/store/ProductDetailsPage';
-import { StorefrontPage } from '@/features/store/StorefrontPage';
+import { AuthProvider } from '@/features/auth/AuthContext';
 import { CartProvider } from '@/features/store/CartContext';
 import { AppChrome } from '@/shared/ui/AppChrome';
-import { ProtectedRoute } from '@/shared/ui/ProtectedRoute';
-import { AuthProvider } from '@/features/auth/AuthContext';
-import { LoginPage } from '@/features/auth/LoginPage';
-import { RegisterPage } from '@/features/auth/RegisterPage';
-import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
-import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage';
-import { AuthCallbackPage } from '@/features/auth/AuthCallbackPage';
-import { DashboardPage } from '@/features/dashboard/DashboardPage';
+import { authRoutes } from './routes/auth.routes';
+import { publicRoutes } from './routes/public.routes';
+import { protectedRoutes } from './routes/protected.routes';
+import { ROUTES } from './constants/routes';
 
+/**
+ * App — composition root.
+ *
+ * Responsibilities:
+ *   1. Mount global context providers in the correct order.
+ *   2. Declare the top-level router shell.
+ *   3. Spread route arrays from focused route modules.
+ *
+ * Why arrays instead of components?
+ * React Router v6 requires <Route> elements to be static JSX children of
+ * <Routes>. Wrapping them in a component function breaks route matching
+ * because the router sees a component node, not <Route> elements.
+ * Exporting plain JSX arrays and spreading them here is the correct pattern.
+ */
 export default function App(): JSX.Element {
   return (
     <BrowserRouter>
@@ -23,33 +28,10 @@ export default function App(): JSX.Element {
         <CartProvider>
           <Routes>
             <Route element={<AppChrome />}>
-              <Route path="/" element={<StorefrontPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/auth/callback" element={<AuthCallbackPage />} />
-
-              {/* Protected routes — require authentication */}
-              <Route
-                path="/dashboard"
-                element={<ProtectedRoute><DashboardPage /></ProtectedRoute>}
-              />
-              <Route
-                path="/checkout"
-                element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>}
-              />
-              <Route
-                path="/orders"
-                element={<ProtectedRoute><OrderHistoryPage /></ProtectedRoute>}
-              />
-
-              <Route path="/checkout/result" element={<CheckoutResultPage />} />
-              <Route path="/products/:slug" element={<ProductDetailsPage />} />
-              <Route path="/chat" element={<ChatPage />} />
-              <Route path="/chat/:threadId" element={<ChatPage />} />
-
-              <Route path="*" element={<Navigate replace to="/" />} />
+              {publicRoutes}
+              {authRoutes}
+              {protectedRoutes}
+              <Route path="*" element={<Navigate replace to={ROUTES.HOME} />} />
             </Route>
           </Routes>
         </CartProvider>

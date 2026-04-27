@@ -229,6 +229,12 @@ services:
       MAIL_USER: ${MAIL_USER:-}
       MAIL_PASS: ${MAIL_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-"Atlas Commerce Lab" <noreply@atlascommerce.dev>}
+      # Auth
+      JWT_SECRET: ${JWT_SECRET:-fallback_secret_change_in_production}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Must match exactly what is registered in Google Console → Authorized redirect URIs
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3000/auth/google/callback}
 
     ports:
       - "3000:3000"

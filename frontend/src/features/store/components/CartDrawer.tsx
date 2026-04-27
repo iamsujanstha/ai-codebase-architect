@@ -3,29 +3,20 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '@/features/store/CartContext';
 import { useAuth } from '@/features/auth/AuthContext';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
+import { ROUTES, loginWithRedirect } from '@/app/constants/routes';
 
 export function CartDrawer(): JSX.Element {
   const navigate = useNavigate();
   const { user } = useAuth();
   const {
-    items,
-    itemCount,
-    subtotal,
-    isOpen,
-    closeCart,
-    removeItem,
-    updateQuantity,
-    clearCart,
+    items, itemCount, subtotal, isOpen,
+    closeCart, removeItem, updateQuantity, clearCart,
   } = useCart();
 
   function handleCheckout() {
     closeCart();
-    if (!user) {
-      // Mirror Amazon: redirect to login with /checkout as the return destination
-      navigate('/login?redirect=%2Fcheckout');
-    } else {
-      navigate('/checkout');
-    }
+    // Mirror Amazon: unauthenticated users are sent to login with /checkout as return destination
+    navigate(user ? ROUTES.CHECKOUT : loginWithRedirect(ROUTES.CHECKOUT));
   }
 
   return (

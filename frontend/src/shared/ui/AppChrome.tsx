@@ -5,15 +5,16 @@ import { useCart } from '@/features/store/CartContext';
 import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useOnClickOutside } from '@/shared/hooks/useOnClickOutside';
+import { ROUTES } from '@/app/constants/routes';
 
 // ─── route label ─────────────────────────────────────────────────────────────
 
 function routeLabel(pathname: string): string {
-  if (pathname.startsWith('/chat'))      return 'Local AI concierge';
-  if (pathname.startsWith('/checkout'))  return 'Payments orchestration';
-  if (pathname.startsWith('/orders'))    return 'Order History';
-  if (pathname.startsWith('/dashboard')) return 'Admin Operations';
-  if (pathname.startsWith('/login') || pathname.startsWith('/register')) return 'Account';
+  if (pathname.startsWith(ROUTES.CHAT))      return 'Local AI concierge';
+  if (pathname.startsWith(ROUTES.CHECKOUT))  return 'Payments orchestration';
+  if (pathname.startsWith(ROUTES.ORDERS))    return 'Order History';
+  if (pathname.startsWith(ROUTES.DASHBOARD)) return 'Admin Operations';
+  if (pathname.startsWith(ROUTES.LOGIN) || pathname.startsWith(ROUTES.REGISTER)) return 'Account';
   return 'Mongo-backed storefront';
 }
 
@@ -45,7 +46,7 @@ function UserMenu(): JSX.Element {
   function handleLogout() {
     setOpen(false);
     logout();
-    navigate('/');
+    navigate(ROUTES.HOME);
   }
 
   return (
@@ -58,11 +59,7 @@ function UserMenu(): JSX.Element {
         type="button"
       >
         {user.avatar ? (
-          <img
-            src={user.avatar}
-            alt={user.name}
-            className="user-menu__avatar"
-          />
+          <img src={user.avatar} alt={user.name} className="user-menu__avatar" />
         ) : (
           <span className="user-menu__initials">{initials}</span>
         )}
@@ -72,44 +69,23 @@ function UserMenu(): JSX.Element {
 
       {open && (
         <div className="user-menu__dropdown" role="menu">
-          {/* identity header */}
           <div className="user-menu__header">
             <p className="user-menu__full-name">{user.name}</p>
             <p className="user-menu__email">{user.email}</p>
           </div>
-
           <div className="user-menu__divider" />
-
-          <button
-            className="user-menu__item"
-            role="menuitem"
-            onClick={() => { setOpen(false); navigate('/orders'); }}
-            type="button"
-          >
-            <span className="user-menu__item-icon">📦</span>
-            My Orders
+          <button className="user-menu__item" role="menuitem" type="button"
+            onClick={() => { setOpen(false); navigate(ROUTES.ORDERS); }}>
+            <span className="user-menu__item-icon">📦</span>My Orders
           </button>
-
-          <button
-            className="user-menu__item"
-            role="menuitem"
-            onClick={() => { setOpen(false); navigate('/dashboard'); }}
-            type="button"
-          >
-            <span className="user-menu__item-icon">⚙️</span>
-            Dashboard
+          <button className="user-menu__item" role="menuitem" type="button"
+            onClick={() => { setOpen(false); navigate(ROUTES.DASHBOARD); }}>
+            <span className="user-menu__item-icon">⚙️</span>Dashboard
           </button>
-
           <div className="user-menu__divider" />
-
-          <button
-            className="user-menu__item user-menu__item--danger"
-            role="menuitem"
-            onClick={handleLogout}
-            type="button"
-          >
-            <span className="user-menu__item-icon">→</span>
-            Sign out
+          <button className="user-menu__item user-menu__item--danger" role="menuitem" type="button"
+            onClick={handleLogout}>
+            <span className="user-menu__item-icon">→</span>Sign out
           </button>
         </div>
       )}
