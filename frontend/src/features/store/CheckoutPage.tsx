@@ -12,45 +12,40 @@ import type {
 } from '@/core/types/payment';
 import type { PaymentProvider } from '@/core/types/payment-literals';
 import { useCart } from '@/features/store/CartContext';
+import { useAuth } from '@/features/auth/AuthContext';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 
 const CUSTOMER_STORAGE_KEY = 'atlas-commerce-lab:checkout-customer';
 
-function loadStoredCustomer(): CheckoutCustomerInput {
-  if (typeof window === 'undefined') {
-    return {
-      fullName: '',
-      email: '',
-      phone: '',
-      addressLine1: '',
-      city: '',
-      country: 'Nepal',
-    };
-  }
+function loadStoredCustomer(
+  userEmail?: string,
+  userName?: string,
+): CheckoutCustomerInput {
+  const defaults: CheckoutCustomerInput = {
+    fullName: userName ?? '',
+    email: userEmail ?? '',
+    phone: '',
+    addressLine1: '',
+    city: '',
+    country: 'Nepal',
+  };
+
+  if (typeof window === 'undefined') return defaults;
 
   try {
     const rawValue = window.localStorage.getItem(CUSTOMER_STORAGE_KEY);
-    if (!rawValue) {
-      return {
-        fullName: '',
-        email: '',
-        phone: '',
-        addressLine1: '',
-        city: '',
-        country: 'Nepal',
-      };
-    }
+    if (!rawValue) return defaults;
 
-    return JSON.parse(rawValue) as CheckoutCustomerInput;
-  } catch {
+    const stored = JSON.parse(rawValue) as CheckoutCustomerInput;
     return {
-      fullName: '',
-      email: '',
-      phone: '',
-      addressLine1: '',
-      city: '',
-      country: 'Nepal',
+      ...stored,
+      // Always override with the logged-in user's email so the order
+      // confirmation is guaranteed to reach the right inbox.
+      email: userEmail ?? stored.email,
+      fullName: stored.fullName || userName || '',
     };
+  } catch {
+    return defaults;
   }
 }
 
@@ -63,7 +58,10 @@ function isValidCustomer(customer: CheckoutCustomerInput): boolean {
 
 export function CheckoutPage(): JSX.Element {
   const { items } = useCart();
-  const [customer, setCustomer] = useState<CheckoutCustomerInput>(loadStoredCustomer);
+  const { user } = useAuth();
+  const [customer, setCustomer] = useState<CheckoutCustomerInput>(() =>
+    loadStoredCustomer(user?.email, user?.name),
+  );
   const [quote, setQuote] = useState<PaymentQuoteResponse | null>(null);
   const [selectedProvider, setSelectedProvider] =
     useState<PaymentProvider>('stripe');
@@ -71,6 +69,17 @@ export function CheckoutPage(): JSX.Element {
   const [isSubmittingProvider, setIsSubmittingProvider] =
     useState<PaymentProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep the email field in sync if the user logs in after the page mounts
+  useEffect(() => {
+    if (user?.email) {
+      setCustomer((prev) => ({
+        ...prev,
+        email: user.email,
+        fullName: prev.fullName || user.name || '',
+      }));
+    }
+  }, [user?.email, user?.name]);
 
   const checkoutItems = useMemo(
     () =>
@@ -265,7 +274,15 @@ export function CheckoutPage(): JSX.Element {
                 }
                 placeholder="avery@example.com"
                 type="email"
+                readOnly={Boolean(user?.email)}
+                style={user?.email ? { opacity: 0.7, cursor: 'not-allowed' } : undefined}
+                title={user?.email ? 'Email is taken from your account' : undefined}
               />
+              {user?.email && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  Order confirmation will be sent to your account email
+                </span>
+              )}
             </label>
 
             <label className="checkout-field">

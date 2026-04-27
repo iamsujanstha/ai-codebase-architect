@@ -3,6 +3,22 @@ name: atlas-commerce-lab
 
 services:
   # =========================================================
+  # MAILPIT (Local SMTP + Web UI for email testing)
+  # =========================================================
+  # Catches all outgoing emails so nothing is accidentally sent
+  # to real addresses during development.
+  # SMTP:   localhost:1025  (backend connects here)
+  # Web UI: http://localhost:8025  (view emails in browser)
+  # =========================================================
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - assistant-network
+
+  # =========================================================
   # MONGODB (Primary application database)
   # =========================================================
   # The NestJS backend uses Mongoose and can point either to:
@@ -207,6 +223,12 @@ services:
       ESEWA_TAX_AMOUNT_NPR: ${ESEWA_TAX_AMOUNT_NPR:-0}
       ESEWA_SERVICE_CHARGE_NPR: ${ESEWA_SERVICE_CHARGE_NPR:-0}
       ESEWA_DELIVERY_CHARGE_NPR: ${ESEWA_DELIVERY_CHARGE_NPR:-0}
+      # Mail — uses .env values; falls back to Mailpit for zero-config local testing
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASS: ${MAIL_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-"Atlas Commerce Lab" <noreply@atlascommerce.dev>}
 
     ports:
       - "3000:3000"
@@ -215,6 +237,8 @@ services:
     depends_on:
       ai-service:
         condition: service_healthy
+      mailpit:
+        condition: service_started
 
 
     # Real runtime command

@@ -836,8 +836,19 @@ export class PaymentsService {
     });
     await order.save();
 
-    // Send confirmation email asynchronously
-    void this.mailService.sendOrderConfirmation(order);
+    // Send confirmation email to the customer.
+    // We await it properly so errors surface in logs instead of being silently swallowed.
+    // The email goes to the customer snapshot email on the order (which is the
+    // logged-in user's email, since checkout requires authentication).
+    try {
+      await this.mailService.sendOrderConfirmation(order);
+    } catch (emailError) {
+      // Email failure must never roll back a confirmed payment — log and continue.
+      this.logger.error(
+        `Order ${orderNumber} was paid but confirmation email failed: ` +
+        (emailError instanceof Error ? emailError.message : String(emailError)),
+      );
+    }
   }
 
 
