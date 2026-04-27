@@ -6,25 +6,20 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { Order, OrderSchema } from './schemas/order.schema';
 import { MailModule } from '../mail/mail.module';
+import { AuthModule } from '../auth/auth.module';
 
-// Payment integrations deserve their own module because they combine:
-// - provider-specific APIs
-// - order persistence
-// - callback verification
-// - frontend-facing checkout orchestration
-//
-// Keeping this isolated prevents payment logic from bleeding into catalog and AI features.
-// PassportModule is imported so AuthGuard('jwt') resolves correctly in this module.
+// PassportModule + AuthModule are imported together so AuthGuard('jwt') can
+// resolve JwtStrategy at runtime inside this module's request pipeline.
 @Module({
   imports: [
     PassportModule,
+    AuthModule,
     MongooseModule.forFeature([
       { name: Product.name, schema: ProductSchema },
       { name: Order.name, schema: OrderSchema },
     ]),
     MailModule,
   ],
-
   controllers: [PaymentsController],
   providers: [PaymentsService],
   exports: [PaymentsService],

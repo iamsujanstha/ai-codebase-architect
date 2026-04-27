@@ -402,9 +402,9 @@ export class PaymentsService {
       .find({ userId })
       .sort({ createdAt: -1 })
       .limit(100)
-      .lean();
+      .exec();
 
-    return orders.map((order) => this.mapOrderSummary(order as any));
+    return orders.map((order) => this.mapOrderSummary(order));
   }
 
   async handleEsewaSuccessRedirect(
@@ -990,6 +990,18 @@ export class PaymentsService {
   }
 
   private mapOrderSummary(order: OrderDocument): OrderSummaryResponse {
+    // `createdAt` is injected by Mongoose `timestamps: true`. Access it via
+    // the document's plain object representation to avoid `.get()` failing on
+    // lean results or when the field hasn't been hydrated yet.
+    const rawDoc = order.toObject ? order.toObject() : (order as any);
+    const createdAtRaw: unknown = rawDoc.createdAt;
+    const createdAt =
+      createdAtRaw instanceof Date
+        ? createdAtRaw.toISOString()
+        : typeof createdAtRaw === 'string'
+          ? createdAtRaw
+          : new Date().toISOString();
+
     return {
       orderNumber: order.orderNumber,
       status: order.status,
@@ -1020,10 +1032,7 @@ export class PaymentsService {
       paymentReference: order.paymentReference,
       failureReason: order.failureReason,
       paidAt: order.paidAt ? order.paidAt.toISOString() : null,
-      createdAt:
-        order.get('createdAt') instanceof Date
-          ? (order.get('createdAt') as Date).toISOString()
-          : new Date().toISOString(),
+      createdAt,
     };
   }
 

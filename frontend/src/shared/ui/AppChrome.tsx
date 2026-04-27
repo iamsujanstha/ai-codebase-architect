@@ -14,6 +14,8 @@ export function AppChrome(): JSX.Element {
     ? 'Local AI concierge'
     : location.pathname.startsWith('/checkout')
       ? 'Payments orchestration'
+    : location.pathname.startsWith('/orders')
+      ? 'Order History'
     : location.pathname.startsWith('/dashboard')
       ? 'Admin Operations'
     : 'Mongo-backed storefront';
@@ -33,6 +35,7 @@ export function AppChrome(): JSX.Element {
             Home
           </NavLink>
           {user && <NavLink to="/dashboard">Dashboard</NavLink>}
+          {user && <NavLink to="/orders">Orders</NavLink>}
           <NavLink to="/chat">Chat</NavLink>
         </nav>
 
