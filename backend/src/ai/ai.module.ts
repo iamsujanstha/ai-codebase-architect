@@ -1,12 +1,22 @@
 import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { PassportModule } from '@nestjs/passport';
 import { AiController } from './ai.controller';
 import { AiGatewayService } from './ai.service';
+import { ChatThreadsController } from './chat-threads.controller';
+import { ChatThreadsService } from './chat-threads.service';
+import { ChatThread, ChatThreadSchema } from './schemas/chat-thread.schema';
+import { AuthModule } from '../auth/auth.module';
 
-// Feature modules are one of NestJS's strongest organizational tools.
-// They let us group controllers and providers by business capability instead of by file type alone.
 @Module({
-  controllers: [AiController],
-  providers: [AiGatewayService],
+  imports: [
+    PassportModule,
+    AuthModule,
+    MongooseModule.forFeature([
+      { name: ChatThread.name, schema: ChatThreadSchema },
+    ]),
+  ],
+  controllers: [AiController, ChatThreadsController],
+  providers: [AiGatewayService, ChatThreadsService],
 })
 export class AiModule {}
-
