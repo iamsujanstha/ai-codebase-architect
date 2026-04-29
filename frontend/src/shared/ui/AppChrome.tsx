@@ -82,6 +82,15 @@ function UserMenu(): JSX.Element {
             onClick={() => { setOpen(false); navigate(ROUTES.DASHBOARD); }}>
             <span className="user-menu__item-icon">⚙️</span>Dashboard
           </button>
+          {user.role === 'admin' && (
+            <>
+              <div className="user-menu__divider" />
+              <button className="user-menu__item" role="menuitem" type="button"
+                onClick={() => { setOpen(false); navigate('/admin'); }}>
+                <span className="user-menu__item-icon">🛡️</span>Admin Panel
+              </button>
+            </>
+          )}
           <div className="user-menu__divider" />
           <button className="user-menu__item user-menu__item--danger" role="menuitem" type="button"
             onClick={handleLogout}>

@@ -23,6 +23,17 @@ export const ROUTES = {
   CHECKOUT_RESULT:  '/checkout/result',
   ORDERS:           '/orders',
   DASHBOARD:        '/dashboard',
+
+  // ── admin (require admin role) ───────────────────────────────────────────
+  ADMIN:            '/admin',
+  ADMIN_PRODUCTS:   '/admin/products',
+  ADMIN_PRODUCT_NEW: '/admin/products/new',
+  ADMIN_PRODUCT_EDIT: '/admin/products/:id/edit',
+  ADMIN_ORDERS:     '/admin/orders',
+  ADMIN_ORDER_DETAIL: '/admin/orders/:id',
+  ADMIN_USERS:      '/admin/users',
+  ADMIN_USER_DETAIL: '/admin/users/:id',
+  ADMIN_SETTINGS:   '/admin/settings',
 } as const;
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];

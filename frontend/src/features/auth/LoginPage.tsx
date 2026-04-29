@@ -25,7 +25,13 @@ export const LoginPage: React.FC = () => {
     try {
       const response = await axios.post('/auth/login', { email, password });
       login(response.data.access_token, response.data.user);
-      navigate(redirectTo, { replace: true });
+      
+      // Redirect admin users to admin dashboard
+      if (response.data.user.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate(redirectTo, { replace: true });
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {

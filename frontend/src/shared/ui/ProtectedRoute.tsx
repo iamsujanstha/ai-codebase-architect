@@ -4,6 +4,7 @@ import { loginWithRedirect } from '@/app/constants/routes';
 
 interface ProtectedRouteProps {
   children: JSX.Element;
+  requireAdmin?: boolean;
 }
 
 /**
@@ -14,8 +15,9 @@ interface ProtectedRouteProps {
  * - Unauthenticated: redirects to /login with ?redirect= so the user lands
  *   back on the intended page after signing in.
  * - Authenticated: renders the page normally.
+ * - requireAdmin: if true, checks if user has admin role
  */
-export function ProtectedRoute({ children }: ProtectedRouteProps): JSX.Element {
+export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps): JSX.Element {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
@@ -36,6 +38,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps): JSX.Element {
         state={{ from: location }}
       />
     );
+  }
+
+  if (requireAdmin && user.role !== 'admin') {
+    return <Navigate to="/" replace />;
   }
 
   return children;

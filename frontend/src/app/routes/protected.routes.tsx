@@ -16,6 +16,9 @@ import { ROUTES } from '../constants/routes';
  *
  * OCP: adding a new protected page means adding one entry here — the
  *      guard logic in ProtectedRoute is never modified.
+ *
+ * Note: Admin routes are defined separately in App.tsx since they use
+ * a different layout (AdminLayout instead of AppChrome).
  */
 export const protectedRoutes = [
   <Route
