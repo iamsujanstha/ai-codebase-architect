@@ -18,25 +18,31 @@ import styles from './Admin.module.css';
 
 interface OrderData {
   _id: string;
+  userId: string;
   userEmail: string;
   total: number;
+  subtotal: number;
+  currency: string;
   status: string;
   createdAt: string;
   items: Array<{
     productId: string;
     productName: string;
     quantity: number;
-    price: number;
+    unitPrice: number;
     lineTotal: number;
+    currency: string;
   }>;
-  shippingAddress?: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
+  customer?: {
+    fullName: string;
+    email: string;
+    phone?: string;
+    addressLine1?: string;
+    city?: string;
+    country?: string;
   };
-  paymentMethod?: string;
+  paymentProvider?: string;
+  paymentReference?: string;
 }
 
 interface UserData {
@@ -51,6 +57,7 @@ export function OrderDetail() {
   const [order, setOrder] = useState<OrderData | null>(null);
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const statusOptions = [
     'pending',
@@ -70,13 +77,21 @@ export function OrderDetail() {
   }, [id]);
 
   const loadOrderData = async () => {
+    if (!id) {
+      setError('No order ID provided');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const data = await adminApi.getOrderById(id!);
-      setOrder(data.order);
-      setUser(data.user);
-    } catch (error) {
+      setError(null);
+      const data = await adminApi.getOrderById(id);
+      setOrder(data.order || data);
+      setUser(data.user || null);
+    } catch (error: any) {
       console.error('Failed to load order data:', error);
+      setError(error.response?.data?.message || error.message || 'Failed to load order');
     } finally {
       setLoading(false);
     }
@@ -126,13 +141,17 @@ export function OrderDetail() {
     );
   }
 
-  if (!order) {
+  if (error || !order) {
     return (
       <div className={styles.adminContent}>
         <div className={styles.emptyState}>
           <Package className={styles.emptyIcon} />
-          <div className={styles.emptyTitle}>Order not found</div>
-          <div className={styles.emptyText}>The requested order could not be found</div>
+          <div className={styles.emptyTitle}>
+            {error ? 'Error Loading Order' : 'Order not found'}
+          </div>
+          <div className={styles.emptyText}>
+            {error || 'The requested order could not be found'}
+          </div>
           <button
             onClick={() => navigate('/admin/orders')}
             className={styles.emptyAction}
@@ -234,11 +253,13 @@ export function OrderDetail() {
               </div>
               <div className={styles.tableCellContent}>
                 <div className={styles.primaryText}>
-                  {user?.name || 'Guest User'}
+                  {order.customer?.fullName || user?.name || 'Guest User'}
                 </div>
                 <div className={styles.tableCell}>
                   <Mail size={16} style={{ color: '#6b7280' }} />
-                  <span className={styles.secondaryText}>{order.userEmail}</span>
+                  <span className={styles.secondaryText}>
+                    {order.customer?.email || order.userEmail}
+                  </span>
                 </div>
               </div>
             </div>
@@ -274,7 +295,7 @@ export function OrderDetail() {
               </tr>
             </thead>
             <tbody className={styles.tableBody}>
-              {order.items.map((item, index) => (
+              {order.items?.map((item, index) => (
                 <tr key={index}>
                   <td>
                     <div className={styles.customerCell}>
@@ -294,7 +315,7 @@ export function OrderDetail() {
                   <td>
                     <div className={styles.tableCell}>
                       <DollarSign size={16} style={{ color: '#10b981' }} />
-                      <span>${item.price.toFixed(2)}</span>
+                      <span>${item.unitPrice.toFixed(2)}</span>
                     </div>
                   </td>
                   <td>
@@ -325,20 +346,28 @@ export function OrderDetail() {
 
       {/* Shipping & Payment Information */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem', marginTop: '1.5rem' }}>
-        {/* Shipping Address */}
-        {order.shippingAddress && (
+        {/* Customer Address */}
+        {order.customer && (order.customer.addressLine1 || order.customer.city) && (
           <div className={styles.card}>
             <div className={styles.cardHeader}>
               <MapPin className={styles.cardIcon} />
-              <h3 className={styles.cardTitle}>Shipping Address</h3>
+              <h3 className={styles.cardTitle}>Customer Address</h3>
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <div className={styles.primaryText}>{order.shippingAddress.street}</div>
-              <div className={styles.secondaryText}>
-                {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zipCode}
-              </div>
-              <div className={styles.secondaryText}>{order.shippingAddress.country}</div>
+              {order.customer.addressLine1 && (
+                <div className={styles.primaryText}>{order.customer.addressLine1}</div>
+              )}
+              {order.customer.city && (
+                <div className={styles.secondaryText}>
+                  {order.customer.city}{order.customer.country ? `, ${order.customer.country}` : ''}
+                </div>
+              )}
+              {order.customer.phone && (
+                <div className={styles.secondaryText}>
+                  Phone: {order.customer.phone}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -352,11 +381,19 @@ export function OrderDetail() {
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
-              <div className={styles.statLabel}>Payment Method</div>
+              <div className={styles.statLabel}>Payment Provider</div>
               <div className={styles.primaryText}>
-                {order.paymentMethod || 'Stripe'}
+                {order.paymentProvider || 'Stripe'}
               </div>
             </div>
+            {order.paymentReference && (
+              <div>
+                <div className={styles.statLabel}>Payment Reference</div>
+                <div className={styles.secondaryText} style={{ fontFamily: 'monospace' }}>
+                  {order.paymentReference}
+                </div>
+              </div>
+            )}
             <div>
               <div className={styles.statLabel}>Payment Status</div>
               <span className={`${styles.statusBadge} ${order.status === 'paid' || order.status === 'completed' ? styles.completed : styles.pending}`}>

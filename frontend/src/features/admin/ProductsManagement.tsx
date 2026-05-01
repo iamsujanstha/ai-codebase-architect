@@ -18,6 +18,8 @@ import {
   Warehouse
 } from 'lucide-react';
 import { adminApi } from './api/adminApi';
+import { ConfirmModal } from './components/ConfirmModal';
+import { TableSkeleton } from './components/TableSkeleton';
 import styles from './Admin.module.css';
 
 interface Product {
@@ -43,6 +45,19 @@ export function ProductsManagement() {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalProducts, setTotalProducts] = useState(0);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    action: 'delete' | null;
+    productId: string;
+    productName: string;
+    isLoading: boolean;
+  }>({
+    isOpen: false,
+    action: null,
+    productId: '',
+    productName: '',
+    isLoading: false,
+  });
 
   const stockOptions = [
     { value: '', label: 'All Stock Levels' },
@@ -122,15 +137,26 @@ export function ProductsManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+  const handleDelete = async (id: string, name: string) => {
+    setConfirmModal({
+      isOpen: true,
+      action: 'delete',
+      productId: id,
+      productName: name,
+      isLoading: false,
+    });
+  };
 
+  const handleConfirmDelete = async () => {
     try {
-      await adminApi.deleteProduct(id);
+      setConfirmModal(prev => ({ ...prev, isLoading: true }));
+      await adminApi.deleteProduct(confirmModal.productId);
+      setConfirmModal({ isOpen: false, action: null, productId: '', productName: '', isLoading: false });
       loadProducts();
     } catch (error) {
       console.error('Failed to delete product:', error);
       alert('Failed to delete product');
+      setConfirmModal(prev => ({ ...prev, isLoading: false }));
     }
   };
 
@@ -198,9 +224,34 @@ export function ProductsManagement() {
           <h1 className={styles.pageTitle}>Products Management</h1>
           <p className={styles.pageSubtitle}>Manage your product catalog, inventory, and pricing</p>
         </div>
-        <div className={styles.loadingContainer}>
-          <div className={styles.loadingSpinner}></div>
-          <div className={styles.loadingText}>Loading products...</div>
+        <div style={{ marginBottom: '2rem' }}>
+          <button
+            disabled
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            style={{ opacity: 0.6 }}
+          >
+            <Plus size={20} />
+            Add Product
+          </button>
+        </div>
+        <div className={styles.tableContainer}>
+          <div className={styles.tableToolbar}>
+            <div className={styles.searchContainer}>
+              <Search className={styles.searchIcon} />
+              <input
+                type="text"
+                placeholder="Search products by name or description..."
+                disabled
+                className={styles.searchInput}
+              />
+            </div>
+            <div className={styles.filtersContainer}>
+              <select disabled className={styles.filterSelect}>
+                <option>All Stock Levels</option>
+              </select>
+            </div>
+          </div>
+          <TableSkeleton rows={10} columns={6} />
         </div>
       </div>
     );
@@ -363,7 +414,7 @@ export function ProductsManagement() {
                           <Edit size={16} />
                         </button>
                         <button
-                          onClick={() => handleDelete(product._id)}
+                          onClick={() => handleDelete(product._id, product.name)}
                           className={`${styles.actionBtn} ${styles.deleteBtn}`}
                           title="Delete Product"
                         >
@@ -443,6 +494,17 @@ export function ProductsManagement() {
           </>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, action: null, productId: '', productName: '', isLoading: false })}
+        onConfirm={handleConfirmDelete}
+        isLoading={confirmModal.isLoading}
+        title="Delete Product"
+        message={`Are you sure you want to delete "${confirmModal.productName}"? This action cannot be undone.`}
+        confirmText="Delete Product"
+        variant="danger"
+      />
     </div>
   );
 }

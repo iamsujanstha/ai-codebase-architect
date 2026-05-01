@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Search, 
-  Eye, 
-  ChevronLeft, 
-  ChevronRight, 
-  ChevronsLeft, 
+import {
+  Search,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
   ChevronsRight,
   ArrowUpDown,
   ArrowUp,
@@ -16,6 +16,8 @@ import {
   User
 } from 'lucide-react';
 import { adminApi } from './api/adminApi';
+import { ConfirmModal } from './components/ConfirmModal';
+import { TableSkeleton } from './components/TableSkeleton';
 import styles from './Admin.module.css';
 
 interface Order {
@@ -42,6 +44,19 @@ export function OrdersManagement() {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalOrders, setTotalOrders] = useState(0);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    orderId: string;
+    currentStatus: string;
+    newStatus: string;
+    isLoading: boolean;
+  }>({
+    isOpen: false,
+    orderId: '',
+    currentStatus: '',
+    newStatus: '',
+    isLoading: false,
+  });
 
   const statusOptions = [
     { value: '', label: 'All Status' },
@@ -75,7 +90,7 @@ export function OrdersManagement() {
     try {
       setLoading(true);
       const data = await adminApi.getOrders(currentPage, pageSize, statusFilter || undefined);
-      
+
       // Filter by search term on frontend (in production, this should be done on backend)
       let filteredOrders = data.orders;
       if (searchTerm) {
@@ -125,20 +140,30 @@ export function OrdersManagement() {
     }
   };
 
-  const handleStatusChange = async (orderId: string, currentStatus: string) => {
-    const newStatus = prompt(
-      `Change order status (current: ${currentStatus})\nOptions: ${statusOptions.slice(1).map(s => s.value).join(', ')}`,
-      currentStatus
-    );
+  const handleStatusChange = (orderId: string, currentStatus: string, newStatus: string) => {
+    if (currentStatus === newStatus) return;
 
     if (!newStatus || !statusOptions.some(s => s.value === newStatus)) return;
 
+    setConfirmModal({
+      isOpen: true,
+      orderId,
+      currentStatus,
+      newStatus,
+      isLoading: false,
+    });
+  };
+
+  const confirmStatusChange = async () => {
     try {
-      await adminApi.updateOrderStatus(orderId, newStatus);
+      setConfirmModal(prev => ({ ...prev, isLoading: true }));
+      await adminApi.updateOrderStatus(confirmModal.orderId, confirmModal.newStatus);
+      setConfirmModal({ isOpen: false, orderId: '', currentStatus: '', newStatus: '', isLoading: false });
       loadOrders();
     } catch (error) {
       console.error('Failed to update order status:', error);
       alert('Failed to update order status');
+      setConfirmModal(prev => ({ ...prev, isLoading: false }));
     }
   };
 
@@ -148,8 +173,8 @@ export function OrdersManagement() {
 
   const getSortIcon = (field: string) => {
     if (sortField !== field) return <ArrowUpDown size={16} className={styles.sortIcon} />;
-    return sortDirection === 'asc' ? 
-      <ArrowUp size={16} className={styles.sortIcon} /> : 
+    return sortDirection === 'asc' ?
+      <ArrowUp size={16} className={styles.sortIcon} /> :
       <ArrowDown size={16} className={styles.sortIcon} />;
   };
 
@@ -185,9 +210,24 @@ export function OrdersManagement() {
           <h1 className={styles.pageTitle}>Orders Management</h1>
           <p className={styles.pageSubtitle}>Track and manage customer orders and fulfillment</p>
         </div>
-        <div className={styles.loadingContainer}>
-          <div className={styles.loadingSpinner}></div>
-          <div className={styles.loadingText}>Loading orders...</div>
+        <div className={styles.tableContainer}>
+          <div className={styles.tableToolbar}>
+            <div className={styles.searchContainer}>
+              <Search className={styles.searchIcon} />
+              <input
+                type="text"
+                placeholder="Search orders by ID, customer email, or name..."
+                disabled
+                className={styles.searchInput}
+              />
+            </div>
+            <div className={styles.filtersContainer}>
+              <select disabled className={styles.filterSelect}>
+                <option>All Status</option>
+              </select>
+            </div>
+          </div>
+          <TableSkeleton rows={10} columns={7} />
         </div>
       </div>
     );
@@ -213,7 +253,7 @@ export function OrdersManagement() {
               className={styles.searchInput}
             />
           </div>
-          
+
           <div className={styles.filtersContainer}>
             <select
               value={statusFilter}
@@ -235,7 +275,7 @@ export function OrdersManagement() {
             <Package className={styles.emptyIcon} />
             <div className={styles.emptyTitle}>No orders found</div>
             <div className={styles.emptyText}>
-              {searchTerm || statusFilter 
+              {searchTerm || statusFilter
                 ? 'Try adjusting your search or filter criteria'
                 : 'Orders will appear here once customers start placing them'
               }
@@ -246,7 +286,7 @@ export function OrdersManagement() {
             <table className={styles.table}>
               <thead className={styles.tableHeader}>
                 <tr>
-                  <th 
+                  <th
                     className={styles.sortableHeader}
                     onClick={() => handleSort('_id')}
                   >
@@ -255,7 +295,7 @@ export function OrdersManagement() {
                   </th>
                   <th>Customer</th>
                   <th>Items</th>
-                  <th 
+                  <th
                     className={styles.sortableHeader}
                     onClick={() => handleSort('total')}
                   >
@@ -263,7 +303,7 @@ export function OrdersManagement() {
                     {getSortIcon('total')}
                   </th>
                   <th>Status</th>
-                  <th 
+                  <th
                     className={styles.sortableHeader}
                     onClick={() => handleSort('createdAt')}
                   >
@@ -308,7 +348,7 @@ export function OrdersManagement() {
                       <div className={styles.tableCell}>
                         <DollarSign size={16} style={{ color: '#10b981' }} />
                         <span className={styles.totalCell}>
-                          ${order.total.toFixed(2)}
+                          ${order?.total?.toFixed(2)}
                         </span>
                       </div>
                     </td>
@@ -356,7 +396,7 @@ export function OrdersManagement() {
               <div className={styles.paginationInfo}>
                 Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalOrders)} of {totalOrders} orders
               </div>
-              
+
               <div className={styles.paginationControls}>
                 <button
                   onClick={() => setCurrentPage(1)}
@@ -365,7 +405,7 @@ export function OrdersManagement() {
                 >
                   <ChevronsLeft size={16} />
                 </button>
-                
+
                 <button
                   onClick={() => setCurrentPage(currentPage - 1)}
                   disabled={currentPage === 1}
@@ -387,7 +427,7 @@ export function OrdersManagement() {
                   Next
                   <ChevronRight size={16} />
                 </button>
-                
+
                 <button
                   onClick={() => setCurrentPage(totalPages)}
                   disabled={currentPage === totalPages}
@@ -418,6 +458,17 @@ export function OrdersManagement() {
           </>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, orderId: '', currentStatus: '', newStatus: '', isLoading: false })}
+        onConfirm={confirmStatusChange}
+        isLoading={confirmModal.isLoading}
+        title="Update Order Status"
+        message={`Are you sure you want to change the order status from "${confirmModal.currentStatus}" to "${confirmModal.newStatus}"?`}
+        confirmText="Update Status"
+        variant="info"
+      />
     </div>
   );
 }

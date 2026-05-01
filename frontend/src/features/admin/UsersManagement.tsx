@@ -18,6 +18,8 @@ import {
   UserX
 } from 'lucide-react';
 import { adminApi } from './api/adminApi';
+import { ConfirmModal } from './components/ConfirmModal';
+import { TableSkeleton } from './components/TableSkeleton';
 import styles from './Admin.module.css';
 
 interface UserData {
@@ -43,6 +45,20 @@ export function UsersManagement() {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    action: 'delete' | 'role' | 'status' | null;
+    userId: string;
+    userName: string;
+    data?: any;
+    isLoading: boolean;
+  }>({
+    isOpen: false,
+    action: null,
+    userId: '',
+    userName: '',
+    isLoading: false,
+  });
 
   const roleOptions = [
     { value: '', label: 'All Roles' },
@@ -124,41 +140,89 @@ export function UsersManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-
-    try {
-      await adminApi.deleteUser(id);
-      loadUsers();
-    } catch (error) {
-      console.error('Failed to delete user:', error);
-      alert('Failed to delete user');
-    }
+  const handleDelete = async (id: string, name: string) => {
+    setConfirmModal({
+      isOpen: true,
+      action: 'delete',
+      userId: id,
+      userName: name,
+      isLoading: false,
+    });
   };
 
   const toggleUserRole = async (user: UserData) => {
     const newRole = user.role === 'admin' ? 'user' : 'admin';
-    if (!confirm(`Change ${user.name}'s role to ${newRole}?`)) return;
-
-    try {
-      await adminApi.updateUser(user._id, { role: newRole });
-      loadUsers();
-    } catch (error) {
-      console.error('Failed to update user role:', error);
-      alert('Failed to update user role');
-    }
+    setConfirmModal({
+      isOpen: true,
+      action: 'role',
+      userId: user._id,
+      userName: user.name,
+      data: { newRole },
+      isLoading: false,
+    });
   };
 
   const toggleUserStatus = async (user: UserData) => {
     const newStatus = !user.isActive;
-    if (!confirm(`${newStatus ? 'Activate' : 'Deactivate'} ${user.name}?`)) return;
+    setConfirmModal({
+      isOpen: true,
+      action: 'status',
+      userId: user._id,
+      userName: user.name,
+      data: { newStatus },
+      isLoading: false,
+    });
+  };
 
+  const handleConfirmAction = async () => {
     try {
-      await adminApi.updateUser(user._id, { isActive: newStatus });
+      setConfirmModal(prev => ({ ...prev, isLoading: true }));
+      if (confirmModal.action === 'delete') {
+        await adminApi.deleteUser(confirmModal.userId);
+      } else if (confirmModal.action === 'role') {
+        await adminApi.updateUser(confirmModal.userId, { role: confirmModal.data.newRole });
+      } else if (confirmModal.action === 'status') {
+        await adminApi.updateUser(confirmModal.userId, { isActive: confirmModal.data.newStatus });
+      }
+      setConfirmModal({ isOpen: false, action: null, userId: '', userName: '', isLoading: false });
       loadUsers();
     } catch (error) {
-      console.error('Failed to update user status:', error);
-      alert('Failed to update user status');
+      console.error('Failed to perform action:', error);
+      alert('Failed to perform action');
+      setConfirmModal(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  const getConfirmModalProps = () => {
+    switch (confirmModal.action) {
+      case 'delete':
+        return {
+          title: 'Delete User',
+          message: `Are you sure you want to delete "${confirmModal.userName}"? This action cannot be undone.`,
+          confirmText: 'Delete User',
+          variant: 'danger' as const,
+        };
+      case 'role':
+        return {
+          title: 'Change User Role',
+          message: `Change "${confirmModal.userName}"'s role to ${confirmModal.data?.newRole}?`,
+          confirmText: 'Change Role',
+          variant: 'warning' as const,
+        };
+      case 'status':
+        return {
+          title: confirmModal.data?.newStatus ? 'Activate User' : 'Deactivate User',
+          message: `${confirmModal.data?.newStatus ? 'Activate' : 'Deactivate'} "${confirmModal.userName}"?`,
+          confirmText: confirmModal.data?.newStatus ? 'Activate' : 'Deactivate',
+          variant: 'info' as const,
+        };
+      default:
+        return {
+          title: '',
+          message: '',
+          confirmText: 'Confirm',
+          variant: 'info' as const,
+        };
     }
   };
 
@@ -201,9 +265,27 @@ export function UsersManagement() {
           <h1 className={styles.pageTitle}>Users Management</h1>
           <p className={styles.pageSubtitle}>Manage user accounts, roles, and permissions</p>
         </div>
-        <div className={styles.loadingContainer}>
-          <div className={styles.loadingSpinner}></div>
-          <div className={styles.loadingText}>Loading users...</div>
+        <div className={styles.tableContainer}>
+          <div className={styles.tableToolbar}>
+            <div className={styles.searchContainer}>
+              <Search className={styles.searchIcon} />
+              <input
+                type="text"
+                placeholder="Search users by name or email..."
+                disabled
+                className={styles.searchInput}
+              />
+            </div>
+            <div className={styles.filtersContainer}>
+              <select disabled className={styles.filterSelect}>
+                <option>All Roles</option>
+              </select>
+              <select disabled className={styles.filterSelect}>
+                <option>All Status</option>
+              </select>
+            </div>
+          </div>
+          <TableSkeleton rows={10} columns={5} />
         </div>
       </div>
     );
@@ -361,7 +443,7 @@ export function UsersManagement() {
                           <Eye size={16} />
                         </button>
                         <button
-                          onClick={() => handleDelete(user._id)}
+                          onClick={() => handleDelete(user._id, user.name)}
                           className={`${styles.actionBtn} ${styles.deleteBtn}`}
                           title="Delete User"
                         >
@@ -441,6 +523,14 @@ export function UsersManagement() {
           </>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, action: null, userId: '', userName: '', isLoading: false })}
+        onConfirm={handleConfirmAction}
+        isLoading={confirmModal.isLoading}
+        {...getConfirmModalProps()}
+      />
     </div>
   );
 }

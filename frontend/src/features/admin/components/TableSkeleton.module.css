@@ -1,0 +1,122 @@
+/* Table Skeleton Loader */
+.skeletonContainer {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  min-height: 600px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tableHeader {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.tableHeader th {
+  padding: 1.25rem 1.5rem;
+  text-align: left;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.skeletonHeader {
+  height: 16px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: shimmer 1.5s ease-in-out infinite;
+  max-width: 120px;
+}
+
+.tableBody tr {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tableBody tr:last-child {
+  border-bottom: none;
+}
+
+.tableBody td {
+  padding: 1.25rem 1.5rem;
+}
+
+.skeletonCell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.skeletonAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.skeletonText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skeletonLine {
+  height: 14px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeletonLineSmall {
+  height: 12px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: shimmer 1.5s ease-in-out infinite;
+  max-width: 60%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .tableHeader th,
+  .tableBody td {
+    padding: 1rem;
+  }
+
+  .skeletonAvatar {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  .tableHeader th,
+  .tableBody td {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .skeletonAvatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .skeletonCell {
+    gap: 0.5rem;
+  }
+}
