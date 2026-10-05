@@ -39,10 +39,10 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 
     const message =
       typeof exceptionPayload === 'object' &&
-      exceptionPayload !== null &&
-      'message' in exceptionPayload
-        ? (exceptionPayload as { message?: string | string[] }).message ??
-          'Unexpected server error.'
+        exceptionPayload !== null &&
+        'message' in exceptionPayload
+        ? ((exceptionPayload as { message?: string | string[] }).message ??
+          'Unexpected server error.')
         : String(exceptionPayload);
 
     const errorResponse: ApiErrorResponse = {
@@ -55,4 +55,3 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     response.status(statusCode).json(errorResponse);
   }
 }
-

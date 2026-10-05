@@ -15,7 +15,7 @@ import { OrdersService, CreateOrderDto } from './orders.service';
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(private readonly ordersService: OrdersService) { }
 
   /**
    * Create a new order for the authenticated user.

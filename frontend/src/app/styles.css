@@ -139,6 +139,16 @@ img {
   display: block;
 }
 
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* =========================================================
    COMMON SURFACES AND BUTTONS
    ========================================================= */
@@ -3494,8 +3504,281 @@ img {
   font-weight: 500;
 }
 
+/* =========================================================
+   PDF RAG
+   ========================================================= */
+
+.pdf-rag-page {
+  min-height: calc(100vh - var(--header-height) - 28px);
+}
+
+.pdf-rag-workspace {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 18px;
+  min-height: calc(100vh - var(--header-height) - 44px);
+}
+
+.pdf-rag-sidebar,
+.pdf-chat {
+  border-radius: 8px;
+}
+
+.pdf-rag-sidebar {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pdf-rag-sidebar__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.pdf-rag-sidebar__header h1,
+.pdf-chat-empty h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.pdf-rag-sidebar__header p,
+.pdf-chat-empty p,
+.pdf-cost-events p,
+.pdf-document-summary p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.pdf-rag-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--surface-accent-soft);
+  color: #2563eb;
+  flex: 0 0 auto;
+}
+
+.pdf-upload-target {
+  min-height: 132px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pdf-upload-target input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pdf-document-summary,
+.pdf-cost-panel {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 14px;
+}
+
+.pdf-document-summary__name {
+  color: var(--text-primary) !important;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.pdf-rag-error,
+.pdf-chat-status {
+  margin: 0;
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  background: rgba(220, 38, 38, 0.07);
+  color: var(--danger);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+.pdf-cost-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.pdf-cost-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.pdf-cost-grid div {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.pdf-cost-grid dt {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.pdf-cost-grid dd {
+  margin: 4px 0 0;
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.pdf-cost-events {
+  display: grid;
+  gap: 8px;
+}
+
+.pdf-cost-event {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 8px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.pdf-cost-event span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-cost-event strong {
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.pdf-chat {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  overflow: hidden;
+}
+
+.pdf-chat__messages {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pdf-chat-empty {
+  margin: auto;
+  width: min(420px, 100%);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.pdf-chat-empty svg {
+  margin: 0 auto 12px;
+  color: #2563eb;
+}
+
+.pdf-message {
+  max-width: min(760px, 88%);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--surface-strong);
+}
+
+.pdf-message--user {
+  align-self: flex-end;
+  background: var(--surface-user-message);
+  color: var(--text-on-accent);
+}
+
+.pdf-message span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.76rem;
+  font-weight: 850;
+  opacity: 0.74;
+}
+
+.pdf-message p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.pdf-chat-status {
+  margin: 0 22px 12px;
+}
+
+.pdf-chat-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  gap: 10px;
+  border-top: 1px solid var(--border-color);
+  padding: 14px;
+  background: var(--surface-strong);
+}
+
+.pdf-chat-composer input {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-elevated);
+  padding: 0 14px;
+  outline: none;
+}
+
+.pdf-chat-composer button {
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface-accent);
+  color: var(--text-on-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdf-chat-composer button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 @media (max-width: 600px) {
   .user-menu__dropdown { right: -8px; min-width: 200px; }
   .user-menu__name { display: none; }
   .result-signin-nudge { flex-direction: column; align-items: flex-start; }
+  .pdf-rag-workspace {
+    grid-template-columns: 1fr;
+  }
+  .pdf-rag-sidebar {
+    order: 2;
+  }
+  .pdf-message {
+    max-width: 100%;
+  }
 }

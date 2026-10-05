@@ -353,13 +353,20 @@ export function OrdersManagement() {
                       </div>
                     </td>
                     <td>
-                      <button
-                        onClick={() => handleStatusChange(order._id, order.status)}
+                      <select
+                        value={order.status}
+                        onChange={(e) => handleStatusChange(order._id, order.status, e.target.value)}
                         className={getStatusBadgeClass(order.status)}
+                        style={{ cursor: 'pointer', outline: 'none' }}
                       >
-                        <div className={styles.statusDot}></div>
-                        {order.status}
-                      </button>
+                        {statusOptions.map((option) => (
+                          option.value && (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          )
+                        ))}
+                      </select>
                     </td>
                     <td>
                       <div className={styles.tableCell}>

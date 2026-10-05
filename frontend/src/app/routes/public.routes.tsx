@@ -3,6 +3,7 @@ import { StorefrontPage } from '@/features/store/StorefrontPage';
 import { ProductDetailsPage } from '@/features/store/ProductDetailsPage';
 import { CheckoutResultPage } from '@/features/store/CheckoutResultPage';
 import { ChatPage } from '@/features/chat/ChatPage';
+import { PdfRagPage } from '@/features/pdf-rag/PdfRagPage';
 import { ROUTES } from '../constants/routes';
 
 /**
@@ -23,4 +24,5 @@ export const publicRoutes = [
   <Route key="checkout-result" path={ROUTES.CHECKOUT_RESULT} element={<CheckoutResultPage />} />,
   <Route key="chat"            path={ROUTES.CHAT}            element={<ChatPage />} />,
   <Route key="chat-thread"     path={ROUTES.CHAT_THREAD}     element={<ChatPage />} />,
+  <Route key="pdf-rag"         path={ROUTES.PDF_RAG}         element={<PdfRagPage />} />,
 ];

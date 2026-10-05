@@ -10,6 +10,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { OrdersModule } from './orders/orders.module';
 import { AdminModule } from './admin/admin.module';
+import { PdfRagModule } from './pdf-rag/pdf-rag.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AdminModule } from './admin/admin.module';
     AuthModule,
     OrdersModule,
     AdminModule,
+    PdfRagModule,
   ],
   controllers: [AppController],
   providers: [AppService],

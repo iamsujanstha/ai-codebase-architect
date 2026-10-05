@@ -24,6 +24,12 @@ export default defineConfig({
         timeout: 300000,
         proxyTimeout: 300000,
       },
+      '/pdf-rag': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        timeout: 600000,
+        proxyTimeout: 600000,
+      },
       '/catalog': {
         target: 'http://localhost:3000',
         changeOrigin: true,

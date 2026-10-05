@@ -11,6 +11,7 @@ import { ROUTES } from '@/app/constants/routes';
 
 function routeLabel(pathname: string): string {
   if (pathname.startsWith(ROUTES.CHAT))      return 'Local AI concierge';
+  if (pathname.startsWith(ROUTES.PDF_RAG))   return 'PDF-grounded RAG';
   if (pathname.startsWith(ROUTES.CHECKOUT))  return 'Payments orchestration';
   if (pathname.startsWith(ROUTES.ORDERS))    return 'Order History';
   if (pathname.startsWith(ROUTES.DASHBOARD)) return 'Admin Operations';
@@ -122,6 +123,7 @@ export function AppChrome(): JSX.Element {
         <nav className="site-nav">
           <NavLink to="/" end>Home</NavLink>
           <NavLink to="/chat">Chat</NavLink>
+          <NavLink to={ROUTES.PDF_RAG}>PDF RAG</NavLink>
         </nav>
 
         <div className="site-actions">

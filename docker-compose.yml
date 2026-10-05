@@ -150,7 +150,7 @@ services:
   redis:
     image: redis:alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6381}:6379"
     networks:
       - assistant-network
     healthcheck:
@@ -191,6 +191,29 @@ services:
       - assistant-network
 
   # =========================================================
+  # PGVECTOR (PDF RAG database)
+  # =========================================================
+  # Stores PDF chunks and embeddings for local document-grounded chat.
+  # =========================================================
+  pgvector:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pdf_rag
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pdf_rag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - assistant-network
+
+  # =========================================================
 
 
   # BACKEND (NestJS / Node.js)
@@ -203,6 +226,11 @@ services:
     environment:
       PORT: 3000
       AI_SERVICE_URL: http://ai-service:8000
+      PGVECTOR_DATABASE_URL: postgres://postgres:postgres@pgvector:5432/pdf_rag
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      PDF_RAG_EMBEDDING_MODEL: nomic-embed-text
+      PDF_RAG_EMBEDDING_DIMENSIONS: 768
+      PDF_RAG_CHAT_MODEL: ${PDF_RAG_CHAT_MODEL:-deepseek-coder:6.7b}
       AI_SERVICE_TIMEOUT_MS: 600000
       AI_SERVICE_STREAM_TIMEOUT_MS: 600000
       CORS_ORIGIN: http://localhost:8080,http://localhost:5173
@@ -242,6 +270,8 @@ services:
     # Wait until AI service is healthy
     depends_on:
       ai-service:
+        condition: service_healthy
+      pgvector:
         condition: service_healthy
       mailpit:
         condition: service_started
@@ -295,4 +325,5 @@ networks:
 
 volumes:
   qdrant_data:
+  pgvector_data:
   mongo_data:

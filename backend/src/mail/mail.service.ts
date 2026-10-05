@@ -39,7 +39,7 @@ export class MailService {
       this.transporter = nodemailer.createTransport({
         host,
         port,
-        secure: port === 465,          // 465 = implicit TLS, 587 = STARTTLS
+        secure: port === 465, // 465 = implicit TLS, 587 = STARTTLS
         auth: user && pass ? { user, pass } : undefined,
         tls: { rejectUnauthorized: true },
       });
@@ -49,10 +49,12 @@ export class MailService {
         if (err) {
           this.logger.error(
             `SMTP verification failed for ${host}:${port} — ${err.message}. ` +
-              'Check MAIL_HOST / MAIL_PORT / MAIL_USER / MAIL_PASS in .env.',
+            'Check MAIL_HOST / MAIL_PORT / MAIL_USER / MAIL_PASS in .env.',
           );
         } else {
-          this.logger.log(`SMTP ready ✓ → ${host}:${port} (from: ${this.fromAddress})`);
+          this.logger.log(
+            `SMTP ready ✓ → ${host}:${port} (from: ${this.fromAddress})`,
+          );
         }
       });
     } else {
@@ -97,13 +99,13 @@ export class MailService {
           `Email sent ✓  to=${options.to}  subject="${options.subject}"  id=${info.messageId}`,
         );
       } catch (err: unknown) {
-        const msg      = err instanceof Error ? err.message : String(err);
-        const code     = (err as any)?.code ?? '';
+        const msg = err instanceof Error ? err.message : String(err);
+        const code = (err as any)?.code ?? '';
         const response = (err as any)?.response ?? '';
         this.logger.error(
           `Email failed  to=${options.to}  ${msg}` +
-            (code     ? `  [code: ${code}]`             : '') +
-            (response ? `  [smtp: ${response}]`          : ''),
+          (code ? `  [code: ${code}]` : '') +
+          (response ? `  [smtp: ${response}]` : ''),
         );
       }
     } else {
