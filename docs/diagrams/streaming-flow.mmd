@@ -1,0 +1,34 @@
+sequenceDiagram
+    participant browser as React
+    participant proxy as Vite or Nginx
+    participant backend as NestJS
+    participant ai as FastAPI
+    participant model as Ollama
+    participant vector as Qdrant
+    browser->>proxy: POST /ai/generate/stream
+    proxy->>backend: Forward prompt, messages, model
+    backend->>backend: Validate DTO and create requestId
+    backend->>ai: POST /generate/stream with request_id
+    ai->>ai: Resolve configured provider and model
+    ai-->>backend: NDJSON start
+    backend-->>proxy: Pipe start
+    proxy-->>browser: Start event
+    ai->>ai: Acquire semaphore
+    opt Qdrant retrieval enabled
+        ai->>model: POST /api/embeddings
+        model-->>ai: Query vector
+        ai->>vector: SDK query_points with corpus filter
+        vector-->>ai: Matching evidence
+    end
+    ai->>ai: Assemble bounded messages
+    ai->>model: POST /api/chat with stream true
+    loop Output chunks
+        model-->>ai: Chat content
+        ai-->>backend: NDJSON delta
+        backend-->>proxy: Pipe delta
+        proxy-->>browser: Append delta to assistant message
+    end
+    model-->>ai: Generation complete
+    ai-->>backend: NDJSON done
+    backend-->>proxy: Pipe done
+    proxy-->>browser: Mark message complete

@@ -1,9 +1,10 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { LocalModel } from '@/core/types/api';
+import type { AiModel } from '@/core/types/api';
 import type { ChatThread } from '@/core/types/chat';
 
 interface ModelSidebarProps {
-  models: LocalModel[];
+  models: AiModel[];
+  provider: string;
   selectedModel: string;
   isLoadingModels: boolean;
   modelError: string | null;
@@ -18,6 +19,7 @@ interface ModelSidebarProps {
 
 export function ModelSidebar({
   models,
+  provider,
   selectedModel,
   isLoadingModels,
   modelError,
@@ -33,46 +35,45 @@ export function ModelSidebar({
     ? 'Discovering models'
     : modelError
       ? 'Unavailable'
-      : 'Ready';
+      : models.length ? 'Connected' : 'No models';
 
   return (
     <>
       <div className="brand-block">
-        <p className="section-kicker">Enterprise AI</p>
-        <h2>Control Plane</h2>
+        <div className="brand-mark" aria-hidden="true">a<span> /</span></div><div><h2>Architect</h2><p>AI workspace</p></div>
       </div>
 
       <button className="primary-button new-chat-button" onClick={onNewChat}>
-        <span className="plus-icon">+</span> New Chat
+        <span className="plus-icon">+</span> New conversation
       </button>
 
       <section className="sidebar-section history-section">
         <div className="sidebar-section-header">
-          <h3>Chat History</h3>
+          <h3>Conversations</h3>
         </div>
         <div className="thread-list">
           {threads.length === 0 ? (
-            <p className="sidebar-copy empty-history">No conversations yet.</p>
+            <p className="sidebar-copy empty-history">Your conversations will appear here.</p>
           ) : (
             threads.map((thread) => (
               <div
                 key={thread.id}
                 className={`thread-item ${thread.id === currentThreadId ? 'selected' : ''}`}
-                onClick={() => onSelectThread(thread.id)}
               >
-                <div className="thread-content">
+                <button type="button" className="thread-content" aria-current={thread.id === currentThreadId ? 'true' : undefined} onClick={() => onSelectThread(thread.id)}>
                   <span className="thread-title">{thread.title}</span>
                   <span className="thread-date">
                     {new Date(thread.lastMessageAt).toLocaleDateString()}
                   </span>
-                </div>
+                </button>
                 <button
                   className="delete-thread-btn"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteThread(thread.id);
                   }}
-                  title="Delete chat"
+                  title="Delete conversation"
+                  aria-label={`Delete ${thread.title}`}
                 >
                   ×
                 </button>
@@ -87,6 +88,7 @@ export function ModelSidebar({
           <h3>Runtime</h3>
           <button
             className="secondary-button"
+            disabled={isLoadingModels}
             type="button"
             onClick={() => {
               void onRefreshModels();
@@ -99,14 +101,14 @@ export function ModelSidebar({
         <div className="status-list">
           <div className="status-row">
             <span>Provider</span>
-            <strong>Ollama local</strong>
+            <strong>{provider || 'Not connected'}</strong>
           </div>
           <div className="status-row">
             <span>Status</span>
             <strong>{runtimeStatus}</strong>
           </div>
           <div className="status-row">
-            <span>Installed</span>
+            <span>Available</span>
             <strong>{models.length}</strong>
           </div>
         </div>
@@ -116,10 +118,11 @@ export function ModelSidebar({
 
       <section className="sidebar-section">
         <div className="sidebar-section-header">
-          <h3>Available Models</h3>
+          <h3>Available models</h3>
         </div>
 
         <div className="model-list">
+          {!models.length && <p className="sidebar-copy">{isLoadingModels ? 'Loading available models…' : 'No models available. Check your runtime, then refresh.'}</p>}
           {models.map((model) => {
             const isSelected = model.name === selectedModel;
 
@@ -128,6 +131,7 @@ export function ModelSidebar({
                 key={model.name}
                 className={`model-tile ${isSelected ? 'selected' : ''}`}
                 type="button"
+                aria-pressed={isSelected}
                 onClick={() => onSelectModel(model.name)}
               >
                 <span className="model-name">{model.name}</span>
@@ -146,6 +150,7 @@ export function ModelSidebar({
           })}
         </div>
       </section>
+      <p className="sidebar-footnote">Conversations saved in this browser</p>
     </>
   );
 }

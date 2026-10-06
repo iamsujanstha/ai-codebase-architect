@@ -20,3 +20,10 @@ __pycache__/
 .idea/
 .vscode/
 
+
+# Local configuration and Python environments
+.env
+.env.*
+!.env.example
+venv/
+*.tsbuildinfo

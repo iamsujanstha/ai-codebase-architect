@@ -9,9 +9,9 @@ export interface TokenUsage {
 
 export interface StreamTimings {
   totalDurationMs: number;
-  loadDurationMs: number;
-  promptEvalDurationMs: number;
-  completionDurationMs: number;
+  loadDurationMs?: number;
+  promptEvalDurationMs?: number;
+  completionDurationMs?: number;
 }
 
 export interface StreamStartEvent {
@@ -34,7 +34,7 @@ export interface StreamDoneEvent {
   provider: string;
   model: string;
   generatedAt: string;
-  usage: TokenUsage;
+  usage?: TokenUsage;
   timings: StreamTimings;
   doneReason: string;
 }
@@ -51,4 +51,3 @@ export type GatewayStreamEvent =
   | StreamDeltaEvent
   | StreamDoneEvent
   | StreamErrorEvent;
-

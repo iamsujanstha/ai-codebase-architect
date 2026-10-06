@@ -8,8 +8,9 @@ import {
   fetchAvailableModels,
   streamAiResponse,
 } from '@/core/api/aiApi';
+import { buildRequestHistory } from './history';
 import type { ChatMessage, ChatThread } from '@/core/types/chat';
-import type { LocalModel, StreamEvent } from '@/core/types/api';
+import type { AiModel, StreamEvent } from '@/core/types/api';
 
 const MODEL_STORAGE_KEY = 'ai-code-assistant:selected-model';
 const THREADS_STORAGE_KEY = 'ai-code-assistant:threads';
@@ -41,9 +42,11 @@ function createMessage(
 export function useAiAssistant() {
   const [draft, setDraft] = useState('');
   const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
 
-  const [models, setModels] = useState<LocalModel[]>([]);
+  const [provider, setProvider] = useState('');
+  const [models, setModels] = useState<AiModel[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -77,23 +80,25 @@ export function useAiAssistant() {
     if (savedId) {
       setCurrentThreadId(savedId);
     }
+    setHistoryLoaded(true);
   }, []);
 
   // Persist threads to localStorage whenever they change
   useEffect(() => {
-    if (threads.length > 0) {
+    if (historyLoaded) {
       window.localStorage.setItem(THREADS_STORAGE_KEY, JSON.stringify(threads));
     }
-  }, [threads]);
+  }, [threads, historyLoaded]);
 
   // Persist current thread ID
   useEffect(() => {
+    if (!historyLoaded) return;
     if (currentThreadId) {
       window.localStorage.setItem(CURRENT_THREAD_ID_KEY, currentThreadId);
     } else {
       window.localStorage.removeItem(CURRENT_THREAD_ID_KEY);
     }
-  }, [currentThreadId]);
+  }, [currentThreadId, historyLoaded]);
 
   async function loadModels() {
     setIsLoadingModels(true);
@@ -102,6 +107,7 @@ export function useAiAssistant() {
     try {
       const modelsResponse = await fetchAvailableModels();
       setModels(modelsResponse.models);
+      setProvider(modelsResponse.provider);
 
       const storedModel = window.localStorage.getItem(MODEL_STORAGE_KEY);
       const hasStoredModel = modelsResponse.models.some(
@@ -112,20 +118,22 @@ export function useAiAssistant() {
       // Otherwise, pick the default from backend or the first one in the list.
       const nextModel = hasStoredModel
         ? (storedModel as string)
-        : modelsResponse.defaultModel || modelsResponse.models[0]?.name || '';
+        : modelsResponse.models.find((model) => model.name === modelsResponse.defaultModel)?.name || modelsResponse.models[0]?.name || '';
+
+      setSelectedModel(nextModel);
 
       if (nextModel) {
         setSelectedModel(nextModel);
         setModelError(null);
       } else {
-        setModelError('No models detected in Ollama. Please pull a model first (e.g. ollama pull deepseek-coder).');
+        setModelError('No models are available. Check your AI provider configuration, then refresh.');
       }
     } catch (caughtError) {
 
       if (caughtError instanceof ApiError) {
         setModelError(caughtError.message);
       } else {
-        setModelError('The app could not load local Ollama models.');
+        setModelError('The app could not load configured AI models.');
       }
     } finally {
       setIsLoadingModels(false);
@@ -163,14 +171,14 @@ export function useAiAssistant() {
   };
 
   async function handleSubmit(promptOverride?: string) {
-    if (isStreaming) {
+    if (isStreaming || isLoadingModels || !models.some((model) => model.name === selectedModel)) {
       return;
     }
 
     const normalizedPrompt = (promptOverride ?? draft).trim();
 
-    if (!normalizedPrompt) {
-      setError('Please enter a prompt before submitting.');
+    if (normalizedPrompt.length < 3 || normalizedPrompt.length > 4000) {
+      setError('Please enter a message between 3 and 4,000 characters.');
       return;
     }
 
@@ -178,7 +186,7 @@ export function useAiAssistant() {
     const userMessage = createMessage('user', normalizedPrompt, 'complete');
     const assistantMessage = createMessage('assistant', '', 'streaming', {
       model: selectedModel || undefined,
-      provider: 'ollama-local',
+      provider: provider || undefined,
     });
 
     // Ensure we have a thread to work with
@@ -203,9 +211,7 @@ export function useAiAssistant() {
     ));
 
     // Prepare history for AI, filtering out empty placeholders
-    const history = activeThread.messages
-      .filter(m => m.content.trim().length > 0)
-      .map(m => ({ role: m.role, content: m.content }));
+    const history = buildRequestHistory(activeThread.messages);
 
     setDraft('');
     setIsStreaming(true);
@@ -247,8 +253,8 @@ export function useAiAssistant() {
                   ...m,
                   status: 'complete' as const,
                   requestId: event.requestId,
-                  provider: event.provider,
-                  model: event.model,
+                  provider: event.provider ?? m.provider,
+                  model: event.model ?? m.model,
                   usage: event.usage,
                   timings: event.timings,
                   createdAt: event.generatedAt,
@@ -309,6 +315,7 @@ export function useAiAssistant() {
     threads,
     currentThreadId,
     models,
+    provider,
     selectedModel,
     setSelectedModel,
     isStreaming,

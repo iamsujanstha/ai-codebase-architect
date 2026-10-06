@@ -1,0 +1,30 @@
+sequenceDiagram
+    participant browser as React
+    participant backend as NestJS
+    participant store as Object storage
+    participant database as Application database
+    participant dispatcher as Outbox dispatcher
+    participant ai as FastAPI
+    participant queue as Redis and RQ worker
+    participant model as Ollama
+    participant vector as Qdrant
+    browser->>backend: POST /documents through public proxy
+    backend->>backend: Authorize and validate upload
+    backend->>store: Store original document
+    backend->>database: Commit document, job, and outbox record
+    backend-->>browser: 202 with documentId and jobId
+    dispatcher->>database: Read pending outbox record
+    dispatcher->>ai: POST /internal/ingestion/jobs
+    ai->>queue: Idempotently enqueue existing jobId
+    ai-->>dispatcher: 202 accepted
+    dispatcher->>database: Mark outbox record delivered
+    queue->>store: Read authorized document object
+    queue->>queue: Extract and chunk with source metadata
+    queue->>model: Embed chunks using configured provider adapter
+    model-->>queue: Vectors
+    queue->>vector: SDK upsert stable chunk IDs and scope
+    vector-->>queue: Index writes acknowledged
+    queue->>backend: PATCH /internal/jobs/:id with successful version
+    backend->>database: Mark ready and activate document version
+    browser->>backend: GET /jobs/:id
+    backend-->>browser: Ready or actionable failure state

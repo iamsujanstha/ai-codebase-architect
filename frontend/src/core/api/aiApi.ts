@@ -132,12 +132,12 @@ export async function fetchAvailableModels(): Promise<ModelsResponse> {
 
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new ApiError(
-        'Loading local models timed out while waiting for the backend.',
+        'Loading models timed out while waiting for the backend.',
         408,
       );
     }
 
-    throw new ApiError('The frontend could not load local Ollama models.', 503);
+    throw new ApiError('The frontend could not load configured AI models.', 503);
   } finally {
     window.clearTimeout(timeoutHandle);
   }
@@ -175,6 +175,12 @@ export async function streamAiResponse({
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let completed = false;
+  function deliver(event: StreamEvent) {
+    if (completed) throw new ApiError('Received data after stream completion.', 502);
+    onEvent(event);
+    if (event.type === 'done') completed = true;
+  }
 
   try {
     while (true) {
@@ -196,7 +202,7 @@ export async function streamAiResponse({
         }
 
         const event = JSON.parse(trimmedLine) as StreamEvent;
-        onEvent(event);
+        deliver(event);
 
         if (event.type === 'error') {
           throw new ApiError(event.message, 503);
@@ -204,16 +210,18 @@ export async function streamAiResponse({
       }
     }
 
+    buffer += decoder.decode();
     const finalLine = buffer.trim();
 
     if (finalLine) {
       const finalEvent = JSON.parse(finalLine) as StreamEvent;
-      onEvent(finalEvent);
+      deliver(finalEvent);
 
       if (finalEvent.type === 'error') {
         throw new ApiError(finalEvent.message, 503);
       }
     }
+    if (!completed) throw new ApiError('The streamed response ended before completion.', 502);
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;

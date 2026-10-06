@@ -30,13 +30,25 @@ services:
 
     environment:
       APP_NAME: AI Code Assistant Engine
-      PROVIDER_NAME: ollama-local
-      OLLAMA_MODEL: deepseek-coder:6.7b
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-120}
+      AI_CONCURRENCY: ${AI_CONCURRENCY:-1}
+      AI_MODELS: ${AI_MODELS:-}
+      AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-2048}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      RETRIEVAL_BACKEND: ${RETRIEVAL_BACKEND:-none}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      RETRIEVAL_CORPUS: ${RETRIEVAL_CORPUS:-reference}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_TIMEOUT_SECONDS: 120
       QDRANT_HOST: vector-db
       QDRANT_PORT: 6333
-      MEMORY_COLLECTION: conversations
+      MEMORY_COLLECTION: ${MEMORY_COLLECTION:-knowledge}
       REDIS_URL: redis://redis:6379/0
       PORT: 8000
 
@@ -46,10 +58,6 @@ services:
     # Real runtime command
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-    # Wait until Vector DB and Redis are started
-    depends_on:
-      - vector-db
-      - redis
 
     # Health check ensures the service is actually responding
     healthcheck:
@@ -75,6 +83,7 @@ services:
   # a background processor for heavy tasks (like bulk embeddings).
   # =========================================================
   ai-worker:
+    profiles: ["rag"]
     build:
       context: ./ai-service
       dockerfile: Dockerfile
@@ -86,6 +95,11 @@ services:
       QDRANT_HOST: vector-db
       QDRANT_PORT: 6333
       REDIS_URL: redis://redis:6379/0
+
+      RETRIEVAL_BACKEND: qdrant
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      MEMORY_COLLECTION: ${MEMORY_COLLECTION:-knowledge}
+      RETRIEVAL_CORPUS: ${RETRIEVAL_CORPUS:-reference}
 
     # Start the RQ worker process instead of the FastAPI app
     command: rq worker ai_tasks --url redis://redis:6379/0
@@ -104,6 +118,7 @@ services:
   # Used for async background jobs like bulk embeddings.
   # =========================================================
   redis:
+    profiles: ["rag"]
     image: redis:alpine
     container_name: ai-code-assistant-redis
     ports:
@@ -123,6 +138,7 @@ services:
   # Access at http://localhost:8888
   # =========================================================
   monitoring:
+    profiles: ["monitoring"]
     image: amir20/dozzle:latest
     container_name: ai-code-assistant-monitoring
     volumes:
@@ -140,6 +156,7 @@ services:
   # for Retrieval-Augmented Generation (RAG).
   # =========================================================
   vector-db:
+    profiles: ["rag"]
     image: qdrant/qdrant:latest
     container_name: ai-code-assistant-vector-db
     ports:

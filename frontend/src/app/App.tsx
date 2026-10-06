@@ -13,6 +13,7 @@ export default function App(): JSX.Element {
     threads,
     currentThreadId,
     models,
+    provider,
     selectedModel,
     setSelectedModel,
     isStreaming,
@@ -30,6 +31,7 @@ export default function App(): JSX.Element {
   const sidebar = (
     <ModelSidebar
       models={models}
+      provider={provider}
       selectedModel={selectedModel}
       isLoadingModels={isLoadingModels}
       modelError={modelError}
@@ -47,10 +49,10 @@ export default function App(): JSX.Element {
     <MainLayout sidebar={sidebar}>
       <header className="chat-header">
         <div>
-          <p className="section-kicker">Local AI Workspace</p>
-          <h1>Chat with your models</h1>
+          <p className="section-kicker">Workspace / Conversations</p>
+          <h1>{threads.find((thread) => thread.id === currentThreadId)?.title || 'New conversation'}</h1>
           <p className="chat-subtitle">
-            Responses stream token-by-token, powered by local infrastructure.
+            A focused space to think through your code.
           </p>
         </div>
 
@@ -63,6 +65,7 @@ export default function App(): JSX.Element {
               onChange={(event) => setSelectedModel(event.target.value)}
               disabled={isLoadingModels || models.length === 0}
             >
+              {!models.length && <option value="">No models available</option>}
               {models.map((model) => (
                 <option key={model.name} value={model.name}>
                   {model.name}
@@ -71,8 +74,8 @@ export default function App(): JSX.Element {
             </select>
           </label>
 
-          <div className="status-chip">
-            {isLoadingModels ? 'Loading...' : `${models.length} models`}
+          <div className="status-chip" role="status">
+            {isLoadingModels ? 'Connecting' : modelError ? 'Unavailable' : provider || 'AI workspace'}
           </div>
 
           <ThemeToggle />
@@ -83,7 +86,7 @@ export default function App(): JSX.Element {
         messages={messages}
         isStreaming={isStreaming}
         error={error}
-        onStarterPrompt={handleSubmit}
+        onStarterPrompt={(prompt) => { setDraft(prompt ?? ''); document.getElementById('chat-prompt')?.focus(); }}
       />
 
       <ChatComposer

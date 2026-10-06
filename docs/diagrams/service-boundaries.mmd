@@ -1,0 +1,7 @@
+flowchart LR
+    browser["React browser"] -->|"Relative /ai requests"| proxy["Vite :5173 or Nginx :8080"]
+    proxy -->|"HTTP /ai endpoints"| backend["NestJS :3000"]
+    backend -->|"HTTP models and generation"| ai["FastAPI and ChatService :8000"]
+    ai -->|"HTTP chat and embeddings"| ollama["Ollama :11434"]
+    ai -->|"Optional corpus retrieval"| qdrant["Qdrant :6333"]
+    browser -->|"Save conversation history"| storage["Browser localStorage"]

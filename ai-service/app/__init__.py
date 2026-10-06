@@ -6,4 +6,3 @@ Using an application package instead of a single flat script is a production-fri
 - scales better as the codebase grows
 - makes testing and future refactoring easier
 """
-

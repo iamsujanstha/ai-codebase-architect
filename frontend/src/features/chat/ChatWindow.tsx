@@ -7,7 +7,7 @@ interface ChatWindowProps {
   messages: ChatMessage[];
   isStreaming: boolean;
   error: string | null;
-  onStarterPrompt: (promptOverride?: string) => Promise<void>;
+  onStarterPrompt: (promptOverride?: string) => void;
 }
 
 function formatTime(timestamp: string): string {
@@ -83,15 +83,15 @@ export function ChatWindow({
       {messages.length === 0 ? (
         <div className="empty-state">
           <div className="empty-copy">
-            <h2>Start with a practical prompt</h2>
+            <div className="empty-monogram" aria-hidden="true">a /</div><p className="section-kicker">A little clarity goes a long way</p><h2>What are you building?</h2>
             <p>
-              The response will stream in live, and the final message will show
-              model choice, token counts, and generation timings.
+              Work through an architecture, untangle a bug, or explore an idea.
+              Start with a question and take it from there.
             </p>
           </div>
 
           <div className="starter-grid">
-            {STARTER_PROMPTS.map((prompt) => (
+            {STARTER_PROMPTS.map((prompt, index) => (
               <button
                 key={prompt}
                 className="starter-tile"
@@ -100,7 +100,9 @@ export function ChatWindow({
                   void onStarterPrompt(prompt);
                 }}
               >
-                {prompt}
+                <span className="starter-number">0{index + 1} <span aria-hidden="true">↗</span></span>
+                <strong>{['Understand a system', 'Plan an architecture', 'Build a service', 'Explore RAG'][index]}</strong>
+                <span>{prompt}</span>
               </button>
             ))}
           </div>
@@ -108,7 +110,7 @@ export function ChatWindow({
       ) : null}
 
       {error ? (
-        <div className="thread-banner error">
+        <div className="thread-banner error" role="alert">
           <strong>Request issue</strong>
           <p>{error}</p>
         </div>
@@ -126,7 +128,7 @@ export function ChatWindow({
               } ${message.status === 'error' ? 'error' : ''}`}
             >
               <div className={`message-avatar ${message.role}`}>
-                {message.role === 'user' ? 'U' : 'AI'}
+                {message.role === 'user' ? 'Y' : 'a /'}
               </div>
 
               <div className="message-content-wrapper">
@@ -152,7 +154,7 @@ export function ChatWindow({
                 </div>
 
                 {message.role === 'assistant' ? (
-                  <MarkdownRenderer content={message.content} />
+                  <>{!message.content && message.status === 'streaming' ? <p className="thinking" role="status">Preparing a response<span>…</span></p> : <MarkdownRenderer content={message.content} />}</>
                 ) : (
                   <div className="message-plain-content">{message.content}</div>
                 )}

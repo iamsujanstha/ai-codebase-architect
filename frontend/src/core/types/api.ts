@@ -27,12 +27,12 @@ export interface TokenUsage {
 
 export interface StreamTimings {
   totalDurationMs: number;
-  loadDurationMs: number;
-  promptEvalDurationMs: number;
-  completionDurationMs: number;
+  loadDurationMs?: number;
+  promptEvalDurationMs?: number;
+  completionDurationMs?: number;
 }
 
-export interface LocalModel {
+export interface AiModel {
   name: string;
   sizeBytes: number;
   sizeLabel: string;
@@ -44,8 +44,9 @@ export interface LocalModel {
 }
 
 export interface ModelsResponse {
+  provider: string;
   defaultModel: string;
-  models: LocalModel[];
+  models: AiModel[];
 }
 
 export interface StreamStartEvent {
@@ -68,7 +69,7 @@ export interface StreamDoneEvent {
   provider: string;
   model: string;
   generatedAt: string;
-  usage: TokenUsage;
+  usage?: TokenUsage;
   timings: StreamTimings;
   doneReason: string;
 }

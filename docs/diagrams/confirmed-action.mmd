@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant browser as React
+    participant ai as FastAPI
+    participant backend as NestJS
+    participant database as Application database
+    ai->>backend: POST /internal/actions/return-preview
+    backend->>backend: Authorize and validate proposed return
+    backend->>database: Save exact action, actor, scope, and expiry
+    backend-->>ai: actionId and preview only
+    ai-->>browser: Deliver preview through the NestJS answer stream
+    browser->>browser: Show order, reason, and consequence for confirmation
+    browser->>backend: POST /actions/:id/confirm with idempotency key
+    backend->>backend: Recheck session, permissions, expiry, and eligibility
+    backend->>database: Execute return and record outcome atomically
+    database-->>backend: Committed result
+    backend-->>browser: Confirmed outcome and actionId

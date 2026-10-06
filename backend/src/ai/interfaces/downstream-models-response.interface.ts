@@ -13,7 +13,7 @@ export interface DownstreamModelSummary {
 }
 
 export interface DownstreamModelsResponse {
+  provider: string;
   default_model: string;
   models: DownstreamModelSummary[];
 }
-

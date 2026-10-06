@@ -22,20 +22,24 @@ export function ChatComposer({
   onStop,
 }: ChatComposerProps): JSX.Element {
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      void onSubmit();
+      if (!isStreaming && !isLoadingModels && modelCount > 0 && draft.trim().length >= 3) void onSubmit();
     }
   }
 
   return (
     <section className="composer-shell">
       <div className="composer">
+        <label className="sr-only" htmlFor="chat-prompt">Your message</label>
         <textarea
+          id="chat-prompt"
+          rows={3}
+          maxLength={4000}
           value={draft}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask your local model about architecture, code, debugging, or system design."
+          placeholder="Ask a question, or describe what you’re working on…"
         />
 
         <div className="composer-footer">
@@ -44,7 +48,7 @@ export function ChatComposer({
               {selectedModel || 'No model selected'}
             </span>
             <span className="status-chip">
-              {isLoadingModels ? 'Loading local models' : `${modelCount} models available`}
+              {draft.length > 3500 ? `${draft.length} / 4000` : 'AI response'}
             </span>
           </div>
 
@@ -65,13 +69,14 @@ export function ChatComposer({
               onClick={() => {
                 void onSubmit();
               }}
-              disabled={isStreaming || !draft.trim()}
+              disabled={isStreaming || isLoadingModels || modelCount === 0 || !selectedModel || draft.trim().length < 3}
             >
-              {isStreaming ? 'Streaming' : 'Send'}
+              {isStreaming ? 'Generating…' : 'Send message ↑'}
             </button>
           </div>
         </div>
       </div>
+      <p className="composer-hint">Enter to send · Shift + Enter for a new line <span>Review generated code before using it.</span></p>
     </section>
   );
 }

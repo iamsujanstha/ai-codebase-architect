@@ -5,6 +5,7 @@ import {
   RequestTimeoutException,
 } from '@nestjs/common';
 import axios from 'axios';
+import { ChatMessageDto } from './dto/generate-ai-request.dto';
 import { randomUUID } from 'crypto';
 import { Response } from 'express';
 import { Readable } from 'stream';
@@ -39,6 +40,7 @@ export class AiGatewayService {
       );
 
       return {
+        provider: data.provider,
         defaultModel: data.default_model,
         models: (data.models ?? []).map((model) => ({
           name: model.name,
@@ -58,7 +60,7 @@ export class AiGatewayService {
 
   async generateResponse(
     prompt: string,
-    messages?: any[],
+    messages?: ChatMessageDto[],
     model?: string,
   ): Promise<GatewayAiResponse> {
     const gatewayStartedAt = Date.now();
@@ -101,11 +103,14 @@ export class AiGatewayService {
 
   async streamResponse(
     prompt: string,
-    messages: any[] | undefined,
+    messages: ChatMessageDto[] | undefined,
     model: string | undefined,
     response: Response,
   ): Promise<void> {
     const requestId = randomUUID();
+    const abortController = new AbortController();
+    const onClose = () => abortController.abort();
+    response.once('close', onClose);
 
     try {
       const upstreamResponse = await axios.post<Readable>(
@@ -119,12 +124,18 @@ export class AiGatewayService {
         {
           timeout: this.streamTimeoutMs,
           responseType: 'stream',
+          signal: abortController.signal,
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/x-ndjson',
           },
         },
       );
+
+      if (response.destroyed) {
+        upstreamResponse.data.destroy();
+        return;
+      }
 
       response.status(200);
       response.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
@@ -144,8 +155,11 @@ export class AiGatewayService {
         }
       });
 
+      response.once('close', () => upstreamResponse.data.destroy());
       upstreamResponse.data.pipe(response);
     } catch (error) {
+      response.off('close', onClose);
+      if (abortController.signal.aborted) return;
       this.handleAxiosError(error, 'while opening the AI stream');
     }
   }

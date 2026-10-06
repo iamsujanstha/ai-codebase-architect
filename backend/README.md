@@ -8,9 +8,12 @@ Why a gateway layer exists:
 - request validation should happen in one trusted backend layer
 - future concerns like auth, rate limiting, billing, and audit logging belong here
 
-Core endpoint:
+Public endpoints:
 
-- `POST /ai/generate`
+- `GET /ai/models` — configured provider and available models
+- `POST /ai/generate` — complete JSON response
+- `POST /ai/generate/stream` — NDJSON stream with cancellation propagation
+- `GET /health` — process health
 
 Helpful local commands:
 
@@ -21,5 +24,5 @@ npm run build
 npm run test
 ```
 
-For the full platform walkthrough, use the repository root `README.md`.
+For setup and provider extension instructions, read [the starter guide](../docs/provider-starter.md). The gateway is provider-neutral; keys and vendor clients belong in the Python service.
 

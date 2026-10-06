@@ -1,5 +1,7 @@
 import {
   IsArray,
+  ArrayMaxSize,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -9,10 +11,12 @@ import {
 import { Type } from 'class-transformer';
 
 export class ChatMessageDto {
-  @IsString()
+  @IsIn(['user', 'assistant'])
   role!: string;
 
   @IsString()
+  @MinLength(1)
+  @MaxLength(8000)
   content!: string;
 }
 
@@ -35,6 +39,7 @@ export class GenerateAiRequestDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(40)
   @ValidateNested({ each: true })
   @Type(() => ChatMessageDto)
   messages?: ChatMessageDto[];

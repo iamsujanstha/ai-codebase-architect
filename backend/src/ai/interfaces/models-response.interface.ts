@@ -5,7 +5,7 @@ import { ModelSummary } from './model-summary.interface';
 // what is installed, which one is the default, and a few helpful characteristics.
 
 export interface ModelsResponse {
+  provider: string;
   defaultModel: string;
   models: ModelSummary[];
 }
-

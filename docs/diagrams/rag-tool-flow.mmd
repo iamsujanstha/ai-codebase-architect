@@ -1,0 +1,32 @@
+sequenceDiagram
+    participant browser as React
+    participant backend as NestJS
+    participant database as Application database
+    participant ai as FastAPI
+    participant vector as Qdrant
+    participant model as Ollama
+    browser->>backend: POST /conversations/:id/messages/stream
+    backend->>backend: Authenticate and authorize conversation
+    backend->>database: Save user message and pending assistant message
+    backend->>ai: POST /internal/chat/stream with trusted scope
+    ai->>model: Embed retrieval query
+    model-->>ai: Query vector
+    ai->>vector: SDK search with tenant and access filters
+    vector-->>ai: Authorized policy chunks and source IDs
+    ai->>model: POST /api/chat with context and allowed tool schema
+    model-->>ai: Proposed get_order arguments
+    ai->>ai: Validate schema and remaining tool budget
+    ai->>backend: POST /internal/tools/get-order
+    backend->>backend: Verify service identity and original user scope
+    backend->>database: Read authorized order facts
+    database-->>backend: Current order state
+    backend-->>ai: Minimal tool result
+    ai->>model: POST /api/chat with evidence and tool result
+    loop Answer generation
+        model-->>ai: Answer content
+        ai-->>backend: NDJSON delta
+        backend-->>browser: Forward delta through public proxy
+    end
+    ai-->>backend: Completion with validated source IDs
+    backend->>database: Persist final answer and citations
+    backend-->>browser: Terminal done with durable message ID
