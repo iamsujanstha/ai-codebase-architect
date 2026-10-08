@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { MarkdownRenderer } from '@/features/chat/MarkdownRenderer';
 import { STARTER_PROMPTS } from '@/features/chat/useAiAssistant';
-import type { ChatMessage } from '@/core/types/chat';
+import { ChatMessage } from '@/core/types/chat';
+import { ChatProductCard } from '@/features/chat/ChatProductCard';
+
 
 interface ChatWindowProps {
   messages: ChatMessage[];
@@ -44,7 +46,7 @@ export function ChatWindow({
   const handleScroll = () => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    
+
     const { scrollTop, scrollHeight, clientHeight } = container;
     // If we are within 150px of the bottom, enable auto-scroll
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
@@ -123,9 +125,8 @@ export function ChatWindow({
             className={`message-row ${message.role}`}
           >
             <div
-              className={`message-card ${message.role} ${
-                message.status === 'streaming' ? 'streaming' : ''
-              } ${message.status === 'error' ? 'error' : ''}`}
+              className={`message-card ${message.role} ${message.status === 'streaming' ? 'streaming' : ''
+                } ${message.status === 'error' ? 'error' : ''}`}
             >
               <div className={`message-avatar ${message.role}`}>
                 {message.role === 'user' ? 'Y' : 'a /'}
@@ -153,11 +154,34 @@ export function ChatWindow({
                   ) : null}
                 </div>
 
+
+
                 {message.role === 'assistant' ? (
-                  <>{!message.content && message.status === 'streaming' ? <p className="thinking" role="status">Preparing a response<span>…</span></p> : <MarkdownRenderer content={message.content} />}</>
+                  message.content.trim() === '' && message.status === 'streaming' ? (
+                    <div className="thinking-wrapper">
+                      <div className="thinking-dots">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                      <span className="thinking-text">Thinking...</span>
+                    </div>
+                  ) : (
+                    <div className="assistant-message-content">
+                      {message.content.split(/(\[PRODUCT:[a-f0-9]+\])/g).map((part, index) => {
+                        const match = part.match(/\[PRODUCT:([a-f0-9]+)\]/);
+                        if (match) {
+                          return <ChatProductCard key={index} productId={match[1]} />;
+                        }
+                        return <MarkdownRenderer key={index} content={part} />;
+                      })}
+                    </div>
+                  )
                 ) : (
                   <div className="message-plain-content">{message.content}</div>
                 )}
+
+
 
                 {message.role === 'assistant' && message.usage ? (
                   <div className="message-footer">

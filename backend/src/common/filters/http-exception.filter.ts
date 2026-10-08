@@ -4,15 +4,15 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ApiErrorResponse } from '../interfaces/api-error-response.interface';
 
-// A global exception filter gives the backend one consistent error shape.
-// This is a production-grade pattern because clients should not have to guess
-// how different errors are formatted across routes.
 @Catch()
 export class GlobalHttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger('ExceptionFilter');
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp();
     const response = context.getResponse<Response>();
@@ -23,6 +23,15 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
+    // Log unexpected (non-HTTP) errors with full stack so they're visible in
+    // the backend console — the client only ever sees the sanitised message.
+    if (!(exception instanceof HttpException)) {
+      this.logger.error(
+        `Unhandled exception on ${request.method} ${request.url}`,
+        exception instanceof Error ? exception.stack : String(exception),
+      );
+    }
+
     const exceptionPayload =
       exception instanceof HttpException
         ? exception.getResponse()
@@ -30,10 +39,10 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 
     const message =
       typeof exceptionPayload === 'object' &&
-      exceptionPayload !== null &&
-      'message' in exceptionPayload
-        ? (exceptionPayload as { message?: string | string[] }).message ??
-          'Unexpected server error.'
+        exceptionPayload !== null &&
+        'message' in exceptionPayload
+        ? ((exceptionPayload as { message?: string | string[] }).message ??
+          'Unexpected server error.')
         : String(exceptionPayload);
 
     const errorResponse: ApiErrorResponse = {
@@ -46,4 +55,3 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     response.status(statusCode).json(errorResponse);
   }
 }
-

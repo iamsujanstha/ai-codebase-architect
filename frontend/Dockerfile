@@ -5,10 +5,11 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 # Copy dependency manifests first for better layer caching.
-COPY package.json ./
+# Including the lockfile keeps installs more reproducible across machines.
+COPY package*.json ./
 
-# npm install is used instead of npm ci because this teaching repo may be extended without a lockfile.
-RUN npm install
+# npm install with retry to handle transient network issues (like ECONNRESET).
+RUN npm install || (sleep 5 && npm install) || (sleep 10 && npm install)
 
 # Copy the rest of the source only after dependencies are installed.
 COPY . .
@@ -30,4 +31,3 @@ EXPOSE 80
 
 # Nginx stays in the foreground so the container remains alive.
 CMD ["nginx", "-g", "daemon off;"]
-

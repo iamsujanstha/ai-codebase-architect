@@ -1,104 +1,72 @@
-import { ChatComposer } from '@/features/chat/ChatComposer';
-import { ChatWindow } from '@/features/chat/ChatWindow';
-import { ModelSidebar } from '@/features/models/ModelSidebar';
-import { ThemeToggle } from '@/shared/ui/ThemeToggle';
-import { useAiAssistant } from '@/features/chat/useAiAssistant';
-import { MainLayout } from '@/shared/ui/MainLayout';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from '@/features/auth/AuthContext';
+import { CartProvider } from '@/features/store/CartContext';
+import { AppChrome } from '@/shared/ui/AppChrome';
+import { ProtectedRoute } from '@/shared/ui/ProtectedRoute';
+import { AdminLayout } from '@/features/admin/AdminLayout';
+import { AdminDashboard } from '@/features/admin/AdminDashboard';
+import { ProductsManagement } from '@/features/admin/ProductsManagement';
+import { ProductForm } from '@/features/admin/ProductForm';
+import { OrdersManagement } from '@/features/admin/OrdersManagement';
+import { OrderDetail } from '@/features/admin/OrderDetail';
+import { UsersManagement } from '@/features/admin/UsersManagement';
+import { UserDetail } from '@/features/admin/UserDetail';
+import { AdminSettings } from '@/features/admin/AdminSettings';
+import { authRoutes } from './routes/auth.routes';
+import { publicRoutes } from './routes/public.routes';
+import { protectedRoutes } from './routes/protected.routes';
+import { ROUTES } from './constants/routes';
 
+/**
+ * App — composition root.
+ *
+ * Responsibilities:
+ *   1. Mount global context providers in the correct order.
+ *   2. Declare the top-level router shell.
+ *   3. Spread route arrays from focused route modules.
+ *
+ * Why arrays instead of components?
+ * React Router v6 requires <Route> elements to be static JSX children of
+ * <Routes>. Wrapping them in a component function breaks route matching
+ * because the router sees a component node, not <Route> elements.
+ * Exporting plain JSX arrays and spreading them here is the correct pattern.
+ */
 export default function App(): JSX.Element {
-  const {
-    draft,
-    setDraft,
-    messages,
-    threads,
-    currentThreadId,
-    models,
-    provider,
-    selectedModel,
-    setSelectedModel,
-    isStreaming,
-    isLoadingModels,
-    error,
-    modelError,
-    handleSubmit,
-    stopStreaming,
-    refreshModels,
-    createNewThread,
-    selectThread,
-    deleteThread,
-  } = useAiAssistant();
-
-  const sidebar = (
-    <ModelSidebar
-      models={models}
-      provider={provider}
-      selectedModel={selectedModel}
-      isLoadingModels={isLoadingModels}
-      modelError={modelError}
-      onSelectModel={setSelectedModel}
-      onRefreshModels={refreshModels}
-      threads={threads}
-      currentThreadId={currentThreadId}
-      onSelectThread={selectThread}
-      onDeleteThread={deleteThread}
-      onNewChat={createNewThread}
-    />
-  );
-
   return (
-    <MainLayout sidebar={sidebar}>
-      <header className="chat-header">
-        <div>
-          <p className="section-kicker">Workspace / Conversations</p>
-          <h1>{threads.find((thread) => thread.id === currentThreadId)?.title || 'New conversation'}</h1>
-          <p className="chat-subtitle">
-            A focused space to think through your code.
-          </p>
-        </div>
-
-        <div className="chat-toolbar">
-          <label className="toolbar-field" htmlFor="header-model-select">
-            <span>Model</span>
-            <select
-              id="header-model-select"
-              value={selectedModel}
-              onChange={(event) => setSelectedModel(event.target.value)}
-              disabled={isLoadingModels || models.length === 0}
+    <BrowserRouter>
+      <AuthProvider>
+        <CartProvider>
+          <Routes>
+            {/* Admin routes - separate from AppChrome */}
+            <Route
+              path="/admin/*"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
             >
-              {!models.length && <option value="">No models available</option>}
-              {models.map((model) => (
-                <option key={model.name} value={model.name}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <Route index element={<AdminDashboard />} />
+              <Route path="products" element={<ProductsManagement />} />
+              <Route path="products/new" element={<ProductForm />} />
+              <Route path="products/:id/edit" element={<ProductForm />} />
+              <Route path="orders" element={<OrdersManagement />} />
+              <Route path="orders/:id" element={<OrderDetail />} />
+              <Route path="users" element={<UsersManagement />} />
+              <Route path="users/:id" element={<UserDetail />} />
+              <Route path="settings" element={<AdminSettings />} />
+            </Route>
 
-          <div className="status-chip" role="status">
-            {isLoadingModels ? 'Connecting' : modelError ? 'Unavailable' : provider || 'AI workspace'}
-          </div>
-
-          <ThemeToggle />
-        </div>
-      </header>
-
-      <ChatWindow
-        messages={messages}
-        isStreaming={isStreaming}
-        error={error}
-        onStarterPrompt={(prompt) => { setDraft(prompt ?? ''); document.getElementById('chat-prompt')?.focus(); }}
-      />
-
-      <ChatComposer
-        draft={draft}
-        selectedModel={selectedModel}
-        isStreaming={isStreaming}
-        isLoadingModels={isLoadingModels}
-        modelCount={models.length}
-        onDraftChange={setDraft}
-        onSubmit={() => handleSubmit()}
-        onStop={stopStreaming}
-      />
-    </MainLayout>
+            {/* Regular routes with AppChrome */}
+            <Route element={<AppChrome />}>
+              {publicRoutes}
+              {authRoutes}
+              {protectedRoutes}
+              <Route path="*" element={<Navigate replace to={ROUTES.HOME} />} />
+            </Route>
+          </Routes>
+        </CartProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

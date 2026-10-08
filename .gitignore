@@ -19,6 +19,7 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+.env
 
 
 # Local configuration and Python environments

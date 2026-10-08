@@ -7,4 +7,3 @@ export interface ApiErrorResponse {
   path: string;
   message: string | string[];
 }
-

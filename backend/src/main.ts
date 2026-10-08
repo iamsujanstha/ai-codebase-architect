@@ -6,7 +6,13 @@ import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filte
 async function bootstrap() {
   // The bootstrap function is the operational entry point of the backend service.
   // In production this is where global middleware, pipes, filters, and app-wide policies are wired together.
-  const app = await NestFactory.create(AppModule);
+  //
+  // `rawBody: true` is important for payment webhooks such as Stripe.
+  // Stripe signs the exact raw payload bytes, so the server must preserve them
+  // for signature verification rather than relying only on parsed JSON.
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

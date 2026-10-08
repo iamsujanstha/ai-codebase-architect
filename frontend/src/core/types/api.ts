@@ -81,11 +81,19 @@ export interface StreamErrorEvent {
   generatedAt: string;
 }
 
+export interface StreamProductsCreatedEvent {
+  type: 'products_created';
+  productIds: string[];
+  count: number;
+}
+
 export type StreamEvent =
   | StreamStartEvent
   | StreamDeltaEvent
   | StreamDoneEvent
-  | StreamErrorEvent;
+  | StreamErrorEvent
+  | StreamProductsCreatedEvent;
+
 
 export interface ApiErrorResponse {
   statusCode: number;

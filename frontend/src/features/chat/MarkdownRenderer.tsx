@@ -10,19 +10,28 @@ interface MarkdownRendererProps {
 
 function CopyCode({ content }: { content: string }) {
   const [label, setLabel] = useState('Copy');
-  return <button className="code-block-copy" onClick={async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setLabel('Copied');
-    } catch {
-      setLabel('Copy unavailable');
-    }
-  }}>{label}</button>;
+  return (
+    <button
+      className="code-block-copy"
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(content);
+          setLabel('Copied');
+          setTimeout(() => setLabel('Copy'), 1600);
+        } catch {
+          setLabel('Copy unavailable');
+        }
+      }}
+    >
+      {label}
+    </button>
+  );
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
   return (
-    <div className="markdown-body">
+    <div className="markdown-root">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -48,7 +57,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
                   PreTag="div"
                   className="code-block-content"
                   customStyle={{ margin: 0, background: '#1e1e1e', padding: '1rem' }}
-                >{code}</SyntaxHighlighter>
+                >
+                  {code}
+                </SyntaxHighlighter>
               </div>
             );
           },
@@ -58,7 +69,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
                 <table {...props}>{children}</table>
               </div>
             );
-          }
+          },
         }}
       >
         {content}

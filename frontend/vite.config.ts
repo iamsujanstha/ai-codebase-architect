@@ -21,12 +21,35 @@ export default defineConfig({
       '/ai': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+        timeout: 300000,
+        proxyTimeout: 300000,
+      },
+      '/pdf-rag': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        timeout: 600000,
+        proxyTimeout: 600000,
+      },
+      '/catalog': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/payments': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
       },
       '/health': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/auth': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/orders': {
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
     },
   },
 });
-

@@ -1,8 +1,11 @@
 import type { Dispatch, KeyboardEvent, SetStateAction } from 'react';
+import type { AiModel } from '@/core/types/api';
 
 interface ChatComposerProps {
   draft: string;
+  models?: AiModel[];
   selectedModel: string;
+  onSelectModel?: (name: string) => void;
   isStreaming: boolean;
   isLoadingModels: boolean;
   modelCount: number;
@@ -13,7 +16,9 @@ interface ChatComposerProps {
 
 export function ChatComposer({
   draft,
+  models = [],
   selectedModel,
+  onSelectModel,
   isStreaming,
   isLoadingModels,
   modelCount,
@@ -24,13 +29,15 @@ export function ChatComposer({
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      if (!isStreaming && !isLoadingModels && modelCount > 0 && draft.trim().length >= 3) void onSubmit();
+      if (!isStreaming && !isLoadingModels && modelCount > 0 && draft.trim().length >= 3) {
+        void onSubmit();
+      }
     }
   }
 
   return (
     <section className="composer-shell">
-      <div className="composer">
+      <div className="composer panel-surface">
         <label className="sr-only" htmlFor="chat-prompt">Your message</label>
         <textarea
           id="chat-prompt"
@@ -44,9 +51,23 @@ export function ChatComposer({
 
         <div className="composer-footer">
           <div className="composer-pills">
-            <span className="status-chip">
-              {selectedModel || 'No model selected'}
-            </span>
+            {onSelectModel && models.length > 0 ? (
+              <select
+                className="model-select-compact"
+                value={selectedModel}
+                onChange={(e) => onSelectModel(e.target.value)}
+                disabled={isLoadingModels}
+                aria-label="Select AI model"
+              >
+                {models.map((m) => (
+                  <option key={m.name} value={m.name}>{m.name}</option>
+                ))}
+              </select>
+            ) : (
+              <span className="status-chip">
+                {selectedModel || 'No model selected'}
+              </span>
+            )}
             <span className="status-chip">
               {draft.length > 3500 ? `${draft.length} / 4000` : 'AI response'}
             </span>
@@ -55,23 +76,29 @@ export function ChatComposer({
           <div className="composer-actions">
             {isStreaming ? (
               <button
-                className="secondary-button"
+                className="stop-button"
                 type="button"
                 onClick={onStop}
+                title="Stop generation"
+                aria-label="Stop generation"
               >
-                Stop
+                <div className="stop-icon" />
               </button>
             ) : null}
 
             <button
-              className="primary-button"
+              className="send-button-circle"
               type="button"
               onClick={() => {
                 void onSubmit();
               }}
               disabled={isStreaming || isLoadingModels || modelCount === 0 || !selectedModel || draft.trim().length < 3}
+              title={isStreaming ? 'Generating…' : 'Send message'}
+              aria-label="Send message"
             >
-              {isStreaming ? 'Generating…' : 'Send message ↑'}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+              </svg>
             </button>
           </div>
         </div>
