@@ -28,27 +28,27 @@ services:
   # Why keep a local Mongo container even though Atlas is supported?
   # Because teaching projects should still run out of the box.
   # =========================================================
-#  mongo:
-#    image: mongo:7
-#    ports:
-#      - "27017:27017"
-#    volumes:
-#      - mongo_data:/data/db
-#    healthcheck:
-#      test:
-#        [
-#          "CMD",
-#          "mongosh",
-#          "--quiet",
-#          "--eval",
-#          "db.adminCommand('ping').ok"
-#        ]
-#      interval: 15s
-#      timeout: 10s
-#      retries: 5
-#      start_period: 15s
-#    networks:
-#      - assistant-network
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--eval",
+          "db.adminCommand('ping').ok"
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      - assistant-network
 
 
   # =========================================================
@@ -101,8 +101,11 @@ services:
     ports:
       - "8000:8000"
 
+    volumes:
+      - ./ai-service:/app
+
     # Real runtime command
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 
     # Health check ensures the service is actually responding
@@ -219,7 +222,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: pdf_rag
     ports:
-      - "5433:5432"
+      - "${PGVECTOR_PORT:-5435}:5432"
     volumes:
       - pgvector_data:/var/lib/postgresql/data
     healthcheck:
@@ -282,13 +285,15 @@ services:
       GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3000/auth/google/callback}
 
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3002}:3000"
 
     # Wait until AI service is healthy
     depends_on:
       ai-service:
         condition: service_healthy
       pgvector:
+        condition: service_healthy
+      mongo:
         condition: service_healthy
       mailpit:
         condition: service_started

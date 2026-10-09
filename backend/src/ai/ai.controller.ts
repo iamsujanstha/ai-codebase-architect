@@ -48,7 +48,8 @@ export class AiController {
         response,
       );
     } catch (error) {
-      const statusCode = error instanceof HttpException ? error.getStatus() : 502;
+      const statusCode =
+        error instanceof HttpException ? error.getStatus() : 502;
       const payload =
         error instanceof HttpException
           ? error.getResponse()
@@ -57,9 +58,9 @@ export class AiController {
                 'Unexpected gateway failure while streaming the AI response.',
             };
 
-      return response.status(statusCode).json(
-        typeof payload === 'string' ? { message: payload } : payload,
-      );
+      return response
+        .status(statusCode)
+        .json(typeof payload === 'string' ? { message: payload } : payload);
     }
   }
 }

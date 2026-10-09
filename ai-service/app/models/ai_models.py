@@ -1,6 +1,8 @@
 """Public Python contracts; NestJS maps response fields to browser camelCase."""
 
-from typing import Literal
+from __future__ import annotations
+
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -14,9 +16,9 @@ class ChatMessage(BaseModel):
 class GenerateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     prompt: str = Field(min_length=3, max_length=4000)
-    messages: list[ChatMessage] | None = Field(default=None, max_length=40)
-    request_id: str | None = Field(default=None, max_length=100)
-    model: str | None = Field(default=None, min_length=1, max_length=200)
+    messages: Optional[list[ChatMessage]] = Field(default=None, max_length=40)
+    request_id: Optional[str] = Field(default=None, max_length=100)
+    model: Optional[str] = Field(default=None, min_length=1, max_length=200)
 
     @field_validator("prompt")
     @classmethod
@@ -52,10 +54,10 @@ class AvailableModel(BaseModel):
     size_bytes: int = 0
     size_label: str = ""
     modified_at: str = ""
-    digest: str | None = None
-    family: str | None = None
-    parameter_size: str | None = None
-    quantization_level: str | None = None
+    digest: Optional[str] = None
+    family: Optional[str] = None
+    parameter_size: Optional[str] = None
+    quantization_level: Optional[str] = None
 
 
 class ModelsResponse(BaseModel):

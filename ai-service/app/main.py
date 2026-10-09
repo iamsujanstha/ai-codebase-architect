@@ -1,5 +1,7 @@
 """Composition root. Create resources at startup and close them at shutdown."""
 
+from __future__ import annotations
+
 from contextlib import asynccontextmanager
 
 import httpx

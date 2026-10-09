@@ -1,5 +1,7 @@
 """Ollama wire format belongs here; no HTTP route or UI event knowledge."""
 
+from __future__ import annotations
+
 import json
 from typing import AsyncIterator
 

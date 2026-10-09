@@ -211,7 +211,8 @@ class HostedContracts(unittest.IsolatedAsyncioTestCase):
                 Settings(provider="openai", model="test", api_key="test"), client
             )
             iterator = provider.stream(MESSAGES, "test")
-            self.assertEqual(await anext(iterator), "hello")
+            next_item = await (anext(iterator) if "anext" in dir(__builtins__) else iterator.__anext__())
+            self.assertEqual(next_item, "hello")
             await iterator.aclose()
             self.assertTrue(wire.closed)
 

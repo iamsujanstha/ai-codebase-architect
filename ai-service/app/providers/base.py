@@ -1,5 +1,7 @@
 """Provider-neutral chat contract. Adapters yield text followed by one completion."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import AsyncIterator

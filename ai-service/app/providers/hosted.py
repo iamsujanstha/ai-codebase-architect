@@ -1,5 +1,7 @@
 """Shared HTTP/SSE transport. Each adapter owns its vendor's request and events."""
 
+from __future__ import annotations
+
 import json
 from abc import abstractmethod
 from typing import AsyncIterator
