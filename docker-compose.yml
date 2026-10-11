@@ -285,7 +285,7 @@ services:
       GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3000/auth/google/callback}
 
     ports:
-      - "${BACKEND_PORT:-3002}:3000"
+      - "${BACKEND_PORT:-3000}:3000"
 
     # Wait until AI service is healthy
     depends_on:

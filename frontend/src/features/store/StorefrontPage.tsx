@@ -8,10 +8,10 @@ import { CategoryStrip, DEFAULT_CATEGORIES } from './components/CategoryStrip';
 import { SortButton, type SortOption } from './components/SortButton';
 import { ProductGrid } from './components/ProductGrid';
 import { CatalogErrorBanner } from './components/CatalogErrorBanner';
-import { ConciergeLauncher } from '@/features/chat/components/ConciergeLauncher';
+import { useAIConcierge } from '@/features/chat/AIConciergeContext';
 
 // Demo products matching atlas-app.html data structure
-const DEMO_PRODUCTS: CatalogProduct[] = [
+export const DEMO_PRODUCTS: CatalogProduct[] = [
   {
     id: '1',
     slug: 'walnut-standing-desk',
@@ -358,9 +358,10 @@ export function StorefrontPage(): JSX.Element {
     window.location.reload();
   };
 
+  const { openConcierge } = useAIConcierge();
+
   const handleOpenConcierge = () => {
-    // TODO: Wire to concierge panel in step 5
-    console.log('Opening AI concierge...');
+    openConcierge();
   };
 
   // Get category name for title
@@ -371,42 +372,37 @@ export function StorefrontPage(): JSX.Element {
   const displayTitle = categoryName;
 
   return (
-    <>
-      <main className="wrap">
-        <section>
-          {/* Error banner */}
-          {hasError && <CatalogErrorBanner onRetry={handleRetry} />}
+    <main className="wrap">
+      <section>
+        {/* Error banner */}
+        {hasError && <CatalogErrorBanner onRetry={handleRetry} />}
 
-          {/* Category strip and sort button */}
-          <div className="cats">
-            <CategoryStrip
-              categories={DEFAULT_CATEGORIES}
-              selectedCategory={selectedCategory}
-              onSelectCategory={setSelectedCategory}
-            />
-            <SortButton currentSort={sortOption} onSortChange={setSortOption} />
-          </div>
-
-          {/* Page heading */}
-          <div className="head">
-            <h1>{displayTitle}</h1>
-            <span>{filteredProducts.length} products</span>
-          </div>
-
-          {/* Product grid */}
-          <ProductGrid
-            products={filteredProducts}
-            isLoading={isLoading}
-            wishlist={wishlist}
-            onAddToCart={handleAddToCart}
-            onToggleWishlist={toggleWishlist}
-            onAskAI={handleOpenConcierge}
+        {/* Category strip and sort button */}
+        <div className="cats">
+          <CategoryStrip
+            categories={DEFAULT_CATEGORIES}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
           />
-        </section>
-      </main>
+          <SortButton currentSort={sortOption} onSortChange={setSortOption} />
+        </div>
 
-      {/* Floating AI concierge button */}
-      <ConciergeLauncher onClick={handleOpenConcierge} />
-    </>
+        {/* Page heading */}
+        <div className="head">
+          <h1>{displayTitle}</h1>
+          <span>{filteredProducts.length} products</span>
+        </div>
+
+        {/* Product grid */}
+        <ProductGrid
+          products={filteredProducts}
+          isLoading={isLoading}
+          wishlist={wishlist}
+          onAddToCart={handleAddToCart}
+          onToggleWishlist={toggleWishlist}
+          onAskAI={handleOpenConcierge}
+        />
+      </section>
+    </main>
   );
 }

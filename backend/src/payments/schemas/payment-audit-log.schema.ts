@@ -139,14 +139,14 @@ export class PaymentAuditLog {
    * Indexed for fast order-based queries
    */
   @Prop({ required: true, index: true })
-  orderNumber: string;
+  orderNumber!: string;
 
   /**
    * Event type (enum)
    * Indexed for analytics queries
    */
   @Prop({ required: true, index: true })
-  eventType: PaymentAuditEventType;
+  eventType!: PaymentAuditEventType;
 
   /**
    * Event timestamp
@@ -154,7 +154,7 @@ export class PaymentAuditLog {
    * Compound index with orderNumber for timeline queries
    */
   @Prop({ required: true, index: true })
-  timestamp: Date;
+  timestamp!: Date;
 
   /**
    * Payment provider (STRIPE, ESEWA)
@@ -172,7 +172,7 @@ export class PaymentAuditLog {
    * Actor type: USER, SYSTEM, WEBHOOK
    */
   @Prop({ required: true })
-  actor: string;
+  actor!: string;
 
   /**
    * Order status before event
@@ -238,7 +238,7 @@ export class PaymentAuditLog {
    * Success flag
    */
   @Prop({ required: true, default: true })
-  success: boolean;
+  success!: boolean;
 
   /**
    * Human-readable message

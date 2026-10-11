@@ -92,9 +92,9 @@ export class IdempotencyMiddleware implements NestMiddleware {
       
       // Unique index on composite key
       await collection.createIndex({ key: 1 }, { unique: true });
-    } catch (error) {
+    } catch (error: any) {
       // Index may already exist, ignore error
-      console.warn('Idempotency index creation warning:', error.message);
+      console.warn('Idempotency index creation warning:', error?.message);
     }
   }
 

@@ -1,142 +1,197 @@
-import type { CSSProperties } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { X } from 'lucide-react';
 import { useCart } from '@/features/store/CartContext';
 import { useAuth } from '@/features/auth/AuthContext';
+import { useAIConcierge } from '@/features/chat/AIConciergeContext';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { ROUTES, loginWithRedirect } from '@/app/constants/routes';
 
-export function CartDrawer(): JSX.Element {
+/**
+ * CartDrawer - Shopping cart slide-out drawer matching atlas-app.html design.
+ * Features:
+ * - Scrim backdrop
+ * - Header with close button
+ * - Line item list with thumbnail gradient, emoji, and +/- quantity controls
+ * - Payment method switcher (Card with Stripe / eSewa)
+ * - Order total and Checkout button
+ * - Empty state with CTA to AI concierge
+ */
+export function CartDrawer(): JSX.Element | null {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { openConcierge } = useAIConcierge();
   const {
-    items, itemCount, subtotal, isOpen,
-    closeCart, removeItem, updateQuantity, clearCart,
+    items,
+    itemCount: _itemCount,
+    subtotal,
+    isOpen,
+    closeCart,
+    updateQuantity,
   } = useCart();
+
+  const [payMethod, setPayMethod] = useState<'stripe' | 'esewa'>('stripe');
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeCart();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, closeCart]);
+
+  if (!isOpen) return null;
 
   function handleCheckout() {
     closeCart();
-    // Mirror Amazon: unauthenticated users are sent to login with /checkout as return destination
-    navigate(user ? ROUTES.CHECKOUT : loginWithRedirect(ROUTES.CHECKOUT));
+    const destination = `${ROUTES.CHECKOUT}?method=${payMethod}`;
+    navigate(user ? destination : loginWithRedirect(destination));
+  }
+
+  function handleAskConcierge() {
+    closeCart();
+    openConcierge();
   }
 
   return (
     <>
-      <div
-        className={`cart-backdrop ${isOpen ? 'visible' : ''}`}
-        onClick={closeCart}
-      />
+      {/* Scrim backdrop */}
+      <div className="scrim" onClick={closeCart} />
 
-      <aside className={`cart-drawer ${isOpen ? 'open' : ''}`}>
-        <div className="cart-drawer-header">
-          <div>
-            <p className="section-kicker">Cart</p>
-            <h2>{itemCount} items saved</h2>
-          </div>
-
+      {/* Drawer panel */}
+      <aside className="drawer" id="cartd" aria-label="Cart">
+        {/* Header */}
+        <div className="dh">
+          <span>Your cart</span>
           <button
-            className="icon-button"
+            className="icon-btn"
             type="button"
             onClick={closeCart}
-            aria-label="Close cart drawer"
+            aria-label="Close cart"
           >
-            ×
+            <X size={20} />
           </button>
         </div>
 
-        {items.length === 0 ? (
-          <div className="empty-cart-state">
-            <h3>Your cart is ready when you are.</h3>
-            <p>
-              Add a few products from the storefront, then use the local AI route
-              if you want help comparing setup options.
+        {/* Body */}
+        <div className="db" id="cartb2">
+          {items.length === 0 ? (
+            <p className="sub" style={{ textAlign: 'center', padding: '40px 0' }}>
+              <b
+                style={{
+                  color: 'var(--ink)',
+                  fontSize: '17px',
+                  display: 'block',
+                  marginBottom: '8px',
+                }}
+              >
+                Your cart is empty
+              </b>
+              Add something from the shop, or ask the AI concierge for ideas.
+              <br />
+              <button
+                type="button"
+                className="btn p"
+                style={{ marginTop: '16px' }}
+                onClick={handleAskConcierge}
+              >
+                Ask the AI concierge
+              </button>
             </p>
-            <Link className="secondary-link-button" to="/chat" onClick={closeCart}>
-              Open AI concierge
-            </Link>
-          </div>
-        ) : (
-          <>
-            <div className="cart-line-list">
-              {items.map((item) => {
-                const visualStyle = {
-                  '--product-gradient-from': item.visual.gradientFrom,
-                  '--product-gradient-to': item.visual.gradientTo,
-                  '--product-accent': item.visual.accent,
-                } as CSSProperties;
-
-                return (
-                  <article key={item.productId} className="cart-line-item">
-                    <div className="cart-line-visual" style={visualStyle}>
-                      <span>{item.visual.glyph}</span>
-                    </div>
-
-                    <div className="cart-line-copy">
-                      <h3>{item.name}</h3>
-                      <p>{item.subtitle}</p>
-                      <strong>
-                        {formatCurrency(item.price, item.currency)}
-                      </strong>
-
-                      <div className="cart-line-controls">
-                        <button
-                          type="button"
-                          className="quantity-button"
-                          onClick={() =>
-                            updateQuantity(item.productId, item.quantity - 1)
-                          }
-                        >
-                          −
-                        </button>
-                        <span>{item.quantity}</span>
-                        <button
-                          type="button"
-                          className="quantity-button"
-                          onClick={() =>
-                            updateQuantity(item.productId, item.quantity + 1)
-                          }
-                        >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => removeItem(item.productId)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-
-            <div className="cart-summary">
-              <div className="cart-summary-row">
-                <span>Subtotal</span>
-                <strong>{formatCurrency(subtotal, 'USD')}</strong>
-              </div>
-              <div className="cart-summary-row">
-                <span>Shipping</span>
-                <strong>Calculated at checkout</strong>
-              </div>
-              <div className="cart-summary-actions">
-                <button className="ghost-button" type="button" onClick={clearCart}>
-                  Clear cart
-                </button>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={handleCheckout}
+          ) : (
+            items.map((item) => (
+              <div key={item.productId} className="li">
+                <div
+                  className="th"
+                  style={{
+                    background: `linear-gradient(145deg, ${item.visual.gradientFrom}, ${item.visual.gradientTo})`,
+                  }}
+                  aria-hidden="true"
                 >
-                  {user ? 'Continue to checkout' : 'Sign in to checkout'}
-                </button>
+                  {item.visual.glyph}
+                </div>
+                <div>
+                  <b>{item.name}</b>
+                  <div className="qty">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateQuantity(item.productId, item.quantity - 1)
+                      }
+                      aria-label="Decrease quantity"
+                    >
+                      −
+                    </button>
+                    <span>{item.quantity}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateQuantity(item.productId, item.quantity + 1)
+                      }
+                      aria-label="Increase quantity"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <b>{formatCurrency(item.price * item.quantity, item.currency)}</b>
               </div>
-              <p className="cart-note">
-                Server-priced checkout via Stripe or eSewa. Sign in to place an order.
-              </p>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        {items.length > 0 && (
+          <div className="df" id="cartf">
+            <div className="pay">
+              <label>
+                <input
+                  type="radio"
+                  name="pay"
+                  value="stripe"
+                  checked={payMethod === 'stripe'}
+                  onChange={() => setPayMethod('stripe')}
+                />
+                <span>
+                  Card with Stripe
+                  <small>Hosted checkout, international cards</small>
+                </span>
+              </label>
+
+              <label>
+                <input
+                  type="radio"
+                  name="pay"
+                  value="esewa"
+                  checked={payMethod === 'esewa'}
+                  onChange={() => setPayMethod('esewa')}
+                />
+                <span>
+                  eSewa
+                  <small>Pay in NPR from your wallet</small>
+                </span>
+              </label>
             </div>
-          </>
+
+            <div className="tot">
+              <span>Total</span>
+              <span>{formatCurrency(subtotal, 'USD')}</span>
+            </div>
+
+            <button
+              className="btn p"
+              id="co"
+              style={{ width: '100%', marginTop: '12px', padding: '13px' }}
+              type="button"
+              onClick={handleCheckout}
+            >
+              Pay with {payMethod === 'stripe' ? 'Stripe' : 'eSewa'}
+            </button>
+          </div>
         )}
       </aside>
     </>

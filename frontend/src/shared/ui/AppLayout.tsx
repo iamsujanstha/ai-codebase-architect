@@ -1,23 +1,37 @@
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { AppHeader } from './AppHeader';
+import { useCart } from '@/features/store/CartContext';
+import { useAIConcierge } from '@/features/chat/AIConciergeContext';
+import { CartDrawer } from '@/features/store/components/CartDrawer';
+import { ConciergeDrawer } from '@/features/chat/components/ConciergeDrawer';
+import { ConciergeLauncher } from '@/features/chat/components/ConciergeLauncher';
 
 /**
  * AppLayout - Main layout wrapper with the new AppHeader.
- * Handles search and cart drawer interactions.
+ * Manages Cart drawer and AI concierge drawer.
  */
 export function AppLayout(): JSX.Element {
   const [, setSearchQuery] = useState('');
+  const location = useLocation();
+
+  const { openCart, closeCart } = useCart();
+  const { isConciergeOpen, openConcierge, closeConcierge } = useAIConcierge();
+
+  const isChatRoute = location.pathname === '/chat';
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
-    // Search is handled by URL params or will be wired to context
-    console.log('Search:', query);
   };
 
   const handleCartClick = () => {
-    // Cart drawer will be wired in step 4
-    console.log('Cart clicked - drawer will open in step 4');
+    closeConcierge();
+    openCart();
+  };
+
+  const handleOpenConcierge = () => {
+    closeCart();
+    openConcierge();
   };
 
   return (
@@ -26,6 +40,18 @@ export function AppLayout(): JSX.Element {
       <main style={{ flex: 1 }}>
         <Outlet />
       </main>
+
+      {/* Floating AI concierge button - hidden on full chat route or when drawer is already open */}
+      <ConciergeLauncher
+        onClick={handleOpenConcierge}
+        hidden={isChatRoute || isConciergeOpen}
+      />
+
+      {/* Cart Drawer */}
+      <CartDrawer />
+
+      {/* AI Concierge Drawer */}
+      <ConciergeDrawer isOpen={isConciergeOpen} onClose={closeConcierge} />
     </div>
   );
 }

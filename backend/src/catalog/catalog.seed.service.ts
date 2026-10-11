@@ -31,18 +31,24 @@ export class CatalogSeedService implements OnModuleInit {
       return;
     }
 
-    const existingProductCount = await this.productModel.estimatedDocumentCount();
-
-    if (existingProductCount > 0) {
-      this.logger.log('Catalog seed skipped because products already exist.');
-      return;
+    for (const category of CATEGORY_SEED_DATA) {
+      await this.categoryModel.updateOne(
+        { slug: category.slug },
+        { $set: category },
+        { upsert: true },
+      );
     }
 
-    await this.categoryModel.insertMany(CATEGORY_SEED_DATA);
-    await this.productModel.insertMany(PRODUCT_SEED_DATA);
+    for (const product of PRODUCT_SEED_DATA) {
+      await this.productModel.updateOne(
+        { slug: product.slug },
+        { $set: product },
+        { upsert: true },
+      );
+    }
 
     this.logger.log(
-      `Seeded ${CATEGORY_SEED_DATA.length} categories and ${PRODUCT_SEED_DATA.length} products.`,
+      `Synchronized ${CATEGORY_SEED_DATA.length} categories and ${PRODUCT_SEED_DATA.length} products to database.`,
     );
   }
 }

@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   HttpException,
   HttpStatus,
+  SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
@@ -81,12 +82,11 @@ import { Connection } from 'mongoose';
  * - ❌ Complex to tune (too strict → user frustration, too loose → abuse)
  */
 
+export const RATE_LIMIT_KEY = 'RATE_LIMIT';
+
 // Decorator to set rate limit per route
 export const RateLimit = (limit: number, windowMs: number) =>
-  Reflector.createDecorator<{ limit: number; windowMs: number }>({
-    limit,
-    windowMs,
-  });
+  SetMetadata(RATE_LIMIT_KEY, { limit, windowMs });
 
 interface RateLimitRecord {
   key: string; // IP or userId
@@ -114,15 +114,15 @@ export class RateLimitGuard implements CanActivate {
       
       // Unique index on key
       await collection.createIndex({ key: 1 }, { unique: true });
-    } catch (error) {
-      console.warn('Rate limit index creation warning:', error.message);
+    } catch (error: any) {
+      console.warn('Rate limit index creation warning:', error?.message);
     }
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // Get rate limit config from decorator
-    const rateLimitConfig = this.reflector.get(
-      RateLimit,
+    const rateLimitConfig = this.reflector.get<{ limit: number; windowMs: number }>(
+      RATE_LIMIT_KEY,
       context.getHandler(),
     );
 

@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { CartProvider } from '@/features/store/CartContext';
+import { AIConciergeProvider } from '@/features/chat/AIConciergeContext';
 import { ToastProvider } from '@/shared/contexts/ToastContext';
 import { AppLayout } from '@/shared/ui/AppLayout';
 import { ProtectedRoute } from '@/shared/ui/ProtectedRoute';
@@ -28,37 +29,39 @@ export default function App(): JSX.Element {
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
-          <ToastProvider>
-            <Routes>
-              {/* Admin routes - separate from AppChrome */}
-              <Route
-                path="/admin/*"
-                element={
-                  <ProtectedRoute requireAdmin>
-                    <AdminLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<AdminDashboard />} />
-                <Route path="products" element={<ProductsManagement />} />
-                <Route path="products/new" element={<ProductForm />} />
-                <Route path="products/:id/edit" element={<ProductForm />} />
-                <Route path="orders" element={<OrdersManagement />} />
-                <Route path="orders/:id" element={<OrderDetail />} />
-                <Route path="users" element={<UsersManagement />} />
-                <Route path="users/:id" element={<UserDetail />} />
-                <Route path="settings" element={<AdminSettings />} />
-              </Route>
+          <AIConciergeProvider>
+            <ToastProvider>
+              <Routes>
+                {/* Admin routes - separate from AppChrome */}
+                <Route
+                  path="/admin/*"
+                  element={
+                    <ProtectedRoute requireAdmin>
+                      <AdminLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<AdminDashboard />} />
+                  <Route path="products" element={<ProductsManagement />} />
+                  <Route path="products/new" element={<ProductForm />} />
+                  <Route path="products/:id/edit" element={<ProductForm />} />
+                  <Route path="orders" element={<OrdersManagement />} />
+                  <Route path="orders/:id" element={<OrderDetail />} />
+                  <Route path="users" element={<UsersManagement />} />
+                  <Route path="users/:id" element={<UserDetail />} />
+                  <Route path="settings" element={<AdminSettings />} />
+                </Route>
 
-              {/* Regular routes with AppLayout (new design) */}
-              <Route element={<AppLayout />}>
-                {publicRoutes}
-                {authRoutes}
-                {protectedRoutes}
-                <Route path="*" element={<Navigate replace to={ROUTES.HOME} />} />
-              </Route>
-            </Routes>
-          </ToastProvider>
+                {/* Regular routes with AppLayout (new design) */}
+                <Route element={<AppLayout />}>
+                  {publicRoutes}
+                  {authRoutes}
+                  {protectedRoutes}
+                  <Route path="*" element={<Navigate replace to={ROUTES.HOME} />} />
+                </Route>
+              </Routes>
+            </ToastProvider>
+          </AIConciergeProvider>
         </CartProvider>
       </AuthProvider>
     </BrowserRouter>
