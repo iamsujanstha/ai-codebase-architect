@@ -23,6 +23,55 @@ For a deep dive into specific systems, refer to the following guides in the `doc
 - [Authentication & Google OAuth Flow](./docs/authentication_flow.md)
 - [Product Management Dashboard](./docs/product_dashboard.md)
 
+## 🎓 PostgreSQL Interview Preparation
+This repository includes a comprehensive PostgreSQL learning system for Staff/Principal Engineer interviews:
+
+### Quick Start (5 minutes)
+```bash
+cd backend
+npx ts-node src/database/exercises/01-data-modeling.ts
+```
+
+### Complete Learning Resources
+- **[QUICK_START_POSTGRESQL.md](./QUICK_START_POSTGRESQL.md)** - 5-minute quick start guide
+- **[POSTGRESQL_INTERVIEW_EXERCISES.md](./POSTGRESQL_INTERVIEW_EXERCISES.md)** - 15 complete exercises with theory + hands-on + interview Q&A
+- **[POSTGRESQL_PRODUCTION_COMMANDS.md](./POSTGRESQL_PRODUCTION_COMMANDS.md)** - Production SQL command reference (most commonly used)
+- **[POSTGRESQL_MASTERY_COMPLETE.md](./POSTGRESQL_MASTERY_COMPLETE.md)** - Achievement summary and study plan
+- **[DATABASE_LEARNING_ROADMAP.md](./DATABASE_LEARNING_ROADMAP.md)** - 4-week learning roadmap
+
+### What You'll Master
+- ✅ Data Modeling & Normalization (1NF, 2NF, 3NF)
+- ✅ Index Optimization (B-tree, GIN, composite, covering indexes)
+- ✅ Transactions & ACID (atomicity, consistency, isolation, durability)
+- ✅ Isolation Levels (READ COMMITTED, REPEATABLE READ, SERIALIZABLE)
+- ✅ Concurrency Patterns (deadlocks, race conditions, MVCC)
+- ✅ Query Optimization (EXPLAIN ANALYZE, 10x-100x speedups)
+- ✅ Production Best Practices (monitoring, VACUUM, connection pooling)
+- ✅ Partitioning & Replication for scale (100M+ rows)
+
+### Runnable Exercises
+```bash
+# Exercise 1: Data Modeling & Normalization
+npx ts-node src/database/exercises/01-data-modeling.ts
+
+# Exercise 2: Indexes Deep Dive (EXPLAIN ANALYZE)
+npx ts-node src/database/exercises/02-indexes.ts
+
+# Exercise 3: Transactions & ACID
+npx ts-node src/database/exercises/03-transactions-acid.ts
+
+# Run all exercises
+npx ts-node src/database/exercises/run-all.ts
+```
+
+### Database Setup
+- **Neon PostgreSQL** cloud database (serverless, auto-scaling)
+- **9 normalized tables** (3NF) with 126 rows of realistic e-commerce data
+- **46 indexes** optimized for various query patterns
+- **Complete schema** with constraints, triggers, and materialized views
+
+See [QUICK_START_POSTGRESQL.md](./QUICK_START_POSTGRESQL.md) for detailed instructions.
+
 ## What this project demonstrates
 
 - route-based React application design with a shared product shell
