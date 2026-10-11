@@ -27,7 +27,9 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.js",
     "seed:admin": "ts-node -r tsconfig-paths/register src/scripts/seed-admin.ts",
-    "seed:admin:prod": "node dist/scripts/seed-admin.js"
+    "seed:admin:prod": "node dist/scripts/seed-admin.js",
+    "indexes:create": "ts-node -r tsconfig-paths/register src/scripts/create-indexes.ts",
+    "indexes:create:prod": "node dist/scripts/create-indexes.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

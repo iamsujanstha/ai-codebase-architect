@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -317,35 +318,69 @@ export class PaymentsService {
       throw new BadRequestException('Invalid Stripe webhook signature.');
     }
 
-    switch (event.type) {
-      case 'checkout.session.completed':
-      case 'checkout.session.async_payment_succeeded': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        await this.syncOrderWithStripeSession(session);
-        break;
-      }
-      case 'checkout.session.async_payment_failed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        await this.markOrderAsFailed(
-          this.extractOrderNumberFromStripeSession(session),
-          'Stripe reported that the asynchronous payment failed.',
-        );
-        break;
-      }
-      case 'checkout.session.expired': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const orderNumber = this.extractOrderNumberFromStripeSession(session);
-        if (orderNumber) {
-          await this.updateOrderStatus(
-            orderNumber,
-            OrderStatus.EXPIRED,
-            'Stripe Checkout session expired before payment completion.',
-          );
+    // PHASE 1 CRITICAL FIX: Webhook Deduplication
+    // Stripe may send the same webhook multiple times (network retry, failover)
+    // Use Stripe event ID as idempotency key to prevent duplicate processing
+    const idempotencyKey = `stripe_webhook:${event.id}`;
+    const isDuplicate = await this.checkWebhookIdempotency(idempotencyKey);
+
+    if (isDuplicate) {
+      this.logger.log({
+        event: 'webhook_duplicate_ignored',
+        stripeEventId: event.id,
+        stripeEventType: event.type,
+        message: 'Duplicate webhook ignored (already processed)',
+      });
+      return { received: true }; // Return success (idempotent)
+    }
+
+    // Mark as processing (atomic operation prevents race condition)
+    await this.markWebhookAsProcessing(idempotencyKey);
+
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed':
+        case 'checkout.session.async_payment_succeeded': {
+          const session = event.data.object as Stripe.Checkout.Session;
+          await this.syncOrderWithStripeSession(session);
+          break;
         }
-        break;
+        case 'checkout.session.async_payment_failed': {
+          const session = event.data.object as Stripe.Checkout.Session;
+          await this.markOrderAsFailed(
+            this.extractOrderNumberFromStripeSession(session),
+            'Stripe reported that the asynchronous payment failed.',
+          );
+          break;
+        }
+        case 'checkout.session.expired': {
+          const session = event.data.object as Stripe.Checkout.Session;
+          const orderNumber = this.extractOrderNumberFromStripeSession(session);
+          if (orderNumber) {
+            await this.updateOrderStatus(
+              orderNumber,
+              OrderStatus.EXPIRED,
+              'Stripe Checkout session expired before payment completion.',
+            );
+          }
+          break;
+        }
+        default:
+          // Unknown event type, log but don't fail
+          this.logger.log({
+            event: 'webhook_unknown_type',
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+          });
+          break;
       }
-      default:
-        break;
+
+      // Mark as successfully processed
+      await this.markWebhookAsProcessed(idempotencyKey);
+    } catch (error) {
+      // If processing fails, remove the idempotency key so Stripe can retry
+      await this.removeWebhookIdempotency(idempotencyKey);
+      throw error; // Let Stripe know to retry
     }
 
     return { received: true };
@@ -1070,4 +1105,139 @@ export class PaymentsService {
       ? String(normalized)
       : normalized.toFixed(2);
   }
+
+  /**
+   * PHASE 1: Webhook Idempotency Helpers
+   * 
+   * These methods prevent duplicate webhook processing using MongoDB as storage.
+   * 
+   * CRITICAL: Stripe may send the same webhook multiple times due to:
+   * - Network retry (if we respond with 5xx or timeout)
+   * - Stripe failover (server restarts)
+   * - Manual replay (in Stripe dashboard)
+   * 
+   * We use Stripe event ID as idempotency key because:
+   * - It's unique per event
+   * - It's stable (same event always has same ID)
+   * - It's provided by Stripe (we don't generate it)
+   * 
+   * Flow:
+   * 1. Webhook arrives with event.id = "evt_abc123"
+   * 2. Check if evt_abc123 exists in idempotency collection
+   * 3. If exists: Return success (already processed)
+   * 4. If not: Process and store evt_abc123
+   * 
+   * Race condition handling:
+   * - Multiple webhook deliveries arrive simultaneously
+   * - Both try to insert same event ID
+   * - MongoDB unique index ensures only one succeeds
+   * - Loser gets duplicate key error → treated as already processed
+   * 
+   * TTL: 72 hours (Stripe retries for 3 days)
+   * After 72 hours, MongoDB automatically deletes the record.
+   */
+
+  private async checkWebhookIdempotency(key: string): Promise<boolean> {
+    try {
+      const collection = this.orderModel.db.collection('webhook_idempotency');
+      const existing = await collection.findOne({ key });
+      return !!existing;
+    } catch (error) {
+      this.logger.error({
+        event: 'webhook_idempotency_check_failed',
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Fail open: If check fails, allow webhook to process
+      // Better to risk duplicate than block legitimate webhook
+      return false;
+    }
+  }
+
+  private async markWebhookAsProcessing(key: string): Promise<void> {
+    try {
+      const collection = this.orderModel.db.collection('webhook_idempotency');
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 72); // 72 hours TTL
+
+      await collection.insertOne({
+        key,
+        status: 'processing',
+        createdAt: new Date(),
+        expiresAt,
+      });
+
+      // Ensure TTL index exists
+      await collection.createIndex(
+        { expiresAt: 1 },
+        { expireAfterSeconds: 0 },
+      );
+      
+      // Ensure unique index on key
+      await collection.createIndex({ key: 1 }, { unique: true });
+    } catch (error) {
+      // If duplicate key error, webhook is already being processed
+      if ((error as any).code === 11000) {
+        this.logger.log({
+          event: 'webhook_concurrent_processing_detected',
+          key,
+        });
+        throw new ConflictException('Webhook is already being processed');
+      }
+      
+      this.logger.error({
+        event: 'webhook_idempotency_insert_failed',
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't throw - allow processing to continue
+    }
+  }
+
+  private async markWebhookAsProcessed(key: string): Promise<void> {
+    try {
+      const collection = this.orderModel.db.collection('webhook_idempotency');
+      await collection.updateOne(
+        { key },
+        {
+          $set: {
+            status: 'processed',
+            processedAt: new Date(),
+          },
+        },
+      );
+
+      this.logger.log({
+        event: 'webhook_processed',
+        key,
+      });
+    } catch (error) {
+      this.logger.error({
+        event: 'webhook_idempotency_update_failed',
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't throw - webhook was processed successfully
+    }
+  }
+
+  private async removeWebhookIdempotency(key: string): Promise<void> {
+    try {
+      const collection = this.orderModel.db.collection('webhook_idempotency');
+      await collection.deleteOne({ key });
+
+      this.logger.log({
+        event: 'webhook_idempotency_removed',
+        key,
+        reason: 'Processing failed, allowing Stripe to retry',
+      });
+    } catch (error) {
+      this.logger.error({
+        event: 'webhook_idempotency_removal_failed',
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 }
+

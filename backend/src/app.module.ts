@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { OrdersModule } from './orders/orders.module';
 import { AdminModule } from './admin/admin.module';
 import { PdfRagModule } from './pdf-rag/pdf-rag.module';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
 @Module({
   imports: [
@@ -35,4 +36,11 @@ import { PdfRagModule } from './pdf-rag/pdf-rag.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // PHASE 1 PRODUCTION IMPROVEMENTS:
+    // Apply correlation ID middleware to all routes for request tracing
+    // See: docs/architecture/adr/ and ARCHITECTURE_GAP_ANALYSIS.md
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+  }
+}

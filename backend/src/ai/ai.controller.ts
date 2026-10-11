@@ -5,10 +5,12 @@ import {
   HttpException,
   Post,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { GenerateAiRequestDto } from './dto/generate-ai-request.dto';
 import { AiGatewayService } from './ai.service';
+import { RateLimit, RateLimitGuard } from '../common/guards/rate-limit.guard';
 
 // Controllers are the HTTP boundary of the feature.
 // Their job is deliberately narrow:
@@ -17,16 +19,29 @@ import { AiGatewayService } from './ai.service';
 // - return a response
 //
 // Business logic should stay out of controllers so they remain easy to read and maintain.
+//
+// PHASE 1 PRODUCTION IMPROVEMENTS:
+// - Rate limiting applied to prevent AI quota abuse
+// - 20 requests per minute per user (fair resource sharing)
+// - Prevents single user from monopolizing expensive AI resources
 @Controller('ai')
 export class AiController {
   constructor(private readonly aiGatewayService: AiGatewayService) {}
 
+  // List models: 30 requests per minute (read-only, less restrictive)
   @Get('models')
+  @RateLimit(30, 60 * 1000)
+  @UseGuards(RateLimitGuard)
   async listModels() {
     return this.aiGatewayService.listModels();
   }
 
+  // Generate: 20 requests per minute
+  // Critical: AI generation costs money (OpenAI/Claude) or resources (local LLM)
+  // Prevents abuse while allowing normal usage
   @Post('generate')
+  @RateLimit(20, 60 * 1000)
+  @UseGuards(RateLimitGuard)
   async generate(@Body() request: GenerateAiRequestDto) {
     return this.aiGatewayService.generateResponse(
       request.prompt,
@@ -35,7 +50,11 @@ export class AiController {
     );
   }
 
+  // Streaming: 20 requests per minute (same as non-streaming)
+  // Streaming is more expensive (longer connection time)
   @Post('generate/stream')
+  @RateLimit(20, 60 * 1000)
+  @UseGuards(RateLimitGuard)
   async streamGenerate(
     @Body() request: GenerateAiRequestDto,
     @Res() response: Response,
