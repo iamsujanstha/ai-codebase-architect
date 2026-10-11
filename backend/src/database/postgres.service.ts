@@ -90,6 +90,13 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
     return this.pool !== null;
   }
 
+  async getClient(): Promise<import('pg').PoolClient> {
+    if (!this.pool) {
+      throw new Error('PostgreSQL pool is not initialized');
+    }
+    return this.pool.connect();
+  }
+
   async query<T extends QueryResultRow = any>(
     text: string,
     params?: any[],

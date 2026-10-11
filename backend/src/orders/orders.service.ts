@@ -1,5 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../database/prisma.service';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  IOrdersRepository,
+  ORDERS_REPOSITORY_TOKEN,
+  OrderRow,
+} from './repositories/orders.repository.interface';
 
 export interface CreateOrderDto {
   items: {
@@ -59,21 +63,24 @@ export interface OrderResponse {
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(ORDERS_REPOSITORY_TOKEN)
+    private readonly ordersRepo: IOrdersRepository,
+  ) {}
 
-  private mapOrder(o: any): OrderResponse {
+  private mapOrder(o: OrderRow): OrderResponse {
     return {
       _id: o.id.toString(),
       id: o.id.toString(),
       orderNumber: o.order_number,
       userId: o.user_id.toString(),
-      userEmail: o.users?.email ?? '',
-      items: (o.order_items || []).map((item: any) => ({
+      userEmail: o.user_email ?? '',
+      items: (o.items || []).map((item) => ({
         productId: item.product_id.toString(),
         productName: item.name,
         quantity: item.quantity,
         unitPrice: Number(item.price),
-        lineTotal: Number(item.subtotal),
+        lineTotal: Number(item.subtotal ?? Number(item.price) * item.quantity),
         currency: 'USD',
       })),
       subtotal: Number(o.total_amount),
@@ -83,10 +90,8 @@ export class OrdersService {
       paymentProvider: o.payment_method ?? 'stripe',
       paymentReference: o.payment_intent_id ?? undefined,
       customer: {
-        fullName:
-          [o.users?.first_name, o.users?.last_name].filter(Boolean).join(' ') ||
-          (o.users?.email ?? ''),
-        email: o.users?.email ?? '',
+        fullName: o.user_name || o.user_email || '',
+        email: o.user_email ?? '',
       },
       createdAt: o.created_at ? new Date(o.created_at).toISOString() : new Date().toISOString(),
       updatedAt: o.updated_at ? new Date(o.updated_at).toISOString() : new Date().toISOString(),
@@ -101,27 +106,19 @@ export class OrdersService {
     const numericUserId = parseInt(userId, 10) || 1;
     const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    const order = await this.prisma.orders.create({
-      data: {
-        user_id: numericUserId,
-        order_number: orderNumber,
-        total_amount: dto.total || dto.subtotal,
-        status: 'pending',
-        payment_method: dto.paymentProvider || 'stripe',
-        payment_intent_id: dto.paymentReference,
-        order_items: {
-          create: (dto.items || []).map((item) => ({
-            product_id: parseInt(item.productId, 10) || 1,
-            name: item.productName,
-            price: item.unitPrice,
-            quantity: item.quantity,
-          })),
-        },
-      },
-      include: {
-        users: true,
-        order_items: true,
-      },
+    const order = await this.ordersRepo.create({
+      userId: numericUserId,
+      orderNumber,
+      totalAmount: dto.total || dto.subtotal,
+      status: 'pending',
+      paymentMethod: dto.paymentProvider || 'stripe',
+      paymentIntentId: dto.paymentReference,
+      items: (dto.items || []).map((item) => ({
+        productId: parseInt(item.productId, 10) || 1,
+        name: item.productName,
+        price: item.unitPrice,
+        quantity: item.quantity,
+      })),
     });
 
     return this.mapOrder(order);
@@ -129,34 +126,13 @@ export class OrdersService {
 
   async getOrdersByUser(userId: string): Promise<OrderResponse[]> {
     const numericUserId = parseInt(userId, 10) || 0;
-    const orders = await this.prisma.orders.findMany({
-      where: { user_id: numericUserId },
-      orderBy: { created_at: 'desc' },
-      include: {
-        users: true,
-        order_items: true,
-      },
-    });
-
+    const orders = await this.ordersRepo.findByUserId(numericUserId);
     return orders.map((o) => this.mapOrder(o));
   }
 
   async getOrderById(orderId: string, userId: string): Promise<OrderResponse> {
-    const numericOrderId = parseInt(orderId, 10);
     const numericUserId = parseInt(userId, 10) || 0;
-
-    const order = await this.prisma.orders.findFirst({
-      where: {
-        ...(isNaN(numericOrderId)
-          ? { order_number: orderId }
-          : { id: numericOrderId }),
-        user_id: numericUserId,
-      },
-      include: {
-        users: true,
-        order_items: true,
-      },
-    });
+    const order = await this.ordersRepo.findById(orderId, numericUserId);
 
     if (!order) {
       throw new NotFoundException('Order not found.');
@@ -170,23 +146,10 @@ export class OrdersService {
     status: string,
     paymentReference?: string,
   ): Promise<OrderResponse | null> {
-    const numericOrderId = parseInt(orderId, 10);
-
-    const updated = await this.prisma.orders.update({
-      where: isNaN(numericOrderId)
-        ? { order_number: orderId }
-        : { id: numericOrderId },
-      data: {
-        status,
-        ...(paymentReference ? { payment_intent_id: paymentReference } : {}),
-        updated_at: new Date(),
-      },
-      include: {
-        users: true,
-        order_items: true,
-      },
-    });
-
+    const updated = await this.ordersRepo.updateStatus(orderId, status, paymentReference);
+    if (!updated) {
+      return null;
+    }
     return this.mapOrder(updated);
   }
 }

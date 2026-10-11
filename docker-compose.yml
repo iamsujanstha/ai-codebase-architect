@@ -257,6 +257,7 @@ services:
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:-ai_commerce_platform}
       MONGODB_AUTO_INDEX: ${MONGODB_AUTO_INDEX:-true}
+      DATABASE_URL: ${DATABASE_URL:-${POSTGRES_URL:-postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require}}
       POSTGRES_URL: ${POSTGRES_URL}
       DATABASE_MODE: ${DATABASE_MODE:-postgres-only}
       POSTGRES_HOST: ${POSTGRES_HOST:-ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech}

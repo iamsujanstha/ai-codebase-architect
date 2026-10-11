@@ -8,6 +8,20 @@ export class PrismaService
 {
   private readonly logger = new Logger(PrismaService.name);
 
+  constructor() {
+    const url =
+      process.env.DATABASE_URL ||
+      process.env.POSTGRES_URL ||
+      'postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+    super({
+      datasources: {
+        db: {
+          url,
+        },
+      },
+    });
+  }
+
   async onModuleInit() {
     try {
       await this.$connect();

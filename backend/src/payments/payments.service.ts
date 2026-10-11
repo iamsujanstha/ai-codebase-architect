@@ -782,7 +782,7 @@ export class PaymentsService {
     );
 
     return normalizedItems.map((item) => {
-      const product = productMap.get(item.productId);
+      const product: any = productMap.get(item.productId);
       if (!product) {
         throw new BadRequestException(
           'A requested cart item could not be found in the catalog.',
