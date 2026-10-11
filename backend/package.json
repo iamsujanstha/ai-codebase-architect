@@ -30,6 +30,15 @@
     "seed:admin:prod": "node dist/scripts/seed-admin.js",
     "indexes:create": "ts-node -r tsconfig-paths/register src/scripts/create-indexes.ts",
     "indexes:create:prod": "node dist/scripts/create-indexes.js",
+    "db:lab": "ts-node -r tsconfig-paths/register src/database/exercises/run-all.ts",
+    "db:lab:outbox": "ts-node -r tsconfig-paths/register src/database/exercises/14-outbox-pattern.ts",
+    "db:lab:orm-vs-sql": "ts-node -r tsconfig-paths/register src/database/exercises/13-orm-vs-raw-sql.ts",
+    "db:lab:window-cte": "ts-node -r tsconfig-paths/register src/database/exercises/12-sql-fundamentals-window-cte.ts",
+    "db:lab:locks": "ts-node -r tsconfig-paths/register src/database/exercises/07-locks-mvcc.ts",
+    "db:lab:isolation": "ts-node -r tsconfig-paths/register src/database/exercises/04-isolation-levels.ts",
+    "db:lab:deadlocks": "ts-node -r tsconfig-paths/register src/database/exercises/05-deadlocks.ts",
+    "db:lab:acid": "ts-node -r tsconfig-paths/register src/database/exercises/03-transactions-acid.ts",
+    "db:lab:indexes": "ts-node -r tsconfig-paths/register src/database/exercises/02-indexes.ts",
     "postinstall": "prisma skills sync || exit 0"
   },
   "dependencies": {

@@ -16,6 +16,9 @@ import { runConstraintsExercise } from './08-constraints';
 import { runQueryOptimizationExercise } from './09-query-optimization';
 import { runPartitioningExercise } from './10-partitioning';
 import { runReplicationExercise } from './11-replication';
+import { runSqlFundamentalsExercise } from './12-sql-fundamentals-window-cte';
+import { runOrmVsRawSqlExercise } from './13-orm-vs-raw-sql';
+import { runOutboxPatternExercise } from './14-outbox-pattern';
 
 async function runAllExercises() {
   console.log('\n');
@@ -41,6 +44,9 @@ async function runAllExercises() {
     { name: 'Query Optimization & EXPLAIN', fn: runQueryOptimizationExercise },
     { name: 'Table Partitioning & Pruning', fn: runPartitioningExercise },
     { name: 'Replication & WAL Dynamics', fn: runReplicationExercise },
+    { name: 'SQL Fundamentals (Window Functions & Recursive CTEs)', fn: runSqlFundamentalsExercise },
+    { name: 'ORM vs Raw SQL & Keyset Pagination', fn: runOrmVsRawSqlExercise },
+    { name: 'Transactional Outbox Pattern', fn: runOutboxPatternExercise },
   ];
 
   let completedCount = 0;
