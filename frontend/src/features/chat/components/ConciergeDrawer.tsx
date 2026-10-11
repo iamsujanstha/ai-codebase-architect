@@ -331,24 +331,93 @@ export function ConciergeDrawer({
   const STOP_WORDS = new Set([
     'what', 'is', 'the', 'of', 'for', 'and', 'are', 'out', 'list', 'show',
     'price', 'tell', 'me', 'have', 'with', 'about', 'some', 'any', 'can',
-    'you', 'give', 'how', 'much', 'does', 'cost',
+    'you', 'give', 'how', 'much', 'does', 'cost', 'product', 'products',
+    'item', 'items', 'recommend', 'recommendation', 'recommendations',
+    'device', 'devices', 'gadget', 'gadgets', 'shop', 'store', 'good',
+    'best', 'popular', 'all',
   ]);
+
+  const SYNONYM_MAP: Record<string, string[]> = {
+    apple: ['apple', 'macbook', 'ipad', 'airpods'],
+    mac: ['macbook', 'apple'],
+    macbook: ['macbook', 'laptop', 'apple'],
+    ipad: ['ipad', 'tablet', 'apple'],
+    airpods: ['airpods', 'apple', 'earbuds', 'headphones'],
+    iphone: ['apple', 'airpods', 'ipad', 'macbook'],
+    samsung: ['samsung', 'galaxy', 'tab'],
+    galaxy: ['samsung', 'galaxy', 'tab'],
+    dell: ['dell', 'xps'],
+    xps: ['dell', 'xps'],
+    sony: ['sony', '1000xm5'],
+    logitech: ['logitech', 'mx master'],
+    keychron: ['keychron', 'keyboard'],
+    laptop: ['laptop', 'macbook', 'xps'],
+    laptops: ['laptop', 'macbook', 'xps'],
+    tablet: ['ipad', 'galaxy tab', 'tab'],
+    tablets: ['ipad', 'galaxy tab', 'tab'],
+    headphone: ['airpods', 'sony', '1000xm5'],
+    headphones: ['airpods', 'sony', '1000xm5'],
+    earbuds: ['airpods'],
+    audio: ['airpods', 'sony', '1000xm5', 'microphone'],
+    keyboard: ['keyboard', 'keychron', 'mechanical'],
+    keyboards: ['keyboard', 'keychron', 'mechanical'],
+    mouse: ['mouse', 'logitech', 'mx master'],
+    mice: ['mouse', 'logitech', 'mx master'],
+    monitor: ['monitor', 'lg 27'],
+    monitors: ['monitor', 'lg 27'],
+    desk: ['standing desk'],
+    desks: ['standing desk'],
+    chair: ['ergochair', 'chair'],
+    chairs: ['ergochair', 'chair'],
+    book: ['clean code', 'designing data-intensive', 'system design', 'pragmatic', 'domain-driven', 'code complete', 'devops'],
+    books: ['clean code', 'designing data-intensive', 'system design', 'pragmatic', 'domain-driven', 'code complete', 'devops'],
+    software: ['adobe', 'jetbrains'],
+  };
+
+  const findProductsMentionedInText = (text: string): CatalogProduct[] => {
+    if (!text) return [];
+    const lower = text.toLowerCase();
+    const matched: CatalogProduct[] = [];
+    for (const p of catalog) {
+      const name = p.name.toLowerCase();
+      const simplified = name.replace(/[^a-z0-9 ]/g, ' ').trim();
+      const tokens = simplified.split(/\s+/).filter(Boolean);
+      const prefix = tokens.slice(0, 2).join(' ');
+      if (lower.includes(name) || lower.includes(simplified) || (prefix.length >= 6 && lower.includes(prefix))) {
+        if (!matched.some((m) => m.id === p.id)) {
+          matched.push(p);
+        }
+      }
+    }
+    return matched;
+  };
 
   const findMatchingProducts = (query: string): CatalogProduct[] => {
     const q = query.toLowerCase();
     const rawWords = q.split(/\W+/).filter((w) => w.length > 1);
     const keywords = rawWords.filter((w) => !STOP_WORDS.has(w));
 
-    // If specific keywords were entered, score products by matching keywords
-    if (keywords.length > 0) {
+    // Expand search keywords with synonyms (e.g. apple -> macbook, ipad, airpods)
+    const searchTerms = new Set<string>(keywords);
+    for (const kw of keywords) {
+      if (SYNONYM_MAP[kw]) {
+        for (const syn of SYNONYM_MAP[kw]) {
+          searchTerms.add(syn);
+        }
+      }
+    }
+
+    if (searchTerms.size > 0) {
       const scored = catalog
         .map((p) => {
-          const haystack = `${p.name} ${p.subtitle || ''} ${p.categorySlug || ''} ${(p.tags || []).join(' ')}`.toLowerCase();
+          const nameLower = p.name.toLowerCase();
+          const haystack = `${nameLower} ${p.subtitle || ''} ${p.categorySlug || ''} ${(p.tags || []).join(' ')}`.toLowerCase();
           let score = 0;
-          for (const kw of keywords) {
-            const root = kw.replace(/s$/, '');
-            if (haystack.includes(root)) {
-              score += 2;
+          for (const term of searchTerms) {
+            if (nameLower.includes(term)) {
+              score += 4;
+            } else if (haystack.includes(term)) {
+              score += 1;
             }
           }
           return { product: p, score };
@@ -357,7 +426,7 @@ export function ConciergeDrawer({
         .sort((a, b) => b.score - a.score);
 
       if (scored.length > 0) {
-        return scored.slice(0, 3).map((s) => s.product);
+        return scored.slice(0, 4).map((s) => s.product);
       }
     }
 
@@ -406,12 +475,20 @@ export function ConciergeDrawer({
           content: m.content,
         }));
 
+      let streamedCitations: CatalogProduct[] = [];
       await streamAiResponse({
         prompt: text,
         model: selectedModel || 'qwen:latest',
         messages: history,
         onEvent: (event) => {
-          if (event.type === 'delta') {
+          if (event.type === 'citations') {
+            streamedCitations = event.products;
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMsgId ? { ...msg, products: event.products } : msg,
+              ),
+            );
+          } else if (event.type === 'delta') {
             accumulated += event.delta;
             setMessages((prev) =>
               prev.map((msg) =>
@@ -420,7 +497,11 @@ export function ConciergeDrawer({
             );
           } else if (event.type === 'done') {
             const finalProducts =
-              products.length > 0 ? products : findMatchingProducts(accumulated);
+              streamedCitations.length > 0
+                ? streamedCitations
+                : (findProductsMentionedInText(accumulated).length > 0
+                    ? findProductsMentionedInText(accumulated)
+                    : (products.length > 0 ? products : findMatchingProducts(accumulated)));
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMsgId

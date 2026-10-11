@@ -87,12 +87,20 @@ export interface StreamProductsCreatedEvent {
   count: number;
 }
 
+import type { CatalogProduct } from './catalog';
+
+export interface StreamCitationsEvent {
+  type: 'citations';
+  products: CatalogProduct[];
+}
+
 export type StreamEvent =
   | StreamStartEvent
   | StreamDeltaEvent
   | StreamDoneEvent
   | StreamErrorEvent
-  | StreamProductsCreatedEvent;
+  | StreamProductsCreatedEvent
+  | StreamCitationsEvent;
 
 
 export interface ApiErrorResponse {

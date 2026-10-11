@@ -17,24 +17,33 @@ def service(request: Request) -> ChatService:
     return request.app.state.chat
 
 
-async def _get_shopping_system_instruction(query: str = "") -> str | None:
+async def _get_shopping_context(query: str = "") -> tuple[list[dict], str]:
     try:
-        products = await product_service.get_all_products()
-        if not products:
-            return None
-        catalog_str = product_service.format_products_for_context(products, query)
-        return (
+        filters = product_service.extract_search_filters(query)
+        retrieved_products = await product_service.search_catalog(**filters)
+        if not retrieved_products:
+            # Fallback to general catalog if no specific filters matched
+            retrieved_products = (await product_service.get_all_products())[:5]
+
+        items_str = "\n".join([
+            f"- {p['name']} (Price: ${p['price']}): {p.get('shortDescription') or p.get('description', '')}"
+            for p in retrieved_products
+        ])
+        system_instruction = (
             "You are Atlas AI Concierge, the official shopping assistant for Atlas Commerce.\n"
-            "Your job is to answer customer questions about our products, setups, and prices accurately based on our catalog.\n\n"
-            "Guidelines:\n"
-            "1. When asked about any product or price, always quote the exact price from our STORE CATALOG below.\n"
-            "2. If the user asks for a list or comparison, list each matching item with its exact catalog price.\n"
-            "3. Keep answers concise, direct, polite, and well-formatted in Markdown.\n\n"
-            "### STORE CATALOG:\n"
-            f"{catalog_str}"
+            "Your job is to answer customer questions about our products, setups, and prices accurately based ONLY on the verified catalog items below.\n\n"
+            "CRITICAL RULES:\n"
+            "1. ONLY discuss and recommend products listed in the RETRIEVED PRODUCTS below. NEVER invent, mention, or hallucinate products outside this list.\n"
+            "2. Always quote the exact product name and price from the list below.\n"
+            "3. If a requested product is not in our catalog, clearly state that we do not carry it and recommend the closest available catalog item instead.\n"
+            "4. Keep answers concise, direct, polite, and well-formatted in Markdown.\n\n"
+            f"### RETRIEVED PRODUCTS:\n"
+            f"{items_str}"
         )
-    except Exception:
-        return None
+        return retrieved_products, system_instruction
+    except Exception as e:
+        logger.error(f"Error retrieving shopping context: {e}")
+        return [], "You are a helpful eCommerce shopping assistant."
 
 
 @router.get("/models", response_model=ModelsResponse)
@@ -50,7 +59,7 @@ async def generate_response(
     """Accept a prompt and return a structured AI answer."""
     chat = service(request)
     model = await chat.resolve_model(payload.model)
-    system_instruction = await _get_shopping_system_instruction(payload.prompt)
+    _, system_instruction = await _get_shopping_context(payload.prompt)
     return await chat.generate(payload, model, system_prompt=system_instruction)
 
 
@@ -59,14 +68,19 @@ async def generate_response_stream(
     payload: GenerateRequest, request: Request
 ) -> StreamingResponse:
     """
-    Stream a response as newline-delimited JSON events with RAG and Catalog support.
-    After the stream completes, executes any [CREATE_PRODUCT:{...}] commands found in the response.
+    Stream a response as newline-delimited JSON events with Hybrid RAG & Citations.
+    Emits a structured 'citations' event containing authoritative PostgreSQL product objects,
+    followed by the conversational deltas, and executes any CREATE_PRODUCT commands on completion.
     """
     chat = service(request)
     model = await chat.resolve_model(payload.model)
-    system_instruction = await _get_shopping_system_instruction(payload.prompt)
+    retrieved_products, system_instruction = await _get_shopping_context(payload.prompt)
 
     async def event_generator():
+        # 1. Emit structured citations event with authoritative product records
+        if retrieved_products:
+            yield json.dumps({"type": "citations", "products": retrieved_products}) + "\n"
+
         full_response_text = ""
         events = chat.events(payload, model, system_prompt=system_instruction)
         try:
@@ -78,7 +92,7 @@ async def generate_response_stream(
         finally:
             await events.aclose()
 
-        # After stream completes, execute any CREATE_PRODUCT commands
+        # 2. After stream completes, execute any CREATE_PRODUCT commands
         create_commands = product_service.extract_create_product_commands(
             full_response_text
         )
