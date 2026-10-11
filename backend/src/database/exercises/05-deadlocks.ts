@@ -4,11 +4,8 @@
  * Goal: Understand deadlocks, how to trigger them, prevent them, and handle them
  */
 
-import { Pool, PoolClient } from 'pg';
-
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-});
+import { PoolClient } from 'pg';
+import { pool } from './db';
 
 // Retry logic for deadlock recovery
 async function withRetry<T>(

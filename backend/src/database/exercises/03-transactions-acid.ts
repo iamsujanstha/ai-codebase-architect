@@ -4,11 +4,7 @@
  * Goal: Understand Atomicity, Consistency, Isolation, Durability
  */
 
-import { Pool } from 'pg';
-
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-});
+import { pool } from './db';
 
 async function demonstrateTransactionsAndACID() {
   console.log('\n=== Exercise 3: Transactions & ACID ===\n');

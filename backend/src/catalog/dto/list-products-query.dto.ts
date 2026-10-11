@@ -46,7 +46,7 @@ export class ListProductsQueryDto {
   @Transform(({ value }) => toOptionalInteger(value))
   @IsInt()
   @Min(1)
-  @Max(48)
+  @Max(100)
   limit?: number;
 
   @IsOptional()

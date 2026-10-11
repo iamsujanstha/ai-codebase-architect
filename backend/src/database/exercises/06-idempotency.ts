@@ -4,12 +4,8 @@
  * Goal: Understand idempotent operations and prevent duplicate processing
  */
 
-import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
-
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-});
+import { pool } from './db';
 
 async function demonstrateIdempotency() {
   console.log('\n=== Exercise 6: Idempotency ===\n');

@@ -11,6 +11,11 @@ import { demonstrateTransactionsAndACID } from './03-transactions-acid';
 import { demonstrateIsolationLevels } from './04-isolation-levels';
 import { demonstrateDeadlocks } from './05-deadlocks';
 import { demonstrateIdempotency } from './06-idempotency';
+import { demonstrateLocksAndMVCC } from './07-locks-mvcc';
+import { runConstraintsExercise } from './08-constraints';
+import { runQueryOptimizationExercise } from './09-query-optimization';
+import { runPartitioningExercise } from './10-partitioning';
+import { runReplicationExercise } from './11-replication';
 
 async function runAllExercises() {
   console.log('\n');
@@ -26,7 +31,12 @@ async function runAllExercises() {
     { name: 'Transactions & ACID', fn: demonstrateTransactionsAndACID },
     { name: 'Isolation Levels', fn: demonstrateIsolationLevels },
     { name: 'Deadlocks & Prevention', fn: demonstrateDeadlocks },
-    { name: 'Idempotency', fn: demonstrateIdempotency },
+    { name: 'Idempotency Patterns', fn: demonstrateIdempotency },
+    { name: 'Locks & MVCC Internals', fn: demonstrateLocksAndMVCC },
+    { name: 'Constraints & Integrity', fn: runConstraintsExercise },
+    { name: 'Query Optimization & EXPLAIN', fn: runQueryOptimizationExercise },
+    { name: 'Table Partitioning & Pruning', fn: runPartitioningExercise },
+    { name: 'Replication & WAL Dynamics', fn: runReplicationExercise },
   ];
 
   let completedCount = 0;

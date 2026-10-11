@@ -257,6 +257,14 @@ services:
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:-ai_commerce_platform}
       MONGODB_AUTO_INDEX: ${MONGODB_AUTO_INDEX:-true}
+      POSTGRES_URL: ${POSTGRES_URL}
+      DATABASE_MODE: ${DATABASE_MODE:-postgres-only}
+      POSTGRES_HOST: ${POSTGRES_HOST:-ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-neondb_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-npg_HkO0lvFZzJ1u}
+      POSTGRES_DB: ${POSTGRES_DB:-neondb}
+      POSTGRES_SSL: ${POSTGRES_SSL:-true}
       STORE_SEED_ON_BOOT: ${STORE_SEED_ON_BOOT:-true}
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-http://localhost:8080}
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-http://localhost:3000}

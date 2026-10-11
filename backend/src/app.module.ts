@@ -11,11 +11,13 @@ import { AuthModule } from './auth/auth.module';
 import { OrdersModule } from './orders/orders.module';
 import { AdminModule } from './admin/admin.module';
 import { PdfRagModule } from './pdf-rag/pdf-rag.module';
+import { DatabaseModule } from './database/database.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    DatabaseModule,
     MongooseModule.forRootAsync({
       useFactory: () => ({
         uri: process.env.MONGODB_URI ?? 'mongodb://mongo:27017/ai-commerce-platform',

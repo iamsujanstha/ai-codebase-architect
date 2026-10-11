@@ -4,11 +4,7 @@
  * Goal: Understand B-tree, GIN, partial, composite, and covering indexes
  */
 
-import { Pool } from 'pg';
-
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-});
+import { pool } from './db';
 
 async function demonstrateIndexes() {
   console.log('\n=== Exercise 2: Indexes Deep Dive ===\n');

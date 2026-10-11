@@ -4,11 +4,8 @@
  * Goal: Understand READ COMMITTED, REPEATABLE READ, and SERIALIZABLE
  */
 
-import { Pool, PoolClient } from 'pg';
-
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-});
+import { PoolClient } from 'pg';
+import { pool } from './db';
 
 async function demonstrateIsolationLevels() {
   console.log('\n=== Exercise 4: Isolation Levels ===\n');

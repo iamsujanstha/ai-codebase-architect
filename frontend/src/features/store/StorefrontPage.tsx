@@ -1,375 +1,211 @@
-import { useEffect, useState } from 'react';
-import { fetchCatalogProducts } from '@/core/api/catalogApi';
-import type { CatalogProduct } from '@/core/types/catalog';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { fetchCatalogProducts, fetchCategories } from '@/core/api/catalogApi';
+import type { CatalogProduct, CatalogCategory } from '@/core/types/catalog';
 import { useCart } from '@/features/store/CartContext';
 import { useWishlist } from '@/shared/hooks/useWishlist';
 import { useToastContext } from '@/shared/contexts/ToastContext';
-import { CategoryStrip, DEFAULT_CATEGORIES } from './components/CategoryStrip';
+import { CategoryStrip, DEFAULT_CATEGORIES, type Category } from './components/CategoryStrip';
 import { SortButton, type SortOption } from './components/SortButton';
 import { ProductGrid } from './components/ProductGrid';
 import { CatalogErrorBanner } from './components/CatalogErrorBanner';
 import { useAIConcierge } from '@/features/chat/AIConciergeContext';
+import { Sparkles, Laptop, Armchair, BookOpen, Wrench, Package } from 'lucide-react';
 
-// Demo products matching atlas-app.html data structure
-export const DEMO_PRODUCTS: CatalogProduct[] = [
-  {
-    id: '1',
-    slug: 'walnut-standing-desk',
-    name: 'Walnut standing desk',
-    subtitle: 'Electric, 160 × 80 cm',
-    shortDescription: 'Electric, 160 × 80 cm',
-    description: 'Premium electric standing desk',
-    price: 649,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.9,
-    reviewCount: 212,
-    inventoryCount: 50,
-    categorySlug: 'desk',
-    categoryName: 'Desks',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'Premium Build',
-    featured: true,
-    bestSeller: true,
-    newArrival: false,
-    visual: { gradientFrom: '#f6d9b8', gradientTo: '#e8b98a', accent: '#d4a574', glyph: '🪑' },
-    specs: [],
-  },
-  {
-    id: '2',
-    slug: 'halo-monitor-light',
-    name: 'Halo monitor light bar',
-    subtitle: 'Auto-dimming, USB-C',
-    shortDescription: 'Auto-dimming, USB-C',
-    description: 'Monitor light with auto-dimming',
-    price: 69,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.8,
-    reviewCount: 540,
-    inventoryCount: 100,
-    categorySlug: 'lighting',
-    categoryName: 'Lighting',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'Best Value',
-    featured: true,
-    bestSeller: true,
-    newArrival: false,
-    visual: { gradientFrom: '#fff1b8', gradientTo: '#ffd36b', accent: '#ffcd4a', glyph: '💡' },
-    specs: [],
-  },
-  {
-    id: '3',
-    slug: 'mechanical-keyboard',
-    name: 'Low-profile mechanical keyboard',
-    subtitle: '75%, hot-swap, tactile',
-    shortDescription: '75%, hot-swap, tactile',
-    description: 'Compact mechanical keyboard',
-    price: 129,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.7,
-    reviewCount: 388,
-    inventoryCount: 30,
-    categorySlug: 'keyboard',
-    categoryName: 'Keyboards',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'Editor\'s Pick',
-    featured: true,
-    bestSeller: false,
-    newArrival: true,
-    visual: { gradientFrom: '#d6e4ff', gradientTo: '#a9c2ff', accent: '#8daeff', glyph: '⌨️' },
-    specs: [],
-  },
-  {
-    id: '4',
-    slug: 'studio-headphones',
-    name: 'Studio headphones',
-    subtitle: 'Closed-back, wired + BT',
-    shortDescription: 'Closed-back, wired + BT',
-    description: 'Professional studio headphones',
-    price: 249,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.8,
-    reviewCount: 301,
-    inventoryCount: 45,
-    categorySlug: 'audio',
-    categoryName: 'Audio',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'Pro Audio',
-    featured: true,
-    bestSeller: true,
-    newArrival: false,
-    visual: { gradientFrom: '#ffd6e0', gradientTo: '#ff9fb6', accent: '#ff8aa3', glyph: '🎧' },
-    specs: [],
-  },
-  {
-    id: '5',
-    slug: 'ultrawide-display',
-    name: '34" ultrawide display',
-    subtitle: 'UWQHD, 144 Hz',
-    shortDescription: 'UWQHD, 144 Hz',
-    description: 'Ultra-wide gaming display',
-    price: 499,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.6,
-    reviewCount: 157,
-    inventoryCount: 20,
-    categorySlug: 'display',
-    categoryName: 'Displays',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'High Refresh',
-    featured: true,
-    bestSeller: false,
-    newArrival: false,
-    visual: { gradientFrom: '#d4f1e4', gradientTo: '#9fdcc0', accent: '#7dd4ad', glyph: '🖥️' },
-    specs: [],
-  },
-  {
-    id: '6',
-    slug: 'felt-desk-mat',
-    name: 'Felt desk mat',
-    subtitle: '90 × 40 cm, anti-slip',
-    shortDescription: '90 × 40 cm, anti-slip',
-    description: 'Premium felt desk mat',
-    price: 39,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.5,
-    reviewCount: 622,
-    inventoryCount: 200,
-    categorySlug: 'accessory',
-    categoryName: 'Accessories',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'Essentials',
-    featured: false,
-    bestSeller: false,
-    newArrival: false,
-    visual: { gradientFrom: '#e6ddf7', gradientTo: '#c7b4ee', accent: '#b49eeb', glyph: '🧰' },
-    specs: [],
-  },
-  {
-    id: '7',
-    slug: 'monitor-arm',
-    name: 'Dual monitor arm',
-    subtitle: 'Gas spring, up to 9 kg',
-    shortDescription: 'Gas spring, up to 9 kg',
-    description: 'Dual monitor gas spring arm',
-    price: 119,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.7,
-    reviewCount: 274,
-    inventoryCount: 35,
-    categorySlug: 'desk',
-    categoryName: 'Desks',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'Ergonomic',
-    featured: false,
-    bestSeller: false,
-    newArrival: false,
-    visual: { gradientFrom: '#dfe7ea', gradientTo: '#b5c6cc', accent: '#9fb5bd', glyph: '🦾' },
-    specs: [],
-  },
-  {
-    id: '8',
-    slug: 'task-lamp',
-    name: 'Warm task lamp',
-    subtitle: 'Dimmable, 2700–5000K',
-    shortDescription: 'Dimmable, 2700–5000K',
-    description: 'Adjustable task lamp',
-    price: 54,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.6,
-    reviewCount: 198,
-    inventoryCount: 80,
-    categorySlug: 'lighting',
-    categoryName: 'Lighting',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'Adjustable',
-    featured: false,
-    bestSeller: false,
-    newArrival: false,
-    visual: { gradientFrom: '#ffe5c4', gradientTo: '#ffc58a', accent: '#ffb870', glyph: '🔦' },
-    specs: [],
-  },
-  {
-    id: '9',
-    slug: 'usb-c-dock',
-    name: 'USB-C dock',
-    subtitle: '8-in-1, 100W pass-through',
-    shortDescription: '8-in-1, 100W pass-through',
-    description: 'Multi-port USB-C dock',
-    price: 89,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.5,
-    reviewCount: 419,
-    inventoryCount: 120,
-    categorySlug: 'accessory',
-    categoryName: 'Accessories',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'Connectivity',
-    featured: false,
-    bestSeller: false,
-    newArrival: true,
-    visual: { gradientFrom: '#d9eef7', gradientTo: '#a6d6ea', accent: '#8bcee6', glyph: '🔌' },
-    specs: [],
-  },
-  {
-    id: '10',
-    slug: 'bookshelf-speakers',
-    name: 'Bookshelf speakers',
-    subtitle: 'Powered, 60W RMS',
-    shortDescription: 'Powered, 60W RMS',
-    description: 'Powered bookshelf speakers',
-    price: 199,
-    compareAtPrice: null,
-    currency: 'USD',
-    rating: 4.8,
-    reviewCount: 143,
-    inventoryCount: 25,
-    categorySlug: 'audio',
-    categoryName: 'Audio',
-    tags: [],
-    keyHighlights: [],
-    heroBadge: 'Audiophile',
-    featured: false,
-    bestSeller: true,
-    newArrival: false,
-    visual: { gradientFrom: '#fde0d3', gradientTo: '#f7b79b', accent: '#f5a785', glyph: '🔊' },
-    specs: [],
-  },
-];
+const PAGE_SIZE = 8;
+
+// Placeholder for backward compatibility (static data removed)
+export const DEMO_PRODUCTS: CatalogProduct[] = [];
+
+function getCategoryIcon(slug: string): React.ReactNode {
+  switch (slug.toLowerCase()) {
+    case 'electronics':
+      return <Laptop size={24} />;
+    case 'furniture':
+    case 'desk':
+    case 'desks':
+      return <Armchair size={24} />;
+    case 'books':
+      return <BookOpen size={24} />;
+    case 'accessories':
+    case 'accessory':
+      return <Wrench size={24} />;
+    default:
+      return <Package size={24} />;
+  }
+}
 
 /**
- * StorefrontPage - Main shop page matching atlas-app.html design.
+ * StorefrontPage - Main shop page with Airbnb-style infinite scrolling & skeleton loading
+ * Data is dynamically queried from Neon PostgreSQL.
  */
 export function StorefrontPage(): JSX.Element {
   const { addItem } = useCart();
   const { wishlist, toggleWishlist } = useWishlist();
   const { showToast } = useToastContext();
+  const { openConcierge } = useAIConcierge();
 
-  // State
+  // Categories & Filtering
+  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortOption, setSortOption] = useState<SortOption>('featured');
-  const [products, setProducts] = useState<CatalogProduct[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<CatalogProduct[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
 
-  // Load products
+  // Products & Infinite Scrolling State
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [hasError, setHasError] = useState<boolean>(false);
+
+  // Sentinel ref for IntersectionObserver
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Load dynamic categories from Neon PostgreSQL on mount
   useEffect(() => {
     let isMounted = true;
-
-    async function loadProducts() {
-      setIsLoading(true);
-      setHasError(false);
-
+    async function loadDynamicCategories() {
       try {
-        const response = await fetchCatalogProducts({ limit: 100 });
-        
-        if (isMounted) {
-          setProducts(response.items);
+        const catData: CatalogCategory[] = await fetchCategories();
+        if (isMounted && Array.isArray(catData) && catData.length > 0) {
+          const dynamicList: Category[] = [
+            { id: 'all', name: 'All', icon: <Sparkles size={24} /> },
+            ...catData.map((c) => ({
+              id: c.slug,
+              name: c.name,
+              icon: getCategoryIcon(c.slug),
+              count: c.productCount,
+            })),
+          ];
+          setCategories(dynamicList);
         }
-      } catch (error) {
-        if (isMounted) {
-          // Show error but use demo data
-          setHasError(true);
-          console.warn('Failed to load catalog, using demo data:', error);
-          setProducts(DEMO_PRODUCTS);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+      } catch (err) {
+        console.warn('Using default category fallback:', err);
       }
     }
-
-    void loadProducts();
-
+    void loadDynamicCategories();
     return () => {
       isMounted = false;
     };
   }, []);
 
-  // Filter and sort products
-  useEffect(() => {
-    let result = [...products];
+  // Fetch initial batch whenever category or search param changes
+  const loadInitialProducts = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+    setProducts([]);
 
-    // Filter by category
-    if (selectedCategory !== 'all') {
-      result = result.filter((p) => p.categorySlug === selectedCategory);
-    }
-
-    // Filter by search query (from URL params or header search)
     const urlParams = new URLSearchParams(window.location.search);
-    const searchFromUrl = urlParams.get('q') || '';
-    
-    if (searchFromUrl) {
-      const query = searchFromUrl.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          p.shortDescription?.toLowerCase().includes(query) ||
-          p.subtitle?.toLowerCase().includes(query) ||
-          p.categoryName?.toLowerCase().includes(query)
-      );
-    }
+    const searchFromUrl = urlParams.get('q') || undefined;
 
-    // Sort
+    try {
+      const response = await fetchCatalogProducts({
+        category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        search: searchFromUrl,
+        limit: PAGE_SIZE,
+        skip: 0,
+      });
+
+      setProducts(response.items);
+      setTotalCount(response.total);
+      setHasMore(response.items.length < response.total);
+    } catch (error) {
+      setHasError(true);
+      console.error('Failed to load initial catalog from Neon PostgreSQL:', error);
+      setProducts([]);
+      setHasMore(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    void loadInitialProducts();
+  }, [loadInitialProducts]);
+
+  // Load next batch (Airbnb-style infinite scroll)
+  const loadMoreProducts = useCallback(async () => {
+    if (isLoading || isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchFromUrl = urlParams.get('q') || undefined;
+
+    try {
+      const response = await fetchCatalogProducts({
+        category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        search: searchFromUrl,
+        limit: PAGE_SIZE,
+        skip: products.length,
+      });
+
+      setProducts((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        const newUnique = response.items.filter((item) => !existingIds.has(item.id));
+        const updated = [...prev, ...newUnique];
+        setHasMore(updated.length < response.total);
+        return updated;
+      });
+      setTotalCount(response.total);
+    } catch (error) {
+      console.error('Failed to fetch more products from Neon PostgreSQL:', error);
+      setHasMore(false);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoading, isLoadingMore, hasMore, products.length, selectedCategory]);
+
+  // IntersectionObserver for sentinel element
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && hasMore && !isLoading && !isLoadingMore) {
+          void loadMoreProducts();
+        }
+      },
+      {
+        root: null,
+        rootMargin: '350px', // Pre-fetch before user reaches the very bottom
+        threshold: 0.1,
+      },
+    );
+
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
+  }, [loadMoreProducts, hasMore, isLoading, isLoadingMore]);
+
+  // Client-side sorting on loaded products
+  const sortedProducts = [...products].sort((a, b) => {
     switch (sortOption) {
       case 'price-asc':
-        result.sort((a, b) => a.price - b.price);
-        break;
+        return a.price - b.price;
       case 'price-desc':
-        result.sort((a, b) => b.price - a.price);
-        break;
+        return b.price - a.price;
       case 'rating':
-        result.sort((a, b) => b.rating - a.rating);
-        break;
+        return b.rating - a.rating;
       case 'featured':
       default:
-        // Keep original order (featured first)
-        break;
+        return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
     }
-
-    setFilteredProducts(result);
-  }, [products, selectedCategory, sortOption]);
+  });
 
   const handleAddToCart = (product: CatalogProduct) => {
     addItem(product);
-    showToast('Added to cart');
+    showToast(`Added ${product.name} to cart`);
   };
 
   const handleRetry = () => {
-    window.location.reload();
+    void loadInitialProducts();
   };
 
-  const { openConcierge } = useAIConcierge();
-
-  const handleOpenConcierge = () => {
-    openConcierge();
-  };
-
-  // Get category name for title
-  const categoryName = selectedCategory === 'all'
-    ? 'All products'
-    : DEFAULT_CATEGORIES.find((c) => c.id === selectedCategory)?.name || 'Products';
-
-  const displayTitle = categoryName;
+  const selectedCatObj = categories.find((c) => c.id === selectedCategory);
+  const displayTitle = selectedCategory === 'all' ? 'All products' : selectedCatObj?.name || 'Products';
 
   return (
     <main className="wrap">
@@ -380,28 +216,86 @@ export function StorefrontPage(): JSX.Element {
         {/* Category strip and sort button */}
         <div className="cats">
           <CategoryStrip
-            categories={DEFAULT_CATEGORIES}
+            categories={categories}
             selectedCategory={selectedCategory}
-            onSelectCategory={setSelectedCategory}
+            onSelectCategory={(catId) => {
+              setSelectedCategory(catId);
+            }}
           />
           <SortButton currentSort={sortOption} onSortChange={setSortOption} />
         </div>
 
         {/* Page heading */}
         <div className="head">
-          <h1>{displayTitle}</h1>
-          <span>{filteredProducts.length} products</span>
+          <div>
+            <h1>{displayTitle}</h1>
+            <span style={{ fontSize: '13px', color: 'var(--brand, #00e599)', fontWeight: 500 }}>
+              Live from Neon PostgreSQL
+            </span>
+          </div>
+          <span>
+            {isLoading ? 'Loading...' : `${products.length} of ${totalCount} products`}
+          </span>
         </div>
 
-        {/* Product grid */}
+        {/* Product grid with initial & infinite scroll skeleton cards */}
         <ProductGrid
-          products={filteredProducts}
+          products={sortedProducts}
           isLoading={isLoading}
+          isLoadingMore={isLoadingMore}
           wishlist={wishlist}
           onAddToCart={handleAddToCart}
           onToggleWishlist={toggleWishlist}
-          onAskAI={handleOpenConcierge}
+          onAskAI={openConcierge}
         />
+
+        {/* Infinite scroll sentinel trigger element */}
+        <div
+          ref={sentinelRef}
+          style={{
+            height: '40px',
+            marginTop: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {isLoadingMore && (
+            <div style={{ color: 'var(--mute)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  background: '#00e599',
+                  animation: 'p 1s infinite',
+                }}
+              />
+              Loading more from Neon PostgreSQL...
+            </div>
+          )}
+        </div>
+
+        {/* End of catalog indicator */}
+        {!hasMore && !isLoading && products.length > 0 && (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '30px 0 40px',
+              color: 'var(--mute)',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '16px',
+            }}
+          >
+            <div style={{ height: '1px', width: '60px', background: 'var(--soft, #e5e7eb)' }} />
+            <span>✓ All {totalCount} products loaded from Neon PostgreSQL</span>
+            <div style={{ height: '1px', width: '60px', background: 'var(--soft, #e5e7eb)' }} />
+          </div>
+        )}
       </section>
     </main>
   );

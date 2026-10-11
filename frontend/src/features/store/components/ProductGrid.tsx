@@ -6,6 +6,7 @@ import { EmptyState } from './EmptyState';
 interface ProductGridProps {
   products: CatalogProduct[];
   isLoading: boolean;
+  isLoadingMore?: boolean;
   searchQuery?: string;
   wishlist?: Set<string>;
   onAddToCart: (product: CatalogProduct) => void;
@@ -18,12 +19,13 @@ interface ProductGridProps {
  * Uses the .grid class from atlas-app.html with:
  * - Auto-fill layout: minmax(250px, 1fr)
  * - Gap: 32px rows, 24px columns
- * - Loading skeletons
+ * - Loading skeletons (initial and infinite scroll)
  * - Empty state
  */
 export function ProductGrid({
   products,
   isLoading,
+  isLoadingMore = false,
   searchQuery,
   wishlist = new Set(),
   onAddToCart,
@@ -34,7 +36,7 @@ export function ProductGrid({
     return (
       <div className="grid">
         {Array.from({ length: 8 }).map((_, index) => (
-          <SkeletonCard key={index} />
+          <SkeletonCard key={`initial-skeleton-${index}`} />
         ))}
       </div>
     );
@@ -59,6 +61,11 @@ export function ProductGrid({
           onToggleWishlist={onToggleWishlist}
         />
       ))}
+      {isLoadingMore &&
+        Array.from({ length: 4 }).map((_, index) => (
+          <SkeletonCard key={`more-skeleton-${index}`} />
+        ))}
     </div>
   );
 }
+

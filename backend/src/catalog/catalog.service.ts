@@ -15,13 +15,14 @@ import { CatalogProduct } from './interfaces/catalog-product.interface';
 import { CatalogProductsResponse } from './interfaces/catalog-products-response.interface';
 import { Category, CategoryDocument } from './schemas/category.schema';
 import { Product, ProductDocument } from './schemas/product.schema';
+import { PostgresService } from '../database/postgres.service';
 
 // This service is the business layer for the ecommerce catalog.
-// Its job is to translate raw Mongo documents into frontend-friendly view models.
+// Its job is to translate raw database rows/documents into frontend-friendly view models.
 //
 // Production reasoning:
 // The browser should not be forced to understand database structure.
-// The service is where we shape the "commerce contract" that the UI can rely on.
+// Sourcing from Neon PostgreSQL when DATABASE_MODE !== 'mongodb-only'.
 @Injectable()
 export class CatalogService {
   constructor(
@@ -29,9 +30,46 @@ export class CatalogService {
     private readonly categoryModel: Model<CategoryDocument>,
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
+    private readonly postgresService: PostgresService,
   ) {}
 
+  private isPostgresActive(): boolean {
+    const mode = process.env.DATABASE_MODE ?? 'postgres-only';
+    return mode !== 'mongodb-only' && this.postgresService.isReady();
+  }
+
   async getHomePage(): Promise<CatalogHomeResponse> {
+    if (this.isPostgresActive()) {
+      try {
+        const [catRows, featRows, newRows, allRows] = await Promise.all([
+          this.postgresService.query(
+            'SELECT category, COUNT(*) as count FROM products GROUP BY category ORDER BY count DESC',
+          ),
+          this.postgresService.query(
+            'SELECT * FROM products WHERE featured = true ORDER BY price DESC LIMIT 4',
+          ),
+          this.postgresService.query(
+            'SELECT * FROM products ORDER BY created_at DESC LIMIT 4',
+          ),
+          this.postgresService.query(
+            'SELECT * FROM products ORDER BY id ASC LIMIT 8',
+          ),
+        ]);
+
+        return {
+          announcement: '🚀 Powered by Neon Serverless PostgreSQL (Sub-millisecond Queries)',
+          hero: STOREFRONT_HERO,
+          categories: catRows.rows.map((r) => this.mapPostgresCategory(r)),
+          featuredProducts: featRows.rows.map((r) => this.mapPostgresProduct(r)),
+          newArrivals: newRows.rows.map((r) => this.mapPostgresProduct(r)),
+          catalogProducts: allRows.rows.map((r) => this.mapPostgresProduct(r)),
+          valueProps: STOREFRONT_VALUE_PROPS,
+          testimonials: STOREFRONT_TESTIMONIALS,
+        };
+      } catch (err) {
+        console.warn('PostgreSQL getHomePage failed, falling back to Mongo:', err);
+      }
+    }
     const [categories, featuredProducts, newArrivals, catalogProducts] =
       await Promise.all([
         this.categoryModel.find().sort({ sortOrder: 1, name: 1 }).lean(),
@@ -69,6 +107,17 @@ export class CatalogService {
   }
 
   async listCategories(): Promise<CatalogCategory[]> {
+    if (this.isPostgresActive()) {
+      try {
+        const catRows = await this.postgresService.query(
+          'SELECT category, COUNT(*) as count FROM products GROUP BY category ORDER BY count DESC',
+        );
+        return catRows.rows.map((r) => this.mapPostgresCategory(r));
+      } catch (err) {
+        console.warn('PostgreSQL listCategories failed, falling back to Mongo:', err);
+      }
+    }
+
     const [categories, categoryCounts] = await Promise.all([
       this.categoryModel.find().sort({ sortOrder: 1, name: 1 }).lean(),
       this.getCategoryCounts(),
@@ -80,6 +129,58 @@ export class CatalogService {
   async listProducts(
     query: ListProductsQueryDto,
   ): Promise<CatalogProductsResponse> {
+    if (this.isPostgresActive()) {
+      try {
+        const conditions: string[] = ['1=1'];
+        const params: any[] = [];
+        let paramIdx = 1;
+
+        if (query.category && query.category !== 'all') {
+          conditions.push(`LOWER(category) = LOWER($${paramIdx++})`);
+          params.push(query.category);
+        }
+
+        if (query.featured !== undefined) {
+          conditions.push(`featured = $${paramIdx++}`);
+          params.push(query.featured);
+        }
+
+        if (query.search) {
+          conditions.push(`(name ILIKE $${paramIdx} OR description ILIKE $${paramIdx} OR category ILIKE $${paramIdx})`);
+          params.push(`%${query.search}%`);
+          paramIdx++;
+        }
+
+        const whereClause = conditions.join(' AND ');
+        const limit = query.limit ?? 24;
+        const skip = query.skip ?? 0;
+
+        const countRes = await this.postgresService.query(
+          `SELECT COUNT(*) FROM products WHERE ${whereClause}`,
+          params,
+        );
+        const total = parseInt(countRes.rows[0].count, 10);
+
+        const dataRes = await this.postgresService.query(
+          `SELECT * FROM products WHERE ${whereClause} ORDER BY featured DESC, price DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+          [...params, limit, skip],
+        );
+
+        return {
+          items: dataRes.rows.map((r) => this.mapPostgresProduct(r)),
+          total,
+          appliedFilters: {
+            category: query.category,
+            search: query.search,
+            featured: query.featured,
+            skip: query.skip,
+          },
+        };
+      } catch (err) {
+        console.warn('PostgreSQL listProducts failed, falling back to Mongo:', err);
+      }
+    }
+
     const filter = this.buildProductFilter(query);
     const limit = query.limit ?? 24;
     const skip = query.skip ?? 0;
@@ -109,6 +210,38 @@ export class CatalogService {
   }
 
   async getProductBySlug(slug: string): Promise<CatalogProductDetailResponse> {
+    if (this.isPostgresActive()) {
+      try {
+        let productRes = await this.postgresService.query(
+          `SELECT * FROM products WHERE LOWER(REPLACE(name, ' ', '-')) = LOWER($1) OR id::text = $1 LIMIT 1`,
+          [slug],
+        );
+
+        if (productRes.rows.length === 0) {
+          const slugPattern = `%${slug.replace(/-/g, ' ')}%`;
+          productRes = await this.postgresService.query(
+            `SELECT * FROM products WHERE name ILIKE $1 LIMIT 1`,
+            [slugPattern],
+          );
+        }
+
+        if (productRes.rows.length > 0) {
+          const row = productRes.rows[0];
+          const relatedRes = await this.postgresService.query(
+            `SELECT * FROM products WHERE category = $1 AND id != $2 LIMIT 3`,
+            [row.category, row.id],
+          );
+
+          return {
+            product: this.mapPostgresProduct(row),
+            relatedProducts: relatedRes.rows.map((r) => this.mapPostgresProduct(r)),
+          };
+        }
+      } catch (err) {
+        console.warn('PostgreSQL getProductBySlug failed, falling back to Mongo:', err);
+      }
+    }
+
     const product = await this.productModel.findOne({ slug }).lean();
 
     if (!product) {
@@ -285,4 +418,87 @@ export class CatalogService {
       })),
     };
   }
+
+  private mapPostgresCategory(row: any): CatalogCategory {
+    const cat = row.category || 'General';
+    const slug = cat.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const glyphMap: Record<string, string> = {
+      Electronics: '💻',
+      Furniture: '🪑',
+      Accessories: '🧰',
+      Lighting: '💡',
+      Audio: '🎧',
+      Desks: '🪑',
+    };
+    return {
+      id: slug,
+      slug,
+      name: cat,
+      description: `Browse ${cat} queried directly from Neon PostgreSQL`,
+      accentColor: '#00e599',
+      icon: glyphMap[cat] || '📦',
+      featuredCopy: `Curated ${cat} collection in Neon`,
+      productCount: parseInt(row.count, 10) || 0,
+    };
+  }
+
+  private mapPostgresProduct(row: any): CatalogProduct {
+    const slug = (row.name || `product-${row.id}`)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    const categorySlug = (row.category || 'general')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-');
+    const price = Number(row.price) || 0;
+
+    const glyphMap: Record<string, string> = {
+      Electronics: '💻',
+      Furniture: '🪑',
+      Accessories: '🧰',
+      Lighting: '💡',
+      Audio: '🎧',
+      Desks: '🪑',
+    };
+    const glyph = glyphMap[row.category] || '📦';
+
+    return {
+      id: String(row.id),
+      slug,
+      name: row.name,
+      subtitle: `${row.category} • Neon Serverless SQL`,
+      shortDescription: row.description || '',
+      description: row.description || '',
+      price,
+      compareAtPrice: Math.round(price * 1.15),
+      currency: 'USD',
+      rating: 4.8 + ((row.id % 3) * 0.1),
+      reviewCount: 30 + (row.id * 11) % 180,
+      inventoryCount: row.stock ?? 50,
+      categorySlug,
+      categoryName: row.category,
+      tags: [row.category ? row.category.toLowerCase() : 'gear', 'neon', 'postgresql', 'sql'],
+      keyHighlights: [
+        `Live query directly from Neon PostgreSQL (ID: ${row.id})`,
+        `Category: ${row.category}`,
+        `Current inventory: ${row.stock} units`,
+      ],
+      heroBadge: row.featured ? 'Neon SQL' : 'In Stock',
+      featured: Boolean(row.featured),
+      bestSeller: row.id % 2 === 0,
+      newArrival: row.id % 3 === 0,
+      visual: {
+        gradientFrom: '#00e599',
+        gradientTo: '#003322',
+        accent: '#00e599',
+        glyph,
+      },
+      specs: [
+        { label: 'Database Engine', value: 'Neon PostgreSQL (v16)' },
+        { label: 'Source', value: 'PostgreSQL table "products"' },
+        { label: 'Stock Available', value: `${row.stock} units` },
+      ],
+    };
+  }
 }
+
