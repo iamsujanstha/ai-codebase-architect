@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { Plus, Sparkles } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthContext';
+import { useAIConcierge } from '@/features/chat/AIConciergeContext';
 import { adminApi, AdminStats, AdminProduct } from './api/adminApi';
 import { ProductDrawer } from './ProductDrawer';
 import styles from './Admin.module.css';
@@ -26,6 +27,7 @@ const GRADIENTS = [
 
 export const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
+  const { openConcierge } = useAIConcierge();
   const navigate = useNavigate();
   const { refreshStats } = useOutletContext<{ refreshStats?: () => void }>() || {};
 
@@ -147,6 +149,70 @@ export const AdminDashboard: React.FC = () => {
           <b>${revenueDollars.toLocaleString()}</b>
           <span>Revenue, last 30 days</span>
         </div>
+      </div>
+
+      {/* AI Assistant Banner */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, rgba(255, 56, 92, 0.05), rgba(169, 59, 255, 0.08))',
+          border: '1px solid rgba(169, 59, 255, 0.2)',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '14px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #ff385c, #a93bff)',
+              color: '#fff',
+              display: 'grid',
+              placeItems: 'center',
+              boxShadow: '0 4px 10px rgba(169, 59, 255, 0.25)',
+              flexShrink: 0,
+            }}
+          >
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--ink, #222)' }}>
+              Atlas AI Assistant & Catalog Concierge
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--mute, #6a6a6a)' }}>
+              Analyze low inventory, generate product descriptions, or ask catalog questions in real time.
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={openConcierge}
+          className={styles.btn}
+          style={{
+            background: 'linear-gradient(135deg, #ff385c, #a93bff)',
+            color: '#fff',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: '999px',
+            fontWeight: 600,
+            fontSize: '13px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(169, 59, 255, 0.3)',
+          }}
+        >
+          <Sparkles size={15} />
+          <span>Open AI Concierge</span>
+        </button>
       </div>
 
       {/* Two Column Grid: 7-Day Sales & New Users */}

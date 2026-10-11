@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Sparkles, RotateCcw } from 'lucide-react';
 import { useCart } from '@/features/store/CartContext';
 import { useAIConcierge } from '../AIConciergeContext';
-import { DEMO_PRODUCTS } from '@/features/store/StorefrontPage';
+import { fetchCatalogProducts } from '@/core/api/catalogApi';
+import { streamAiResponse } from '@/core/api/aiApi';
 import type { CatalogProduct } from '@/core/types/catalog';
 
 interface ConciergeDrawerProps {
@@ -15,38 +16,271 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   products?: CatalogProduct[];
+  isStreaming?: boolean;
 }
 
-/**
- * ConciergeDrawer - AI concierge drawer matching atlas-app.html design.
- * Features:
- * - Scrim overlay (on mobile/tablet) and side-docking on desktop (>=1100px)
- * - Model selector dropdown in header (Local Ollama / Cloud models)
- * - Interactive chat message stream
- * - Mini product cards with 1-click "Add to cart"
- * - Dynamic context status line
- * - Quick prompt suggestion pills
- * - Integrated auto-expanding composer
- */
-export function ConciergeDrawer({ isOpen, onClose }: ConciergeDrawerProps): JSX.Element | null {
-  const { itemCount, addItem } = useCart();
-  const { selectedModel, setSelectedModel } = useAIConcierge();
+function createDefaultProduct(
+  id: string,
+  slug: string,
+  name: string,
+  subtitle: string,
+  categorySlug: string,
+  price: number,
+  rating: number,
+  glyph: string,
+  from: string,
+  to: string,
+): CatalogProduct {
+  return {
+    id,
+    slug,
+    name,
+    subtitle,
+    shortDescription: subtitle,
+    description: subtitle,
+    price,
+    compareAtPrice: price * 1.2,
+    currency: 'USD',
+    rating,
+    reviewCount: 95,
+    inventoryCount: 20,
+    categorySlug,
+    categoryName: categorySlug.charAt(0).toUpperCase() + categorySlug.slice(1),
+    tags: [categorySlug, 'workspace'],
+    keyHighlights: ['Curated workspace design'],
+    heroBadge: 'Best Seller',
+    featured: true,
+    bestSeller: true,
+    newArrival: false,
+    visual: {
+      gradientFrom: from,
+      gradientTo: to,
+      accent: from,
+      glyph,
+    },
+    specs: [],
+  };
+}
 
+const DEFAULT_WORKSPACE_CATALOG: CatalogProduct[] = [
+  createDefaultProduct(
+    '1',
+    'walnut-desk-mat',
+    'Walnut Desk Mat & Pad',
+    'Premium vegan leather & natural cork base',
+    'accessories',
+    48,
+    4.9,
+    '🪵',
+    '#4a3728',
+    '#2b1d14',
+  ),
+  createDefaultProduct(
+    '2',
+    'screenbar-halo-light',
+    'ScreenBar Halo Monitor Light',
+    'Asymmetric optical design, zero screen glare',
+    'lighting',
+    139,
+    4.9,
+    '💡',
+    '#f5af19',
+    '#f12711',
+  ),
+  createDefaultProduct(
+    '3',
+    'keychron-q1-pro',
+    'Keychron Q1 Pro Wireless Keyboard',
+    'CNC aluminum body, QMK/VIA, hot-swappable',
+    'electronics',
+    199,
+    4.8,
+    '⌨️',
+    '#2c3e50',
+    '#3498db',
+  ),
+  createDefaultProduct(
+    '4',
+    'ergonomic-chair',
+    'Ergonomic Task Chair',
+    'Synchronized tilt mechanism with 4D armrests',
+    'furniture',
+    480,
+    4.9,
+    '🪑',
+    '#232526',
+    '#414345',
+  ),
+  createDefaultProduct(
+    '5',
+    'walnut-monitor-stand',
+    'Solid Walnut Dual Monitor Stand',
+    'Integrated aluminum drawer and cable pass',
+    'furniture',
+    145,
+    4.85,
+    '🖥️',
+    '#5c4033',
+    '#3d2b1f',
+  ),
+  createDefaultProduct(
+    '6',
+    'cable-tray',
+    'Magnetic Cable Management Tray',
+    'Under-desk steel raceway with silicon ties',
+    'accessories',
+    34,
+    4.7,
+    '🧲',
+    '#614385',
+    '#516395',
+  ),
+  createDefaultProduct(
+    '7',
+    'studio-headphones',
+    'Noise-Cancelling Studio Headphones',
+    'High-res audio drivers with spatial acoustics',
+    'electronics',
+    299,
+    4.88,
+    '🎧',
+    '#1e3c72',
+    '#2a5298',
+  ),
+  createDefaultProduct(
+    '8',
+    'oak-wrist-rest',
+    'Solid Oak Mechanical Keyboard Wrist Rest',
+    'Beveled ergonomic angle with anti-slip pads',
+    'accessories',
+    28,
+    4.75,
+    '🪵',
+    '#d4a373',
+    '#a98467',
+  ),
+];
+
+function InlineFormatted({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return (
+    <>
+      {parts.map((part, idx) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={idx}>{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith('*') && part.endsWith('*')) {
+          return <em key={idx}>{part.slice(1, -1)}</em>;
+        }
+        return <span key={idx}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+function FormattedMessage({ content }: { content: string }) {
+  const paragraphs = content.split(/\n\s*\n/);
+  return (
+    <div className="m-content">
+      {paragraphs.map((para, i) => {
+        const lines = para.trim().split('\n');
+        const isBulletList = lines.length > 1 && lines.every((l) => /^[-*•]\s+/.test(l.trim()));
+        if (isBulletList) {
+          return (
+            <ul key={i}>
+              {lines.map((l, j) => (
+                <li key={j}>
+                  <InlineFormatted text={l.replace(/^[-*•]\s+/, '')} />
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return (
+          <p key={i}>
+            {lines.map((line, k) => (
+              <span key={k}>
+                <InlineFormatted text={line} />
+                {k < lines.length - 1 && <br />}
+              </span>
+            ))}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+function generateFallbackReply(query: string): string {
+  const q = query.toLowerCase();
+  if (q.includes('walnut') || q.includes('desk')) {
+    return 'For a walnut desk, pairing warm natural wood tones with matte black aluminum and warm 3000K lighting creates an elevated, distraction-free aesthetic. Here are curated pieces from our catalog that fit your workspace:';
+  }
+  if (q.includes('light') || q.includes('lighting')) {
+    return 'Ergonomic lighting should illuminate your workstation without bouncing glare off the display. An asymmetric screenbar paired with soft warm task lighting helps prevent eye fatigue during focused sessions:';
+  }
+  if (q.includes('keyboard') || q.includes('mechanical')) {
+    return 'For extended typing and coding sessions, a custom mechanical keyboard with tactile switches and a solid wood wrist rest provides optimal ergonomics and satisfying acoustic feedback:';
+  }
+  return 'Here are our top recommendations tailored to enhance your workstation setup:';
+}
+
+export function ConciergeDrawer({
+  isOpen,
+  onClose,
+}: ConciergeDrawerProps): JSX.Element | null {
+  const { itemCount, addItem } = useCart();
+  const {
+    selectedModel,
+    setSelectedModel,
+    availableModels,
+    isLoadingModels,
+  } = useAIConcierge();
+
+  const [catalog, setCatalog] = useState<CatalogProduct[]>(DEFAULT_WORKSPACE_CATALOG);
   const [messages, setMessages] = useState<Message[]>([
     {
-      id: '1',
+      id: 'welcome-1',
       role: 'assistant',
-      content: "Hi! Tell me what you're setting up and I'll suggest products from the catalog.",
+      content:
+        "Hi! I'm your AI Concierge. Tell me what kind of desk setup or workspace you're designing, and I'll find the best gear from our catalog.",
     },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [addedIds, setAddedIds] = useState<Record<string, boolean>>({});
+  const [isSending, setIsSending] = useState(false);
+
+  const handleReset = () => {
+    setMessages([
+      {
+        id: `welcome-${Date.now()}`,
+        role: 'assistant',
+        content:
+          "Hi! I'm your AI Concierge. Tell me what kind of desk setup or workspace you're designing, and I'll find the best gear from our catalog.",
+      },
+    ]);
+  };
   const [isWide, setIsWide] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1100px)').matches : false
+    typeof window !== 'undefined'
+      ? window.matchMedia('(min-width: 1100px)').matches
+      : false,
   );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load live catalog products
+  useEffect(() => {
+    fetchCatalogProducts({ limit: 100 })
+      .then((res) => {
+        if (res.items && res.items.length > 0) {
+          setCatalog(res.items);
+        }
+      })
+      .catch(() => {
+        // Fallback remains DEFAULT_WORKSPACE_CATALOG
+      });
+  }, []);
 
   // Monitor screen width for docking vs scrim behavior
   useEffect(() => {
@@ -94,34 +328,52 @@ export function ConciergeDrawer({ isOpen, onClose }: ConciergeDrawerProps): JSX.
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  const generateReply = (query: string): { text: string; products: CatalogProduct[] } => {
+  const STOP_WORDS = new Set([
+    'what', 'is', 'the', 'of', 'for', 'and', 'are', 'out', 'list', 'show',
+    'price', 'tell', 'me', 'have', 'with', 'about', 'some', 'any', 'can',
+    'you', 'give', 'how', 'much', 'does', 'cost',
+  ]);
+
+  const findMatchingProducts = (query: string): CatalogProduct[] => {
     const q = query.toLowerCase();
-    const words = q.split(/\W+/).filter((w) => w.length > 2);
+    const rawWords = q.split(/\W+/).filter((w) => w.length > 1);
+    const keywords = rawWords.filter((w) => !STOP_WORDS.has(w));
 
-    let matched = DEMO_PRODUCTS.filter((p) => {
-      const haystack = `${p.name} ${p.subtitle || ''} ${p.categorySlug}`.toLowerCase();
-      return words.some((w) => haystack.includes(w.replace(/s$/, '')));
-    });
+    // If specific keywords were entered, score products by matching keywords
+    if (keywords.length > 0) {
+      const scored = catalog
+        .map((p) => {
+          const haystack = `${p.name} ${p.subtitle || ''} ${p.categorySlug || ''} ${(p.tags || []).join(' ')}`.toLowerCase();
+          let score = 0;
+          for (const kw of keywords) {
+            const root = kw.replace(/s$/, '');
+            if (haystack.includes(root)) {
+              score += 2;
+            }
+          }
+          return { product: p, score };
+        })
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score);
 
-    if (/cart|bought|have|match|complement/.test(q)) {
-      matched = DEMO_PRODUCTS.filter((p) => (p.rating || 0) >= 4.7);
+      if (scored.length > 0) {
+        return scored.slice(0, 3).map((s) => s.product);
+      }
     }
 
-    if (!matched.length) {
-      matched = [...DEMO_PRODUCTS].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    // Contextual match for broad desk/workspace/lighting setups
+    if (/desk|setup|lighting|light|keyboard|audio|chair|workspace/.test(q)) {
+      return [...catalog]
+        .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+        .slice(0, 3);
     }
 
-    const picks = matched.slice(0, 3);
-    const text = `Here are ${picks.length} picks that fit${
-      itemCount > 0 ? ", chosen to go with what's in your cart" : ''
-    }:`;
-
-    return { text, products: picks };
+    return [];
   };
 
-  const handleSend = (textToSend?: string) => {
+  const handleSend = async (textToSend?: string) => {
     const text = (textToSend ?? inputValue).trim();
-    if (!text) return;
+    if (!text || isSending) return;
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -129,20 +381,79 @@ export function ConciergeDrawer({ isOpen, onClose }: ConciergeDrawerProps): JSX.
       content: text,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInputValue('');
+    const aiMsgId = `ai-${Date.now()}`;
+    const products = findMatchingProducts(text);
 
-    // Simulate AI response stream matching atlas-app.html reply behavior
-    setTimeout(() => {
-      const { text: replyText, products } = generateReply(text);
-      const aiMessage: Message = {
-        id: `ai-${Date.now()}`,
-        role: 'assistant',
-        content: replyText,
-        products,
-      };
-      setMessages((prev) => [...prev, aiMessage]);
-    }, 450);
+    const initialAiMessage: Message = {
+      id: aiMsgId,
+      role: 'assistant',
+      content: '',
+      products,
+      isStreaming: true,
+    };
+
+    setMessages((prev) => [...prev, userMessage, initialAiMessage]);
+    setInputValue('');
+    setIsSending(true);
+
+    try {
+      let accumulated = '';
+      // Only include valid previous messages for clean conversation context
+      const history = messages
+        .filter((m) => m.content && m.content.trim().length > 0)
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+
+      await streamAiResponse({
+        prompt: text,
+        model: selectedModel || 'qwen:latest',
+        messages: history,
+        onEvent: (event) => {
+          if (event.type === 'delta') {
+            accumulated += event.delta;
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMsgId ? { ...msg, content: accumulated } : msg,
+              ),
+            );
+          } else if (event.type === 'done') {
+            const finalProducts =
+              products.length > 0 ? products : findMatchingProducts(accumulated);
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMsgId
+                  ? {
+                      ...msg,
+                      content:
+                        accumulated || generateFallbackReply(text),
+                      products: finalProducts,
+                      isStreaming: false,
+                    }
+                  : msg,
+              ),
+            );
+          }
+        },
+      });
+    } catch (err: any) {
+      console.warn('Live stream error, using fallback reply:', err);
+      const fallback = generateFallbackReply(text);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMsgId
+            ? {
+                ...msg,
+                content: msg.content || fallback,
+                isStreaming: false,
+              }
+            : msg,
+        ),
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -172,7 +483,10 @@ export function ConciergeDrawer({ isOpen, onClose }: ConciergeDrawerProps): JSX.
       <aside className="drawer" id="aid" aria-label="AI concierge">
         {/* Header */}
         <div className="dh">
-          <span>AI concierge</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Sparkles size={18} style={{ color: '#3b82f6' }} />
+            <span>AI Concierge</span>
+          </span>
           <span style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <select
               className="model"
@@ -180,21 +494,33 @@ export function ConciergeDrawer({ isOpen, onClose }: ConciergeDrawerProps): JSX.
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               aria-label="Model"
+              disabled={isLoadingModels}
             >
-              <optgroup label="Local (Ollama)">
-                <option value="llama3">llama3</option>
-                <option value="deepseek-coder:6.7b">deepseek-coder:6.7b</option>
-              </optgroup>
-              <optgroup label="Cloud">
-                <option value="GPT-4o">GPT-4o</option>
-                <option value="Claude 3.5 Sonnet">Claude 3.5 Sonnet</option>
-                <option value="Gemini 2.0">Gemini 2.0</option>
-              </optgroup>
+              {availableModels.length > 0 ? (
+                <optgroup label="Downloaded Ollama Models">
+                  {availableModels.map((m) => (
+                    <option key={m.name} value={m.name}>
+                      {m.name} {m.sizeLabel ? `(${m.sizeLabel})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : (
+                <option value="qwen:latest">qwen:latest (4B)</option>
+              )}
             </select>
             <button
               className="icon-btn"
+              onClick={handleReset}
+              aria-label="Clear conversation"
+              title="Clear conversation"
+              type="button"
+            >
+              <RotateCcw size={16} />
+            </button>
+            <button
+              className="icon-btn"
               onClick={onClose}
-              aria-label="Close"
+              aria-label="Close concierge"
               type="button"
             >
               <X size={20} />
@@ -203,96 +529,160 @@ export function ConciergeDrawer({ isOpen, onClose }: ConciergeDrawerProps): JSX.
         </div>
 
         {/* Messages body */}
-        <div className="db" id="ai-db">
+        <div className="db">
           <div className="msgs">
-            {messages.map((msg) => (
-              <div key={msg.id} className={`m ${msg.role === 'user' ? 'u' : 'a'}`}>
-                {msg.content}
-                {msg.products && msg.products.length > 0 && (
-                  <div style={{ marginTop: '8px' }}>
-                    {msg.products.map((prod) => (
-                      <div key={prod.id} className="mini">
-                        <div
-                          className="th"
-                          style={{
-                            background: `linear-gradient(145deg, ${prod.visual.gradientFrom}, ${prod.visual.gradientTo})`,
-                          }}
-                          aria-hidden="true"
-                        >
-                          {prod.visual.glyph}
-                        </div>
-                        <div>
-                          <b>{prod.name}</b>
-                          <span>${prod.price} · ★ {prod.rating}</span>
-                        </div>
-                        <button
-                          className="btn"
-                          style={{ padding: '6px 12px' }}
-                          type="button"
-                          disabled={addedIds[prod.id]}
-                          onClick={() => handleAddToCart(prod)}
-                        >
-                          {addedIds[prod.id] ? 'Added' : 'Add'}
-                        </button>
+            {messages.map((message) => {
+              const isUser = message.role === 'user';
+              return (
+                <div
+                  key={message.id}
+                  className={`m ${isUser ? 'u' : 'a'}`}
+                >
+                  {!isUser && (
+                    <div className="ai-badge">
+                      <Sparkles size={11} />
+                      <span>AI Concierge</span>
+                      {selectedModel && (
+                        <span className="ai-badge-model">
+                          {selectedModel.replace(':latest', '')}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {isUser && (
+                    <div style={{ fontSize: '11px', fontWeight: 600, opacity: 0.85, marginBottom: '4px' }}>
+                      You
+                    </div>
+                  )}
+
+                  {message.content ? (
+                    <>
+                      <FormattedMessage content={message.content} />
+                      {message.isStreaming && <span className="streaming-cursor" />}
+                    </>
+                  ) : message.isStreaming ? (
+                    <div className="ai-thinking">
+                      <span className="dots">
+                        <span className="dot" />
+                        <span className="dot" />
+                        <span className="dot" />
+                      </span>
+                      <span>Thinking with {selectedModel || 'AI'}…</span>
+                    </div>
+                  ) : null}
+
+                  {/* Attached Product recommendations */}
+                  {!isUser &&
+                    message.products &&
+                    message.products.length > 0 && (
+                      <div className="prods">
+                        {message.products.map((p) => {
+                          const isAdded = addedIds[p.id];
+                          return (
+                            <div key={p.id} className="pcard">
+                              <div
+                                className="pv"
+                                style={
+                                  p.visual
+                                    ? {
+                                        background: `linear-gradient(135deg, ${p.visual.gradientFrom}, ${p.visual.gradientTo})`,
+                                      }
+                                    : undefined
+                                }
+                              >
+                                <span>{p.visual?.glyph || '📦'}</span>
+                              </div>
+                              <div className="pi">
+                                <div className="pt">{p.name}</div>
+                                <div className="pp">
+                                  ${p.price.toFixed(2)} · ★ {(p.rating || 4.8).toFixed(1)}
+                                </div>
+                              </div>
+                              <button
+                                className={`pb ${isAdded ? 'added' : ''}`}
+                                onClick={() => handleAddToCart(p)}
+                                type="button"
+                              >
+                                {isAdded ? 'Added ✓' : 'Add to cart'}
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+                    )}
+                </div>
+              );
+            })}
             <div ref={messagesEndRef} />
           </div>
         </div>
 
-        {/* Footer with composer */}
-        <div className="df" id="ai-df">
-          <div className="ctx" data-shop>
-            Context: All products · {itemCount} in cart · {selectedModel}
+        {/* Footer */}
+        <div className="df">
+          <div className="ctx">
+            Context: All products · {itemCount} in cart ·{' '}
+            {selectedModel || 'qwen:latest'}
           </div>
 
-          {/* Suggestions */}
-          <div className="sug">
+          {/* Quick prompts */}
+          <div className="chips">
             <button
+              className="chip"
               type="button"
-              onClick={() => handleSuggestion('Build me a quiet home-office setup')}
+              onClick={() =>
+                handleSuggestion(
+                  'What would look great with a walnut desk?',
+                )
+              }
             >
-              Build me a quiet home-office setup
+              Walnut desk setup
             </button>
             <button
+              className="chip"
               type="button"
-              onClick={() => handleSuggestion('What goes with my cart?')}
+              onClick={() =>
+                handleSuggestion(
+                  'Recommend an ergonomic lighting setup',
+                )
+              }
             >
-              What goes with my cart?
+              Ergonomic lighting
             </button>
             <button
+              className="chip"
               type="button"
-              onClick={() => handleSuggestion('Best audio under $250')}
+              onClick={() =>
+                handleSuggestion(
+                  'Best developer mechanical keyboards',
+                )
+              }
             >
-              Best audio under $250
+              Developer keyboards
             </button>
           </div>
 
           {/* Composer */}
-          <form
-            className="comp"
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-          >
+          <div className="comp">
             <textarea
               ref={textareaRef}
               rows={1}
-              placeholder="Ask about products"
-              aria-label="Message"
+              placeholder={`Ask ${selectedModel || 'AI Concierge'} about desk setups…`}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
+              disabled={isSending}
             />
-            <button className="go" type="submit" aria-label="Send">
-              ↑
+            <button
+              className="send"
+              onClick={() => handleSend()}
+              disabled={!inputValue.trim() || isSending}
+              type="button"
+              aria-label="Send message"
+            >
+              {isSending ? '…' : '↑'}
             </button>
-          </form>
+          </div>
         </div>
       </aside>
     </>

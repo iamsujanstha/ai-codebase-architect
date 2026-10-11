@@ -60,33 +60,38 @@ class ProductService:
                 logger.warning(f"Malformed CREATE_PRODUCT JSON: {raw_json}")
         return results
 
-    def format_products_for_context(self, products):
+    def format_products_for_context(self, products, query: str = ""):
         """
-        Convert product list into a compact string for the AI system prompt.
+        Convert product list into a compact, relevant string for the AI system prompt.
+        If a query is provided, score and select the top relevant products so local models
+        maintain tight context attention.
         """
         if not products:
             return "No products available in the catalog right now."
 
+        filtered = products
+        if query:
+            q = query.lower()
+            stop = {"what", "is", "the", "of", "for", "and", "are", "out", "list", "show", "price", "tell", "me", "have", "with", "about", "can", "you", "does", "cost", "much"}
+            words = [w for w in re.split(r'\W+', q) if len(w) > 2 and w not in stop]
+            if words:
+                scored = []
+                for p in products:
+                    name_lower = p.get("name", "").lower()
+                    haystack = (name_lower + " " + p.get("categorySlug", "") + " " + (p.get("shortDescription") or p.get("description") or "")).lower()
+                    score = sum(3 if w in name_lower else 1 for w in words if w in haystack)
+                    if score > 0:
+                        scored.append((score, p))
+                scored.sort(key=lambda x: x[0], reverse=True)
+                if scored:
+                    filtered = [p for _, p in scored[:6]]
+
         lines = ["Available products in our store:"]
-        for p in products:
+        for p in filtered:
+            desc = p.get('shortDescription') or p.get('description') or ''
             lines.append(
-                f"- {p['name']} (ID: {p['id']}, Price: ${p['price']}, Slug: {p['slug']}): "
-                f"{p.get('shortDescription', p.get('description', ''))[:100]}..."
+                f"- {p['name']} (Price: ${p['price']}): {desc[:90]}"
             )
-
-        lines.append("\nInstructions for you:")
-        lines.append("1. If a user asks about a product, mention it and use [PRODUCT:id] to show a card.")
-        lines.append("2. If a user wants to add to cart, use [ADD_TO_CART:id].")
-        lines.append("3. If a user asks you to CREATE a product, respond with the action tag:")
-        lines.append(
-            "   [CREATE_PRODUCT:{\"name\":\"...\",\"subtitle\":\"...\",\"shortDescription\":\"...\","
-            "\"description\":\"...\",\"price\":99,\"categorySlug\":\"productivity\","
-            "\"categoryName\":\"Productivity\",\"heroBadge\":\"New\","
-            "\"visual\":{\"gradientFrom\":\"#3b82f6\",\"gradientTo\":\"#8b5cf6\","
-            "\"accent\":\"#3b82f6\",\"glyph\":\"package\"}}]"
-        )
-        lines.append("4. Always surround action tags with helpful descriptive text.")
-
         return "\n".join(lines)
 
 

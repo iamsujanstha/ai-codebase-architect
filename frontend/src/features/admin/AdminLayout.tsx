@@ -10,13 +10,18 @@ import {
   Sun,
   Moon,
   LogOut,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthContext';
+import { useAIConcierge } from '@/features/chat/AIConciergeContext';
+import { ConciergeDrawer } from '@/features/chat/components/ConciergeDrawer';
+import { ConciergeLauncher } from '@/features/chat/components/ConciergeLauncher';
 import { adminApi, AdminStats } from './api/adminApi';
 import styles from './Admin.module.css';
 
 export const AdminLayout: React.FC = () => {
   const { user, logout } = useAuth();
+  const { isConciergeOpen, openConcierge, closeConcierge } = useAIConcierge();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -147,6 +152,26 @@ export const AdminLayout: React.FC = () => {
               <span className={styles.ct}>{stats.totalUsers}</span>
             )}
           </NavLink>
+
+          <button
+            type="button"
+            className={`${styles.nv} ${isConciergeOpen ? styles.active : ''}`}
+            onClick={() => {
+              setSidebarOpen(false);
+              openConcierge();
+            }}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+            }}
+          >
+            <Sparkles size={20} style={{ color: '#a93bff' }} />
+            <span>AI Concierge</span>
+            <span className={`${styles.ct} ${styles.badgeMute}`}>AI</span>
+          </button>
         </nav>
 
         <div className={styles.sbf}>
@@ -209,6 +234,32 @@ export const AdminLayout: React.FC = () => {
 
           <div className={styles.bc}>{getBreadcrumb()}</div>
 
+          <button
+            type="button"
+            onClick={openConcierge}
+            style={{
+              marginLeft: 'auto',
+              marginRight: '14px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '999px',
+              border: '1px solid var(--line, #e6e6e6)',
+              background: 'var(--bg, #fff)',
+              color: 'var(--ink, #222)',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              transition: 'all 0.15s ease',
+            }}
+            title="Open AI Concierge"
+          >
+            <Sparkles size={15} style={{ color: '#a93bff' }} />
+            <span>Ask AI</span>
+          </button>
+
           <span className={styles.av} title={adminName}>
             {user?.avatar ? (
               <img src={user.avatar} alt={adminName} />
@@ -222,6 +273,15 @@ export const AdminLayout: React.FC = () => {
           <Outlet context={{ refreshStats: () => adminApi.getStats().then(setStats) }} />
         </main>
       </div>
+
+      {/* Floating AI concierge launcher - matching Storefront exactly */}
+      <ConciergeLauncher
+        onClick={openConcierge}
+        hidden={isConciergeOpen}
+      />
+
+      {/* AI Concierge Drawer */}
+      <ConciergeDrawer isOpen={isConciergeOpen} onClose={closeConcierge} />
     </div>
   );
 };

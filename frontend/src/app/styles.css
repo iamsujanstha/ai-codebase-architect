@@ -2247,76 +2247,237 @@ body.dock {
 .msgs {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
+  padding: 4px 0;
 }
 
-.m {
-  max-width: 88%;
-  padding: 11px 15px;
+.m, .msg {
+  max-width: 90%;
+  padding: 13px 17px;
   border-radius: 18px;
-  white-space: pre-wrap;
+  line-height: 1.55;
+  font-size: 14.5px;
   word-wrap: break-word;
+  position: relative;
+  transition: all 0.2s ease;
 }
 
-.m.u {
+.m.u, .msg.me {
   align-self: flex-end;
-  background: var(--ink);
-  color: var(--bg);
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
   border-bottom-right-radius: 4px;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.m.a {
+.m.a, .msg.ai {
   align-self: flex-start;
-  background: var(--soft);
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
   border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
 }
 
-.mini {
+:root[data-theme="dark"] .m.a,
+:root:not([data-theme="light"]) .m.a,
+:root[data-theme="dark"] .msg.ai,
+:root:not([data-theme="light"]) .msg.ai {
+  background: #181820;
+  color: #f4f4f6;
+  border: 1px solid #2a2a36;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 3px;
+  height: 15px;
+  background: #3b82f6;
+  margin-left: 3px;
+  vertical-align: -2px;
+  animation: cursorBlink 0.9s infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #3b82f6;
+  margin-bottom: 6px;
+}
+
+.ai-badge-model {
+  background: rgba(125, 125, 125, 0.15);
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 500;
+  color: var(--mute);
+  text-transform: none;
+  font-size: 11px;
+}
+
+.ai-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mute);
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.ai-thinking .dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.ai-thinking .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: bounceDot 1.4s infinite ease-in-out both;
+}
+
+.ai-thinking .dot:nth-child(1) { animation-delay: -0.32s; }
+.ai-thinking .dot:nth-child(2) { animation-delay: -0.16s; }
+.ai-thinking .dot:nth-child(3) { animation-delay: 0s; }
+
+@keyframes bounceDot {
+  0%, 80%, 100% { transform: scale(0.3); opacity: 0.3; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.m-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.m-content p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.m-content ul {
+  margin: 4px 0 4px 18px;
+  padding: 0;
+}
+
+.m-content li {
+  margin: 2px 0;
+}
+
+.m-content strong {
+  font-weight: 600;
+}
+
+.prods, .mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pcard, .mini {
   display: grid;
-  grid-template-columns: 48px 1fr auto;
-  gap: 10px;
+  grid-template-columns: 46px 1fr auto;
+  gap: 12px;
   align-items: center;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 8px;
-  margin-top: 8px;
+  padding: 10px;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.mini .th {
-  width: 48px;
-  height: 48px;
-  font-size: 24px;
+.pcard:hover, .mini:hover {
+  border-color: var(--ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.mini b {
-  display: block;
-  font-size: 14px;
+.pcard .pv, .mini .th {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: var(--soft);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
 }
 
-.mini span {
-  font-size: 13px;
+.pcard .pi, .mini .info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.pcard .pt, .mini b {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pcard .pp, .mini span {
+  font-size: 12px;
   color: var(--mute);
 }
 
-.sug {
+.pcard .pb, .mini button {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.pcard .pb:hover, .mini button:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.sug, .chips {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
 
-.sug button {
+.sug button, .chips button, .chip {
   border: 1px solid var(--line);
   background: var(--bg);
+  color: var(--ink);
   border-radius: 999px;
-  padding: 7px 13px;
-  font-size: 13px;
+  padding: 7px 14px;
+  font-size: 12.5px;
   font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-.sug button:hover {
+.sug button:hover, .chips button:hover, .chip:hover {
   background: var(--soft);
+  border-color: var(--ink);
 }
 
 .comp {
@@ -2325,9 +2486,14 @@ body.dock {
   align-items: flex-end;
   border: 1px solid var(--line);
   border-radius: 24px;
-  padding: 8px 8px 8px 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  padding: 8px 10px 8px 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   background: var(--bg);
+  transition: border-color 0.15s;
+}
+
+.comp:focus-within {
+  border-color: var(--ink);
 }
 
 .comp textarea {
@@ -2337,10 +2503,34 @@ body.dock {
   resize: none;
   max-height: 120px;
   padding: 6px 0;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
 }
 
 .comp textarea:focus-visible {
   outline: 0;
+}
+
+.comp button.go, .comp button.send {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--bg);
+  border: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.comp button.go:disabled, .comp button.send:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .ctx {

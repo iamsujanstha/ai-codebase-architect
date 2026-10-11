@@ -38,16 +38,9 @@ async function bootstrap() {
   // Add structured logging interceptor (Phase 1: Observability)
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  const rawCorsOrigins = process.env.CORS_ORIGIN ?? '';
-  const allowedOrigins = rawCorsOrigins
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
-  // Even though the Docker deployment uses same-origin proxying through Nginx,
-  // enabling CORS keeps local development ergonomic when the Vite dev server runs separately.
   app.enableCors({
-    origin: allowedOrigins.length > 0 ? allowedOrigins : true,
+    origin: true,
+    credentials: true,
   });
 
   // Enable graceful shutdown (Phase 1: Reliability)

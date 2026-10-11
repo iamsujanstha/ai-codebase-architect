@@ -67,6 +67,11 @@ class OllamaProvider(ChatProvider):
                     "model": model,
                     "messages": messages,
                     "stream": True,
+                    "options": {
+                        "temperature": 0.3,
+                        "repeat_penalty": 1.18,
+                        "num_predict": 350,
+                    },
                 },
             ) as response:
                 response.raise_for_status()

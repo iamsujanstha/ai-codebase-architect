@@ -17,24 +17,20 @@ def service(request: Request) -> ChatService:
     return request.app.state.chat
 
 
-async def _get_shopping_system_instruction() -> str | None:
+async def _get_shopping_system_instruction(query: str = "") -> str | None:
     try:
         products = await product_service.get_all_products()
         if not products:
             return None
-        catalog_str = product_service.format_products_for_context(products)
+        catalog_str = product_service.format_products_for_context(products, query)
         return (
-            "You are the official AI Shopping Assistant for the Atlas Commerce store. "
-            "Your goal is to provide HIGH-QUALITY, IN-DEPTH, and LOGICAL assistance. "
-            "\n\nCRITICAL DIRECTIVES:\n"
-            "1. BE DETAILED: Never give one-sentence answers. Explain the 'why' behind your recommendations. "
-            "2. THINK STEP-BY-STEP: For complex requests, break down your logic into clear, structured points. "
-            "3. BE AN EXPERT: Use the provided catalog data to compare products and provide technical specs. "
-            "4. INTERACTIVE: Use [PRODUCT:id] to show product cards and [ADD_TO_CART:id] for actions. "
-            "5. PRODUCT CREATION: If the user asks you to create or add a product, respond with a "
-            "[CREATE_PRODUCT:{...}] tag containing valid JSON for the new product. "
-            "Always confirm to the user what you are creating. "
-            "\n\n### CURRENT CATALOG DATA:\n"
+            "You are Atlas AI Concierge, the official shopping assistant for Atlas Commerce.\n"
+            "Your job is to answer customer questions about our products, setups, and prices accurately based on our catalog.\n\n"
+            "Guidelines:\n"
+            "1. When asked about any product or price, always quote the exact price from our STORE CATALOG below.\n"
+            "2. If the user asks for a list or comparison, list each matching item with its exact catalog price.\n"
+            "3. Keep answers concise, direct, polite, and well-formatted in Markdown.\n\n"
+            "### STORE CATALOG:\n"
             f"{catalog_str}"
         )
     except Exception:
@@ -54,7 +50,7 @@ async def generate_response(
     """Accept a prompt and return a structured AI answer."""
     chat = service(request)
     model = await chat.resolve_model(payload.model)
-    system_instruction = await _get_shopping_system_instruction()
+    system_instruction = await _get_shopping_system_instruction(payload.prompt)
     return await chat.generate(payload, model, system_prompt=system_instruction)
 
 
@@ -68,7 +64,7 @@ async def generate_response_stream(
     """
     chat = service(request)
     model = await chat.resolve_model(payload.model)
-    system_instruction = await _get_shopping_system_instruction()
+    system_instruction = await _get_shopping_system_instruction(payload.prompt)
 
     async def event_generator():
         full_response_text = ""
@@ -76,6 +72,7 @@ async def generate_response_stream(
         try:
             async for event in events:
                 if event.get("type") == "delta":
+                    # pyrefly: ignore [unsupported-operation]
                     full_response_text += event.get("delta", "")
                 yield json.dumps(event) + "\n"
         finally:
