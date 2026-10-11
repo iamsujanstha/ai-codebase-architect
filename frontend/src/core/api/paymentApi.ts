@@ -60,6 +60,15 @@ async function requestJson<T>(
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+        window.dispatchEvent(new Event('atlas:auth-unauthorized'));
+        if (!window.location.pathname.startsWith('/login')) {
+          const returnTo = window.location.pathname + window.location.search;
+          window.location.assign(`/login?redirect=${encodeURIComponent(returnTo)}`);
+        }
+      }
       const errorPayload = (await response.json()) as ApiErrorResponse;
       throw new ApiError(extractErrorMessage(errorPayload), response.status);
     }

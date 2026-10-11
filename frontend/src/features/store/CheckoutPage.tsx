@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ApiError } from '@/core/api/aiApi';
 import {
   createEsewaCheckout,
@@ -59,6 +59,8 @@ function isValidCustomer(customer: CheckoutCustomerInput): boolean {
 export function CheckoutPage(): JSX.Element {
   const { items } = useCart();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [customer, setCustomer] = useState<CheckoutCustomerInput>(() =>
     loadStoredCustomer(user?.email, user?.name),
   );
@@ -151,6 +153,12 @@ export function CheckoutPage(): JSX.Element {
   );
 
   async function handleStripeCheckout() {
+    if (!user) {
+      const returnTo = location.pathname + location.search;
+      navigate(`/login?redirect=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+
     setIsSubmittingProvider('stripe');
     setError(null);
 
@@ -162,6 +170,11 @@ export function CheckoutPage(): JSX.Element {
 
       window.location.assign(response.checkoutUrl);
     } catch (caughtError) {
+      if (caughtError instanceof ApiError && caughtError.statusCode === 401) {
+        const returnTo = location.pathname + location.search;
+        navigate(`/login?redirect=${encodeURIComponent(returnTo)}`);
+        return;
+      }
       setError(
         caughtError instanceof ApiError
           ? caughtError.message
@@ -172,6 +185,12 @@ export function CheckoutPage(): JSX.Element {
   }
 
   async function handleEsewaCheckout() {
+    if (!user) {
+      const returnTo = location.pathname + location.search;
+      navigate(`/login?redirect=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+
     setIsSubmittingProvider('esewa');
     setError(null);
 
@@ -197,6 +216,11 @@ export function CheckoutPage(): JSX.Element {
       document.body.appendChild(formElement);
       formElement.submit();
     } catch (caughtError) {
+      if (caughtError instanceof ApiError && caughtError.statusCode === 401) {
+        const returnTo = location.pathname + location.search;
+        navigate(`/login?redirect=${encodeURIComponent(returnTo)}`);
+        return;
+      }
       setError(
         caughtError instanceof ApiError
           ? caughtError.message
@@ -246,6 +270,35 @@ export function CheckoutPage(): JSX.Element {
               <h2>Contact information</h2>
             </div>
           </div>
+
+          {!user && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.875rem 1.25rem',
+              marginBottom: '1.25rem',
+              borderRadius: '12px',
+              background: 'rgba(235, 94, 40, 0.08)',
+              border: '1px solid rgba(235, 94, 40, 0.25)',
+            }}>
+              <div>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>
+                  Already have an account?
+                </p>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Sign in to speed up checkout and save this order to your history.
+                </p>
+              </div>
+              <Link
+                to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`}
+                className="secondary-link-button"
+                style={{ whiteSpace: 'nowrap', marginLeft: '1rem', padding: '0.45rem 0.9rem', fontSize: '0.85rem' }}
+              >
+                Sign In
+              </Link>
+            </div>
+          )}
 
           <div className="checkout-form-grid">
             <label className="checkout-field">

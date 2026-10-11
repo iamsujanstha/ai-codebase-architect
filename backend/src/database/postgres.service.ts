@@ -22,23 +22,40 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
         ssl: {
           rejectUnauthorized: false,
         },
-        max: 10,
+        max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
+        connectionTimeoutMillis: 30000,
       });
 
-      // Verify connection immediately
-      const client = await this.pool.connect();
-      try {
-        const res = await client.query('SELECT current_database() as db, version() as ver;');
-        this.isConnected = true;
-        this.logger.log(`✅ Connected to Neon PostgreSQL database: ${res.rows[0].db}`);
-      } finally {
-        client.release();
+      this.pool.on('error', (err) => {
+        this.logger.error(`PostgreSQL pool client error: ${err.message}`);
+      });
+
+      // Verify connection with retries for serverless cold start
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          const client = await this.pool.connect();
+          try {
+            const res = await client.query('SELECT current_database() as db, version() as ver;');
+            this.isConnected = true;
+            this.logger.log(`✅ Connected to Neon PostgreSQL database: ${res.rows[0].db}`);
+            break;
+          } finally {
+            client.release();
+          }
+        } catch (err: any) {
+          retries--;
+          this.logger.warn(`PostgreSQL connect attempt failed: ${err.message}. Retries remaining: ${retries}`);
+          if (retries === 0) {
+            this.logger.error(`❌ Failed to connect to PostgreSQL after retries: ${err.message}`);
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+        }
       }
     } catch (err: any) {
-      this.logger.error(`❌ Failed to connect to PostgreSQL: ${err.message}`, err.stack);
-      this.isConnected = false;
+      this.logger.error(`❌ Failed to initialize PostgreSQL pool: ${err.message}`, err.stack);
     }
   }
 
@@ -54,7 +71,7 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
   }
 
   isReady(): boolean {
-    return this.isConnected && this.pool !== null;
+    return this.pool !== null;
   }
 
   async query<T extends QueryResultRow = any>(
@@ -64,6 +81,8 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
     if (!this.pool) {
       throw new Error('PostgreSQL pool is not initialized');
     }
-    return this.pool.query<T>(text, params);
+    const res = await this.pool.query<T>(text, params);
+    this.isConnected = true;
+    return res;
   }
 }

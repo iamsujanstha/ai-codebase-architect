@@ -15,6 +15,15 @@ export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      window.dispatchEvent(new Event('atlas:auth-unauthorized'));
+      if (!window.location.pathname.startsWith('/login')) {
+        const returnTo = window.location.pathname + window.location.search;
+        window.location.assign(`/login?redirect=${encodeURIComponent(returnTo)}`);
+      }
+    }
     const err = await response.json().catch(() => ({}));
     throw new Error((err as any).message ?? 'Failed to create order.');
   }
@@ -28,6 +37,15 @@ export async function fetchMyOrders(): Promise<Order[]> {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      window.dispatchEvent(new Event('atlas:auth-unauthorized'));
+      if (!window.location.pathname.startsWith('/login')) {
+        const returnTo = window.location.pathname + window.location.search;
+        window.location.assign(`/login?redirect=${encodeURIComponent(returnTo)}`);
+      }
+    }
     throw new Error('Failed to load order history.');
   }
 

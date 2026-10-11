@@ -22,6 +22,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      window.dispatchEvent(new Event('atlas:auth-unauthorized'));
+      if (!window.location.pathname.startsWith('/login')) {
+        const returnTo = window.location.pathname + window.location.search;
+        window.location.assign(`/login?redirect=${encodeURIComponent(returnTo)}`);
+      }
+    }
     console.error('API Error:', error.response?.data || error.message);
     return Promise.reject(error);
   }

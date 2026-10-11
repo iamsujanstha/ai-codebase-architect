@@ -31,6 +31,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(JSON.parse(savedUser));
     }
     setIsLoading(false);
+
+    const onUnauthorized = () => {
+      setToken(null);
+      setUser(null);
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+    };
+    window.addEventListener('atlas:auth-unauthorized', onUnauthorized);
+    return () => window.removeEventListener('atlas:auth-unauthorized', onUnauthorized);
   }, []);
 
   const login = (token: string, user: User) => {

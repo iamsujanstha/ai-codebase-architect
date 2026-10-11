@@ -50,7 +50,7 @@ export const LoginPage: React.FC = () => {
         <h1 className={styles.authTitle}>Welcome Back</h1>
         <p className={styles.authSubtitle}>Enter your details to access your account</p>
 
-        {redirectTo === '/checkout' && (
+        {redirectTo.startsWith('/checkout') && (
           <p className={styles.authSubtitle} style={{ color: 'var(--accent)', marginBottom: '1rem' }}>
             Please sign in to continue to checkout.
           </p>

@@ -767,13 +767,16 @@ export class PaymentsService {
       }
     }
 
-    const products = await this.productModel
-      .find({ _id: { $in: requestedIds } } as FilterQuery<ProductDocument>)
-      .lean();
+    const validMongoIds = requestedIds.filter((id) => Types.ObjectId.isValid(id));
+    const products = validMongoIds.length > 0
+      ? await this.productModel
+          .find({ _id: { $in: validMongoIds } } as FilterQuery<ProductDocument>)
+          .lean()
+      : [];
 
     if (products.length !== normalizedItems.length) {
       throw new BadRequestException(
-        'One or more cart items are no longer available.',
+        'One or more cart items are no longer available in the catalog.',
       );
     }
 
