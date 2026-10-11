@@ -1,33 +1,30 @@
-<!--
-  This HTML file is intentionally small because, in a modern React/Vite app,
-  most of the real UI work happens inside the React component tree.
-
-  Why keep this file?
-  - It provides the root DOM node where React mounts.
-  - It defines metadata that browsers and search tools use.
-  - It remains a useful teaching point: SPAs still begin with a normal HTML page.
--->
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta
       name="description"
       content="Atlas Commerce Lab: a premium ecommerce storefront plus a local AI concierge, built with React, NestJS, MongoDB, FastAPI, and Docker Compose."
     />
     <title>Atlas Commerce Lab</title>
+    <!-- Figtree font - Airbnb-style design -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script>
       (function() {
         try {
-          var storedTheme = window.localStorage.getItem('ai-code-assistant:theme');
+          var storedTheme = window.localStorage.getItem('theme') || window.localStorage.getItem('ai-code-assistant:theme');
           var theme = storedTheme === 'light' || storedTheme === 'dark' 
             ? storedTheme 
             : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-          document.documentElement.dataset.theme = theme;
+          if (theme !== 'light') {
+            document.documentElement.dataset.theme = theme;
+          }
         } catch (e) {}
       })();
     </script>

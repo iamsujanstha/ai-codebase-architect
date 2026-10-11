@@ -1,7 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { CartProvider } from '@/features/store/CartContext';
-import { AppChrome } from '@/shared/ui/AppChrome';
+import { ToastProvider } from '@/shared/contexts/ToastContext';
+import { AppLayout } from '@/shared/ui/AppLayout';
 import { ProtectedRoute } from '@/shared/ui/ProtectedRoute';
 import { AdminLayout } from '@/features/admin/AdminLayout';
 import { AdminDashboard } from '@/features/admin/AdminDashboard';
@@ -20,51 +21,44 @@ import { ROUTES } from './constants/routes';
 /**
  * App — composition root.
  *
- * Responsibilities:
- *   1. Mount global context providers in the correct order.
- *   2. Declare the top-level router shell.
- *   3. Spread route arrays from focused route modules.
- *
- * Why arrays instead of components?
- * React Router v6 requires <Route> elements to be static JSX children of
- * <Routes>. Wrapping them in a component function breaks route matching
- * because the router sees a component node, not <Route> elements.
- * Exporting plain JSX arrays and spreading them here is the correct pattern.
+ * Updated to use AppLayout (new Airbnb-style design) instead of AppChrome.
  */
 export default function App(): JSX.Element {
   return (
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
-          <Routes>
-            {/* Admin routes - separate from AppChrome */}
-            <Route
-              path="/admin/*"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <AdminLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<AdminDashboard />} />
-              <Route path="products" element={<ProductsManagement />} />
-              <Route path="products/new" element={<ProductForm />} />
-              <Route path="products/:id/edit" element={<ProductForm />} />
-              <Route path="orders" element={<OrdersManagement />} />
-              <Route path="orders/:id" element={<OrderDetail />} />
-              <Route path="users" element={<UsersManagement />} />
-              <Route path="users/:id" element={<UserDetail />} />
-              <Route path="settings" element={<AdminSettings />} />
-            </Route>
+          <ToastProvider>
+            <Routes>
+              {/* Admin routes - separate from AppChrome */}
+              <Route
+                path="/admin/*"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<AdminDashboard />} />
+                <Route path="products" element={<ProductsManagement />} />
+                <Route path="products/new" element={<ProductForm />} />
+                <Route path="products/:id/edit" element={<ProductForm />} />
+                <Route path="orders" element={<OrdersManagement />} />
+                <Route path="orders/:id" element={<OrderDetail />} />
+                <Route path="users" element={<UsersManagement />} />
+                <Route path="users/:id" element={<UserDetail />} />
+                <Route path="settings" element={<AdminSettings />} />
+              </Route>
 
-            {/* Regular routes with AppChrome */}
-            <Route element={<AppChrome />}>
-              {publicRoutes}
-              {authRoutes}
-              {protectedRoutes}
-              <Route path="*" element={<Navigate replace to={ROUTES.HOME} />} />
-            </Route>
-          </Routes>
+              {/* Regular routes with AppLayout (new design) */}
+              <Route element={<AppLayout />}>
+                {publicRoutes}
+                {authRoutes}
+                {protectedRoutes}
+                <Route path="*" element={<Navigate replace to={ROUTES.HOME} />} />
+              </Route>
+            </Routes>
+          </ToastProvider>
         </CartProvider>
       </AuthProvider>
     </BrowserRouter>

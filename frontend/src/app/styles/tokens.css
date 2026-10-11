@@ -1,0 +1,84 @@
+/**
+ * CSS Custom Properties - Design Tokens
+ * Matching the Airbnb-style visual reference (atlas-app.html)
+ */
+
+:root {
+  /* Color tokens - Light theme (default) */
+  --bg: #ffffff;
+  --ink: #222222;
+  --mute: #6a6a6a;
+  --line: #e6e6e6;
+  --soft: #f7f7f7;
+  --brand: #ff385c;
+  --brand-hover: #e31c5f;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.14);
+
+  /* Typography */
+  --font-family: Figtree, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-regular: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Border radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-xxl: 32px;
+
+  /* Layout */
+  --max-width: 1760px;
+  --header-height: 64px;
+  --concierge-width: 440px;
+  --studio-sidebar-width: 280px;
+
+  /* Safe area insets for mobile notches */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  
+  /* Box sizing */
+  box-sizing: border-box;
+  
+  /* Padding for safe areas */
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+
+/* Dark theme - prefers-color-scheme */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121212;
+    --ink: #f2f2f2;
+    --mute: #a3a3a3;
+    --line: #2e2e2e;
+    --soft: #1e1e1e;
+    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.7);
+  }
+}
+
+/* Dark theme - explicit */
+:root[data-theme="dark"] {
+  --bg: #121212;
+  --ink: #f2f2f2;
+  --mute: #a3a3a3;
+  --line: #2e2e2e;
+  --soft: #1e1e1e;
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.7);
+}
+
+/* Safe scrolling with notches */
+html {
+  scroll-padding-top: var(--safe-top);
+}

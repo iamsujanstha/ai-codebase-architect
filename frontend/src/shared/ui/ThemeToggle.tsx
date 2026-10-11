@@ -1,57 +1,64 @@
-import { useTheme } from '@/shared/theme/ThemeContext';
+import { useEffect, useState } from 'react';
+import { Moon } from 'lucide-react';
 
+type Theme = 'light' | 'dark' | 'system';
+
+/**
+ * ThemeToggle - Icon button to toggle between light, dark, and system themes.
+ * Matches the Airbnb-style design with proper accessibility.
+ */
 export function ThemeToggle(): JSX.Element {
-  const { theme, toggleTheme } = useTheme();
+  const [theme, setTheme] = useState<Theme>(() => {
+    // Get saved theme or default to system
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme') as Theme | null;
+      return saved || 'system';
+    }
+    return 'system';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    
+    const applyTheme = (themeToApply: Theme) => {
+      if (themeToApply === 'system') {
+        root.removeAttribute('data-theme');
+      } else {
+        root.setAttribute('data-theme', themeToApply);
+      }
+    };
+
+    applyTheme(theme);
+    localStorage.setItem('theme', theme);
+
+    // Listen for system theme changes
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = () => applyTheme('system');
+      
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+  }, [theme]);
+
+  const handleToggle = () => {
+    // Toggle between light and dark (simplified from the reference)
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      (document.documentElement.getAttribute('data-theme') === null && 
+       window.matchMedia('(prefers-color-scheme: dark)').matches);
+    
+    const nextTheme = isDark ? 'light' : 'dark';
+    setTheme(nextTheme);
+  };
 
   return (
     <button
-      className={`theme-toggle-btn ${theme}`}
-      onClick={toggleTheme}
-      aria-label="Toggle Theme"
-      title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+      className="icon-btn"
+      onClick={handleToggle}
+      aria-label="Toggle dark mode"
+      type="button"
     >
-      <div className="theme-toggle-track">
-        <div className="theme-toggle-thumb">
-          {theme === 'light' ? (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="5" />
-              <line x1="12" y1="1" x2="12" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="23" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="1" y1="12" x2="3" y2="12" />
-              <line x1="21" y1="12" x2="23" y2="12" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-            </svg>
-          ) : (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          )}
-        </div>
-      </div>
+      <Moon size={20} />
     </button>
   );
 }
-

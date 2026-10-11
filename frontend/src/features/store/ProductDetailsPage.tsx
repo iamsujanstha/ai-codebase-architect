@@ -181,7 +181,6 @@ export function ProductDetailsPage(): JSX.Element {
               key={relatedProduct.id}
               product={relatedProduct}
               onAddToCart={addItem}
-              compact
             />
           ))}
         </div>
