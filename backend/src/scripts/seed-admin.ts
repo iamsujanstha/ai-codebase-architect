@@ -1,18 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
-import { UsersService } from '../users/users.service';
-import { UserRole } from '../users/schemas/user.schema';
-import { getModelToken } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Product, ProductDocument } from '../catalog/schemas/product.schema';
+import { UsersService, UserRole } from '../users/users.service';
+import { PrismaService } from '../database/prisma.service';
 import * as bcrypt from 'bcrypt';
 
 async function seedAdmin() {
   const app = await NestFactory.createApplicationContext(AppModule);
   const usersService = app.get(UsersService);
-  const productModel = app.get<Model<ProductDocument>>(
-    getModelToken(Product.name),
-  );
+  const prisma = app.get(PrismaService);
 
   const hashedPassword = await bcrypt.hash('password', 10);
 
@@ -96,7 +91,7 @@ async function seedAdmin() {
       {
         title: 'Walnut standing desk',
         category: 'desk',
-        price: 64900,
+        price: 649,
         stock: 12,
         status: 'published',
         description: 'Electric height-adjustable desk in solid walnut.',
@@ -105,7 +100,7 @@ async function seedAdmin() {
       {
         title: 'Halo monitor light bar',
         category: 'lighting',
-        price: 6900,
+        price: 69,
         stock: 4,
         status: 'published',
         description:
@@ -115,7 +110,7 @@ async function seedAdmin() {
       {
         title: 'Low-profile keyboard',
         category: 'keyboard',
-        price: 12900,
+        price: 129,
         stock: 0,
         status: 'published',
         description:
@@ -125,7 +120,7 @@ async function seedAdmin() {
       {
         title: 'Studio headphones',
         category: 'audio',
-        price: 24900,
+        price: 249,
         stock: 31,
         status: 'published',
         description:
@@ -135,7 +130,7 @@ async function seedAdmin() {
       {
         title: '34" ultrawide display',
         category: 'display',
-        price: 49900,
+        price: 499,
         stock: 8,
         status: 'draft',
         description:
@@ -145,7 +140,7 @@ async function seedAdmin() {
       {
         title: 'Felt desk mat',
         category: 'accessory',
-        price: 3900,
+        price: 39,
         stock: 120,
         status: 'published',
         description:
@@ -155,7 +150,7 @@ async function seedAdmin() {
       {
         title: 'Dual monitor arm',
         category: 'desk',
-        price: 11900,
+        price: 119,
         stock: 22,
         status: 'published',
         description:
@@ -165,7 +160,7 @@ async function seedAdmin() {
       {
         title: 'Warm task lamp',
         category: 'lighting',
-        price: 5400,
+        price: 54,
         stock: 3,
         status: 'draft',
         description: 'Minimalist brass desk lamp with warm 2700K illumination.',
@@ -174,44 +169,25 @@ async function seedAdmin() {
     ];
 
     for (const p of sampleProducts) {
-      const slug = p.title
-        .toLowerCase()
-        .replace(/ /g, '-')
-        .replace(/[^\w-]+/g, '');
-      const existingProduct = await productModel.findOne({ slug });
+      const existingProduct = await prisma.products.findFirst({
+        where: { name: p.title },
+      });
       if (!existingProduct) {
-        await productModel.create({
-          name: p.title,
-          slug,
-          subtitle: p.description,
-          shortDescription: p.description,
-          description: p.description,
-          price: p.price,
-          currency: 'USD',
-          inventoryCount: p.stock,
-          categorySlug: p.category,
-          categoryName: p.category,
-          status: p.status,
-          sku: p.sku,
-          imageUrl: '',
-          rating: 5.0,
-          reviewCount: 12,
-          heroBadge: 'Admin Pick',
-          featured: true,
-          bestSeller: false,
-          newArrival: false,
-          visual: {
-            gradientFrom: '#ff385c',
-            gradientTo: '#a93bff',
-            accent: '#ff385c',
-            glyph: 'box',
+        await prisma.products.create({
+          data: {
+            name: p.title,
+            description: p.description,
+            price: p.price,
+            stock: p.stock,
+            category: p.category,
+            status: p.status,
+            sku: p.sku,
+            featured: true,
           },
-          specs: [],
-          deletedAt: null,
         });
       }
     }
-    console.log('✅ Products seeded successfully!');
+    console.log('✅ Products seeded successfully in PostgreSQL!');
   } catch (error) {
     console.error('Error seeding data:', error);
     process.exit(1);

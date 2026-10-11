@@ -8,12 +8,10 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import axios from 'axios';
 import { createHmac, randomBytes } from 'crypto';
-import { FilterQuery, Model, Types } from 'mongoose';
 import Stripe from 'stripe';
-import { Product, ProductDocument } from '../catalog/schemas/product.schema';
+import { PrismaService } from '../database/prisma.service';
 import { PostgresService } from '../database/postgres.service';
 import { CheckoutCustomerDto } from './dto/checkout-customer.dto';
 import { CreatePaymentSessionDto } from './dto/create-payment-session.dto';
@@ -33,13 +31,58 @@ import {
   ProviderQuote,
   QuotedLineItem,
 } from './interfaces/payment-quote.interface';
-import { Order, OrderDocument } from './schemas/order.schema';
 import { MailService } from '../mail/mail.service';
 import {
   CircuitBreaker,
   CircuitBreakerOpenError,
 } from '../common/utils/circuit-breaker.util';
 import { retryWithBackoff } from '../common/utils/retry.util';
+
+export interface OrderRecord {
+  orderNumber: string;
+  userId?: string | null;
+  paymentProvider: PaymentProvider;
+  status: OrderStatus;
+  customer: {
+    fullName: string;
+    email: string;
+    phone?: string | null;
+    addressLine1?: string | null;
+    city?: string | null;
+    country?: string | null;
+  };
+  items: Array<{
+    productId: string;
+    slug: string;
+    name: string;
+    quantity: number;
+    unitAmount: number;
+    lineTotal: number;
+    currency: string;
+  }>;
+  pricing: {
+    currency: string;
+    subtotal: number;
+    taxAmount: number;
+    serviceCharge: number;
+    deliveryCharge: number;
+    total: number;
+  };
+  providerMetadata: Record<string, any>;
+  history: Array<{
+    status: OrderStatus;
+    note: string;
+    changedAt: Date;
+  }>;
+  failureReason?: string | null;
+  providerReference?: string | null;
+  paymentReference?: string | null;
+  paidAt?: Date | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+  save: () => Promise<void>;
+  toObject?: () => any;
+}
 
 interface PricedCartLine {
   productId: string;
@@ -150,10 +193,7 @@ export class PaymentsService {
   });
 
   constructor(
-    @InjectModel(Product.name)
-    private readonly productModel: Model<ProductDocument>,
-    @InjectModel(Order.name)
-    private readonly orderModel: Model<OrderDocument>,
+    private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     @Optional()
     private readonly postgresService?: PostgresService,
@@ -547,76 +587,64 @@ export class PaymentsService {
   }
 
   async getOrdersForUser(userId: string): Promise<OrderSummaryResponse[]> {
-    if (this.postgresService?.isReady()) {
-      const numericUserId = parseInt(userId, 10);
-      if (!isNaN(numericUserId)) {
-        try {
-          const pgRes = await this.postgresService.query(
-            `SELECT o.*, 
-                    COALESCE(json_agg(json_build_object(
-                      'productId', oi.product_id::text,
-                      'name', oi.name,
-                      'quantity', oi.quantity,
-                      'unitAmount', oi.price,
-                      'lineTotal', oi.subtotal,
-                      'currency', 'USD'
-                    )) FILTER (WHERE oi.id IS NOT NULL), '[]') as items
-             FROM orders o
-             LEFT JOIN order_items oi ON oi.order_id = o.id
-             WHERE o.user_id = $1
-             GROUP BY o.id
-             ORDER BY o.created_at DESC
-             LIMIT 100`,
-            [numericUserId],
-          );
-          if (pgRes.rows.length > 0) {
-            return pgRes.rows.map((row) => ({
-              orderNumber: row.order_number,
-              status: row.status,
-              paymentProvider: row.payment_method || 'stripe',
-              customer: {
-                fullName: 'Customer',
-                email: '',
-                phone: undefined,
-                addressLine1: undefined,
-                city: undefined,
-                country: undefined,
-              },
-              items: row.items || [],
-              pricing: {
-                currency: 'USD',
-                subtotal: parseFloat(row.total_amount) || 0,
-                taxAmount: 0,
-                serviceCharge: 0,
-                deliveryCharge: 0,
-                total: parseFloat(row.total_amount) || 0,
-              },
-              createdAt: row.created_at,
-              updatedAt: row.updated_at,
-            }));
-          }
-        } catch (err) {
-          this.logger.warn(
-            `Failed to fetch orders from Postgres: ${(err as any)?.message}`,
-          );
-        }
-      }
+    const numericUserId = parseInt(userId, 10);
+    const where: any = {};
+    if (!isNaN(numericUserId)) {
+      where.user_id = numericUserId;
     }
 
-    const query: any = {
-      $or: [{ userId }],
-    };
-    if (Types.ObjectId.isValid(userId)) {
-      query.$or.push({ userId: new Types.ObjectId(userId) });
-    }
+    const rows = await this.prisma.orders.findMany({
+      where,
+      include: {
+        order_items: true,
+        users: true,
+      },
+      orderBy: { created_at: 'desc' },
+      take: 100,
+    });
 
-    const orders = await this.orderModel
-      .find(query)
-      .sort({ createdAt: -1 })
-      .limit(100)
-      .exec();
+    return rows.map((order) => {
+      const items = (order.order_items || []).map((oi) => ({
+        productId: String(oi.product_id),
+        slug: oi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        name: oi.name,
+        quantity: oi.quantity,
+        unitAmount: Number(oi.price),
+        lineTotal: Number(oi.subtotal),
+        currency: 'USD',
+      }));
+      const total = Number(order.total_amount);
 
-    return orders.map((order) => this.mapOrderSummary(order));
+      return {
+        orderNumber: order.order_number,
+        status:
+          order.status === 'paid'
+            ? OrderStatus.PAID
+            : order.status === 'failed'
+              ? OrderStatus.FAILED
+              : OrderStatus.PENDING_PAYMENT,
+        paymentProvider:
+          order.payment_method?.toUpperCase() === 'ESEWA'
+            ? PaymentProvider.ESEWA
+            : PaymentProvider.STRIPE,
+        customer: {
+          fullName: order.users?.name || order.users?.email || 'Customer',
+          email: order.users?.email || '',
+          phone: undefined,
+        },
+        items,
+        pricing: {
+          currency: 'USD',
+          subtotal: total,
+          taxAmount: 0,
+          serviceCharge: 0,
+          deliveryCharge: 0,
+          total,
+        },
+        createdAt: order.created_at ? order.created_at.toISOString() : new Date().toISOString(),
+        updatedAt: order.updated_at ? order.updated_at.toISOString() : new Date().toISOString(),
+      };
+    });
   }
 
   async handleEsewaSuccessRedirect(
@@ -732,74 +760,16 @@ export class PaymentsService {
     const normalizedItems = this.mergeDuplicateCartItems(items);
     const requestedIds = normalizedItems.map((item) => item.productId);
 
-    // If Neon PostgreSQL is available, query Postgres products table
-    if (this.postgresService?.isReady()) {
-      try {
-        const intIds = requestedIds
-          .map((id) => parseInt(id, 10))
-          .filter((id) => !isNaN(id));
+    const intIds = requestedIds
+      .map((id) => parseInt(id, 10))
+      .filter((id) => !isNaN(id));
 
-        if (intIds.length > 0) {
-          const pgRes = await this.postgresService.query(
-            `SELECT * FROM products WHERE id = ANY($1::int[])`,
-            [intIds],
-          );
-
-          if (pgRes.rows.length === normalizedItems.length) {
-            const productMap = new Map(
-              pgRes.rows.map((r) => [String(r.id), r] as const),
-            );
-
-            return normalizedItems.map((item) => {
-              const product = productMap.get(item.productId);
-              if (!product) {
-                throw new BadRequestException(
-                  'A requested cart item could not be found in the catalog.',
-                );
-              }
-              const price = Number(product.price) || 0;
-              const stock = product.stock ?? 50;
-
-              if (stock < item.quantity) {
-                throw new BadRequestException(
-                  `${product.name} only has ${stock} units left in stock.`,
-                );
-              }
-
-              const slug = (product.name || `product-${product.id}`)
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/(^-|-$)/g, '');
-
-              return {
-                productId: String(product.id),
-                slug,
-                name: product.name,
-                quantity: item.quantity,
-                unitAmountUsd: price,
-                unitAmountNpr: Math.round(price * 135),
-              };
-            });
-          }
-        }
-      } catch (err: any) {
-        this.logger.warn(
-          `PostgreSQL cart lookup: ${err.message}. Trying Mongo fallback.`,
-        );
-      }
-    }
-
-    const validMongoIds = requestedIds.filter((id) =>
-      Types.ObjectId.isValid(id),
-    );
-    const products =
-      validMongoIds.length > 0
-        ? await this.productModel
-            .find({
-              _id: { $in: validMongoIds },
-            } as FilterQuery<ProductDocument>)
-            .lean()
-        : [];
+    const products = await this.prisma.products.findMany({
+      where: {
+        id: { in: intIds },
+        deleted_at: null,
+      },
+    });
 
     if (products.length !== normalizedItems.length) {
       throw new BadRequestException(
@@ -808,31 +778,37 @@ export class PaymentsService {
     }
 
     const productMap = new Map(
-      products.map((product) => [String(product._id), product] as const),
+      products.map((r) => [String(r.id), r] as const),
     );
 
     return normalizedItems.map((item) => {
       const product = productMap.get(item.productId);
-
       if (!product) {
         throw new BadRequestException(
           'A requested cart item could not be found in the catalog.',
         );
       }
+      const price = Number(product.price) || 0;
+      const stock = product.stock ?? 50;
 
-      if (product.inventoryCount < item.quantity) {
+      if (stock < item.quantity) {
         throw new BadRequestException(
-          `${product.name} only has ${product.inventoryCount} units left in stock.`,
+          `${product.name} only has ${stock} units left in stock.`,
         );
       }
 
+      const slug = (product.name || `product-${product.id}`)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
       return {
-        productId: String(product._id),
-        slug: product.slug,
+        productId: String(product.id),
+        slug,
         name: product.name,
         quantity: item.quantity,
-        unitAmountUsd: product.price,
-        unitAmountNpr: product.nprPrice ?? null,
+        unitAmountUsd: price,
+        unitAmountNpr: Math.round(price * 135),
       };
     });
   }
@@ -1002,10 +978,50 @@ export class PaymentsService {
     pricedCart: PricedCartLine[],
     quote: ProviderQuote,
     userId?: string,
-  ): Promise<OrderDocument> {
+  ): Promise<OrderRecord> {
     const orderNumber = this.generateOrderNumber();
+    let numericUserId: number | null = null;
+    if (userId && !isNaN(parseInt(userId, 10))) {
+      numericUserId = parseInt(userId, 10);
+    } else {
+      const user = await this.prisma.users.findUnique({
+        where: { email: customer.email.toLowerCase() },
+      });
+      if (user) numericUserId = user.id;
+    }
 
-    const orderDoc = await this.orderModel.create({
+    if (!numericUserId) {
+      const firstUser = await this.prisma.users.findFirst({
+        select: { id: true },
+      });
+      numericUserId = firstUser ? firstUser.id : 1;
+    }
+
+    await this.prisma.orders.create({
+      data: {
+        user_id: numericUserId,
+        order_number: orderNumber,
+        total_amount: quote.total,
+        status: 'pending',
+        payment_method: provider.toLowerCase(),
+        order_items: {
+          create: pricedCart.map((item) => {
+            const intProdId = parseInt(item.productId, 10);
+            return {
+              product_id: !isNaN(intProdId) ? intProdId : 1,
+              name: item.name,
+              price:
+                provider === PaymentProvider.STRIPE
+                  ? item.unitAmountUsd
+                  : (item.unitAmountNpr ?? 0),
+              quantity: item.quantity,
+            };
+          }),
+        },
+      },
+    });
+
+    const snapshot: OrderRecord = {
       orderNumber,
       userId: userId ?? null,
       paymentProvider: provider,
@@ -1026,7 +1042,7 @@ export class PaymentsService {
         unitAmount:
           provider === PaymentProvider.STRIPE
             ? item.unitAmountUsd
-            : item.unitAmountNpr,
+            : (item.unitAmountNpr ?? 0),
         lineTotal:
           (provider === PaymentProvider.STRIPE
             ? item.unitAmountUsd
@@ -1049,69 +1065,28 @@ export class PaymentsService {
           changedAt: new Date(),
         },
       ],
-    });
+      save: async () => {
+        await this.prisma.orders.update({
+          where: { order_number: orderNumber },
+          data: {
+            status:
+              snapshot.status === OrderStatus.PAID
+                ? 'paid'
+                : snapshot.status === OrderStatus.FAILED
+                  ? 'failed'
+                  : 'pending',
+            payment_intent_id:
+              snapshot.paymentReference ??
+              snapshot.providerReference ??
+              snapshot.providerMetadata?.stripeCheckoutSessionId ??
+              null,
+            updated_at: new Date(),
+          },
+        });
+      },
+    };
 
-    // Also persist order to Neon PostgreSQL
-    if (this.postgresService?.isReady()) {
-      try {
-        let numericUserId: number | null = null;
-        if (userId && !isNaN(parseInt(userId, 10))) {
-          numericUserId = parseInt(userId, 10);
-        } else {
-          const userRes = await this.postgresService.query(
-            `SELECT id FROM users WHERE email = $1 LIMIT 1`,
-            [customer.email.toLowerCase()],
-          );
-          if (userRes.rows.length > 0) {
-            numericUserId = userRes.rows[0].id;
-          }
-        }
-
-        const pgOrderRes = await this.postgresService.query(
-          `INSERT INTO orders (user_id, order_number, total_amount, status, payment_method, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-           RETURNING id`,
-          [
-            numericUserId,
-            orderNumber,
-            quote.total,
-            'pending',
-            provider.toLowerCase(),
-          ],
-        );
-
-        const pgOrderId = pgOrderRes.rows[0]?.id;
-        if (pgOrderId) {
-          for (const item of pricedCart) {
-            const intProdId = parseInt(item.productId, 10);
-            const unitPrice =
-              provider === PaymentProvider.STRIPE
-                ? item.unitAmountUsd
-                : (item.unitAmountNpr ?? 0);
-            await this.postgresService.query(
-              `INSERT INTO order_items (order_id, product_id, name, price, quantity)
-               VALUES ($1, $2, $3, $4, $5)`,
-              [
-                pgOrderId,
-                !isNaN(intProdId) ? intProdId : null,
-                item.name,
-                unitPrice,
-                item.quantity,
-              ],
-            );
-          }
-          this.logger.log(
-            `✅ Order ${orderNumber} persisted to Neon PostgreSQL (ID: ${pgOrderId})`,
-          );
-        }
-      } catch (err: any) {
-        this.logger.warn(
-          `Could not save order snapshot to Neon PostgreSQL: ${err.message}`,
-        );
-      }
-    }
-
-    return orderDoc;
+    return snapshot;
   }
 
   private async syncOrderWithStripeSession(
@@ -1156,7 +1131,7 @@ export class PaymentsService {
     options: {
       providerReference?: string | null;
       paymentReference?: string | null;
-      providerMetadata?: Partial<Order['providerMetadata']>;
+      providerMetadata?: Record<string, any>;
       note: string;
     },
   ): Promise<void> {
@@ -1380,8 +1355,14 @@ export class PaymentsService {
 
   private async getOrderByOrderNumber(
     orderNumber: string,
-  ): Promise<OrderDocument> {
-    const order = await this.orderModel.findOne({ orderNumber });
+  ): Promise<OrderRecord> {
+    const order = await this.prisma.orders.findUnique({
+      where: { order_number: orderNumber },
+      include: {
+        users: true,
+        order_items: true,
+      },
+    });
 
     if (!order) {
       throw new NotFoundException(
@@ -1389,20 +1370,89 @@ export class PaymentsService {
       );
     }
 
-    return order;
+    const items = (order.order_items || []).map((oi) => ({
+      productId: String(oi.product_id),
+      slug: oi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      name: oi.name,
+      quantity: oi.quantity,
+      unitAmount: Number(oi.price),
+      lineTotal: Number(oi.subtotal),
+      currency: 'USD',
+    }));
+
+    const total = Number(order.total_amount);
+
+    const snapshot: OrderRecord = {
+      orderNumber: order.order_number,
+      userId: String(order.user_id),
+      paymentProvider:
+        order.payment_method?.toUpperCase() === 'ESEWA'
+          ? PaymentProvider.ESEWA
+          : PaymentProvider.STRIPE,
+      status:
+        order.status === 'paid'
+          ? OrderStatus.PAID
+          : order.status === 'failed'
+            ? OrderStatus.FAILED
+            : OrderStatus.PENDING_PAYMENT,
+      customer: {
+        fullName: order.users?.name || order.users?.email || 'Customer',
+        email: order.users?.email || '',
+        phone: null,
+      },
+      items,
+      pricing: {
+        currency: 'USD',
+        subtotal: total,
+        taxAmount: 0,
+        serviceCharge: 0,
+        deliveryCharge: 0,
+        total,
+      },
+      providerMetadata: {},
+      history: [],
+      paymentReference: order.payment_intent_id ?? undefined,
+      createdAt: order.created_at,
+      updatedAt: order.updated_at,
+      save: async () => {
+        await this.prisma.orders.update({
+          where: { order_number: orderNumber },
+          data: {
+            status:
+              snapshot.status === OrderStatus.PAID
+                ? 'paid'
+                : snapshot.status === OrderStatus.FAILED
+                  ? 'failed'
+                  : 'pending',
+            payment_intent_id:
+              snapshot.paymentReference ??
+              snapshot.providerReference ??
+              snapshot.providerMetadata?.stripeCheckoutSessionId ??
+              null,
+            updated_at: new Date(),
+          },
+        });
+      },
+    };
+
+    return snapshot;
   }
 
-  private mapOrderSummary(order: OrderDocument): OrderSummaryResponse {
-    // `createdAt` is injected by Mongoose `timestamps: true`. Access it via
-    // the document's plain object representation to avoid `.get()` failing on
-    // lean results or when the field hasn't been hydrated yet.
-    const rawDoc = order.toObject ? order.toObject() : (order as any);
-    const createdAtRaw: unknown = rawDoc.createdAt;
+  private mapOrderSummary(order: OrderRecord): OrderSummaryResponse {
+    const createdAtRaw = order.createdAt;
     const createdAt =
       createdAtRaw instanceof Date
         ? createdAtRaw.toISOString()
         : typeof createdAtRaw === 'string'
           ? createdAtRaw
+          : new Date().toISOString();
+
+    const updatedAtRaw = order.updatedAt;
+    const updatedAt =
+      updatedAtRaw instanceof Date
+        ? updatedAtRaw.toISOString()
+        : typeof updatedAtRaw === 'string'
+          ? updatedAtRaw
           : new Date().toISOString();
 
     return {
@@ -1434,7 +1484,6 @@ export class PaymentsService {
       providerReference: order.providerReference,
       paymentReference: order.paymentReference,
       failureReason: order.failureReason,
-      paidAt: order.paidAt ? order.paidAt.toISOString() : null,
       createdAt,
     };
   }
@@ -1496,8 +1545,9 @@ export class PaymentsService {
 
   private async checkWebhookIdempotency(key: string): Promise<boolean> {
     try {
-      const collection = this.orderModel.db.collection('webhook_idempotency');
-      const existing = await collection.findOne({ key });
+      const existing = await this.prisma.idempotency_keys.findUnique({
+        where: { key },
+      });
       return !!existing;
     } catch (error) {
       this.logger.error({
@@ -1505,33 +1555,24 @@ export class PaymentsService {
         key,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Fail open: If check fails, allow webhook to process
-      // Better to risk duplicate than block legitimate webhook
       return false;
     }
   }
 
   private async markWebhookAsProcessing(key: string): Promise<void> {
     try {
-      const collection = this.orderModel.db.collection('webhook_idempotency');
       const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 72); // 72 hours TTL
+      expiresAt.setHours(expiresAt.getHours() + 72);
 
-      await collection.insertOne({
-        key,
-        status: 'processing',
-        createdAt: new Date(),
-        expiresAt,
+      await this.prisma.idempotency_keys.create({
+        data: {
+          key,
+          status: 'processing',
+          expires_at: expiresAt,
+        },
       });
-
-      // Ensure TTL index exists
-      await collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-
-      // Ensure unique index on key
-      await collection.createIndex({ key: 1 }, { unique: true });
-    } catch (error) {
-      // If duplicate key error, webhook is already being processed
-      if ((error as any).code === 11000) {
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
         this.logger.log({
           event: 'webhook_concurrent_processing_detected',
           key,
@@ -1544,22 +1585,15 @@ export class PaymentsService {
         key,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Don't throw - allow processing to continue
     }
   }
 
   private async markWebhookAsProcessed(key: string): Promise<void> {
     try {
-      const collection = this.orderModel.db.collection('webhook_idempotency');
-      await collection.updateOne(
-        { key },
-        {
-          $set: {
-            status: 'processed',
-            processedAt: new Date(),
-          },
-        },
-      );
+      await this.prisma.idempotency_keys.update({
+        where: { key },
+        data: { status: 'processed' },
+      });
 
       this.logger.log({
         event: 'webhook_processed',
@@ -1571,14 +1605,14 @@ export class PaymentsService {
         key,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Don't throw - webhook was processed successfully
     }
   }
 
   private async removeWebhookIdempotency(key: string): Promise<void> {
     try {
-      const collection = this.orderModel.db.collection('webhook_idempotency');
-      await collection.deleteOne({ key });
+      await this.prisma.idempotency_keys.delete({
+        where: { key },
+      });
 
       this.logger.log({
         event: 'webhook_idempotency_removed',

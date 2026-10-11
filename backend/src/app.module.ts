@@ -1,6 +1,5 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AiModule } from './ai/ai.module';
@@ -18,16 +17,6 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
-    MongooseModule.forRootAsync({
-      useFactory: () => ({
-        uri:
-          process.env.MONGODB_URI ??
-          'mongodb://mongo:27017/ai-commerce-platform',
-        dbName: process.env.MONGODB_DB_NAME ?? 'ai_commerce_platform',
-        autoIndex: (process.env.MONGODB_AUTO_INDEX ?? 'true') === 'true',
-        serverSelectionTimeoutMS: 10000,
-      }),
-    }),
     AiModule,
     CatalogModule,
     PaymentsModule,
@@ -42,9 +31,6 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    // PHASE 1 PRODUCTION IMPROVEMENTS:
-    // Apply correlation ID middleware to all routes for request tracing
-    // See: docs/architecture/adr/ and ARCHITECTURE_GAP_ANALYSIS.md
     consumer.apply(CorrelationIdMiddleware).forRoutes('*');
   }
 }

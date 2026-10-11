@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { FilterQuery, Model } from 'mongoose';
+import { PrismaService } from '../database/prisma.service';
 import {
   STOREFRONT_ANNOUNCEMENT,
   STOREFRONT_HERO,
@@ -13,211 +12,104 @@ import { CatalogHomeResponse } from './interfaces/catalog-home-response.interfac
 import { CatalogProductDetailResponse } from './interfaces/catalog-product-detail-response.interface';
 import { CatalogProduct } from './interfaces/catalog-product.interface';
 import { CatalogProductsResponse } from './interfaces/catalog-products-response.interface';
-import { Category, CategoryDocument } from './schemas/category.schema';
-import { Product, ProductDocument } from './schemas/product.schema';
-import { PostgresService } from '../database/postgres.service';
 
-// This service is the business layer for the ecommerce catalog.
-// Its job is to translate raw database rows/documents into frontend-friendly view models.
-//
-// Production reasoning:
-// The browser should not be forced to understand database structure.
-// Sourcing from Neon PostgreSQL when DATABASE_MODE !== 'mongodb-only'.
 @Injectable()
 export class CatalogService {
-  constructor(
-    @InjectModel(Category.name)
-    private readonly categoryModel: Model<CategoryDocument>,
-    @InjectModel(Product.name)
-    private readonly productModel: Model<ProductDocument>,
-    private readonly postgresService: PostgresService,
-  ) {}
-
-  private isPostgresActive(): boolean {
-    const mode = process.env.DATABASE_MODE ?? 'postgres-only';
-    return mode !== 'mongodb-only' && this.postgresService.isReady();
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async getHomePage(): Promise<CatalogHomeResponse> {
-    if (this.isPostgresActive()) {
-      try {
-        const [catRows, featRows, newRows, allRows] = await Promise.all([
-          this.postgresService.query(
-            'SELECT category, COUNT(*) as count FROM products GROUP BY category ORDER BY count DESC',
-          ),
-          this.postgresService.query(
-            'SELECT * FROM products WHERE featured = true ORDER BY price DESC LIMIT 4',
-          ),
-          this.postgresService.query(
-            'SELECT * FROM products ORDER BY created_at DESC LIMIT 4',
-          ),
-          this.postgresService.query(
-            'SELECT * FROM products ORDER BY id ASC LIMIT 8',
-          ),
-        ]);
-
-        return {
-          announcement:
-            '🚀 Powered by Neon Serverless PostgreSQL (Sub-millisecond Queries)',
-          hero: STOREFRONT_HERO,
-          categories: catRows.rows.map((r) => this.mapPostgresCategory(r)),
-          featuredProducts: featRows.rows.map((r) =>
-            this.mapPostgresProduct(r),
-          ),
-          newArrivals: newRows.rows.map((r) => this.mapPostgresProduct(r)),
-          catalogProducts: allRows.rows.map((r) => this.mapPostgresProduct(r)),
-          valueProps: STOREFRONT_VALUE_PROPS,
-          testimonials: STOREFRONT_TESTIMONIALS,
-        };
-      } catch (err) {
-        console.warn(
-          'PostgreSQL getHomePage failed, falling back to Mongo:',
-          err,
-        );
-      }
-    }
-    const [categories, featuredProducts, newArrivals, catalogProducts] =
+    const [catGroups, featuredRows, newArrivalRows, allRows] =
       await Promise.all([
-        this.categoryModel.find().sort({ sortOrder: 1, name: 1 }).lean(),
-        this.productModel
-          .find({ featured: true })
-          .sort({ bestSeller: -1, rating: -1 })
-          .limit(4)
-          .lean(),
-        this.productModel
-          .find({ newArrival: true })
-          .sort({ createdAt: -1, rating: -1 })
-          .limit(4)
-          .lean(),
-        this.productModel
-          .find()
-          .sort({ featured: -1, bestSeller: -1, rating: -1, createdAt: -1 })
-          .limit(8)
-          .lean(),
+        this.prisma.products.groupBy({
+          by: ['category'],
+          _count: { id: true },
+          where: { deleted_at: null },
+          orderBy: { _count: { id: 'desc' } },
+        }),
+        this.prisma.products.findMany({
+          where: { featured: true, deleted_at: null },
+          orderBy: { price: 'desc' },
+          take: 4,
+        }),
+        this.prisma.products.findMany({
+          where: { deleted_at: null },
+          orderBy: { created_at: 'desc' },
+          take: 4,
+        }),
+        this.prisma.products.findMany({
+          where: { deleted_at: null },
+          orderBy: { id: 'asc' },
+          take: 8,
+        }),
       ]);
 
-    const categoryCounts = await this.getCategoryCounts();
-
     return {
-      announcement: STOREFRONT_ANNOUNCEMENT,
+      announcement:
+        '🚀 Powered by Neon Serverless PostgreSQL with Prisma ORM',
       hero: STOREFRONT_HERO,
-      categories: categories.map((category) =>
-        this.mapCategory(category, categoryCounts),
+      categories: catGroups.map((g) =>
+        this.mapPostgresCategory({ category: g.category, count: g._count.id }),
       ),
-      featuredProducts: featuredProducts.map((product) =>
-        this.mapProduct(product),
-      ),
-      newArrivals: newArrivals.map((product) => this.mapProduct(product)),
-      catalogProducts: catalogProducts.map((product) =>
-        this.mapProduct(product),
-      ),
+      featuredProducts: featuredRows.map((r) => this.mapPostgresProduct(r)),
+      newArrivals: newArrivalRows.map((r) => this.mapPostgresProduct(r)),
+      catalogProducts: allRows.map((r) => this.mapPostgresProduct(r)),
       valueProps: STOREFRONT_VALUE_PROPS,
       testimonials: STOREFRONT_TESTIMONIALS,
     };
   }
 
   async listCategories(): Promise<CatalogCategory[]> {
-    if (this.isPostgresActive()) {
-      try {
-        const catRows = await this.postgresService.query(
-          'SELECT category, COUNT(*) as count FROM products GROUP BY category ORDER BY count DESC',
-        );
-        return catRows.rows.map((r) => this.mapPostgresCategory(r));
-      } catch (err) {
-        console.warn(
-          'PostgreSQL listCategories failed, falling back to Mongo:',
-          err,
-        );
-      }
-    }
+    const groups = await this.prisma.products.groupBy({
+      by: ['category'],
+      _count: { id: true },
+      where: { deleted_at: null },
+      orderBy: { _count: { id: 'desc' } },
+    });
 
-    const [categories, categoryCounts] = await Promise.all([
-      this.categoryModel.find().sort({ sortOrder: 1, name: 1 }).lean(),
-      this.getCategoryCounts(),
-    ]);
-
-    return categories.map((category) =>
-      this.mapCategory(category, categoryCounts),
+    return groups.map((g) =>
+      this.mapPostgresCategory({ category: g.category, count: g._count.id }),
     );
   }
 
   async listProducts(
     query: ListProductsQueryDto,
   ): Promise<CatalogProductsResponse> {
-    if (this.isPostgresActive()) {
-      try {
-        const conditions: string[] = ['1=1'];
-        const params: any[] = [];
-        let paramIdx = 1;
+    const where: any = {
+      deleted_at: null,
+      status: { not: 'draft' },
+    };
 
-        if (query.category && query.category !== 'all') {
-          conditions.push(`LOWER(category) = LOWER($${paramIdx++})`);
-          params.push(query.category);
-        }
-
-        if (query.featured !== undefined) {
-          conditions.push(`featured = $${paramIdx++}`);
-          params.push(query.featured);
-        }
-
-        if (query.search) {
-          conditions.push(
-            `(name ILIKE $${paramIdx} OR description ILIKE $${paramIdx} OR category ILIKE $${paramIdx})`,
-          );
-          params.push(`%${query.search}%`);
-          paramIdx++;
-        }
-
-        const whereClause = conditions.join(' AND ');
-        const limit = query.limit ?? 24;
-        const skip = query.skip ?? 0;
-
-        const countRes = await this.postgresService.query(
-          `SELECT COUNT(*) FROM products WHERE ${whereClause}`,
-          params,
-        );
-        const total = parseInt(countRes.rows[0].count, 10);
-
-        const dataRes = await this.postgresService.query(
-          `SELECT * FROM products WHERE ${whereClause} ORDER BY featured DESC, price DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
-          [...params, limit, skip],
-        );
-
-        return {
-          items: dataRes.rows.map((r) => this.mapPostgresProduct(r)),
-          total,
-          appliedFilters: {
-            category: query.category,
-            search: query.search,
-            featured: query.featured,
-            skip: query.skip,
-          },
-        };
-      } catch (err) {
-        console.warn(
-          'PostgreSQL listProducts failed, falling back to Mongo:',
-          err,
-        );
-      }
+    if (query.category && query.category !== 'all') {
+      where.category = { equals: query.category, mode: 'insensitive' };
     }
 
-    const filter = this.buildProductFilter(query);
+    if (query.featured !== undefined) {
+      where.featured = query.featured;
+    }
+
+    if (query.search) {
+      where.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { description: { contains: query.search, mode: 'insensitive' } },
+        { category: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
     const limit = query.limit ?? 24;
     const skip = query.skip ?? 0;
 
-    const [items, total] = await Promise.all([
-      this.productModel
-        .find(filter)
-        .sort({ featured: -1, bestSeller: -1, rating: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-
-      this.productModel.countDocuments(filter),
+    const [total, rows] = await Promise.all([
+      this.prisma.products.count({ where }),
+      this.prisma.products.findMany({
+        where,
+        orderBy: [{ featured: 'desc' }, { price: 'desc' }],
+        skip,
+        take: limit,
+      }),
     ]);
 
     return {
-      items: items.map((product) => this.mapProduct(product)),
+      items: rows.map((r) => this.mapPostgresProduct(r)),
       total,
       appliedFilters: {
         category: query.category,
@@ -229,134 +121,82 @@ export class CatalogService {
   }
 
   async getProductBySlug(slug: string): Promise<CatalogProductDetailResponse> {
-    if (this.isPostgresActive()) {
-      try {
-        let productRes = await this.postgresService.query(
-          `SELECT * FROM products WHERE LOWER(REPLACE(name, ' ', '-')) = LOWER($1) OR id::text = $1 LIMIT 1`,
-          [slug],
-        );
+    const numericId = parseInt(slug, 10);
+    let row: any = null;
 
-        if (productRes.rows.length === 0) {
-          const slugPattern = `%${slug.replace(/-/g, ' ')}%`;
-          productRes = await this.postgresService.query(
-            `SELECT * FROM products WHERE name ILIKE $1 LIMIT 1`,
-            [slugPattern],
-          );
-        }
-
-        if (productRes.rows.length > 0) {
-          const row = productRes.rows[0];
-          const relatedRes = await this.postgresService.query(
-            `SELECT * FROM products WHERE category = $1 AND id != $2 LIMIT 3`,
-            [row.category, row.id],
-          );
-
-          return {
-            product: this.mapPostgresProduct(row),
-            relatedProducts: relatedRes.rows.map((r) =>
-              this.mapPostgresProduct(r),
-            ),
-          };
-        }
-      } catch (err) {
-        console.warn(
-          'PostgreSQL getProductBySlug failed, falling back to Mongo:',
-          err,
-        );
-      }
+    if (!isNaN(numericId)) {
+      row = await this.prisma.products.findFirst({
+        where: { id: numericId, deleted_at: null },
+      });
     }
 
-    const product = await this.productModel.findOne({ slug }).lean();
+    if (!row) {
+      const normalizedSlug = slug.toLowerCase().replace(/-/g, ' ');
+      row = await this.prisma.products.findFirst({
+        where: {
+          name: { contains: normalizedSlug, mode: 'insensitive' },
+          deleted_at: null,
+        },
+      });
+    }
 
-    if (!product) {
+    if (!row) {
       throw new NotFoundException(`Product with slug "${slug}" was not found.`);
     }
 
-    const relatedProducts = await this.productModel
-      .find({
-        categorySlug: product.categorySlug,
-        slug: { $ne: product.slug },
-      })
-      .sort({ featured: -1, rating: -1 })
-      .limit(3)
-      .lean();
+    const relatedRows = await this.prisma.products.findMany({
+      where: {
+        category: row.category,
+        id: { not: row.id },
+        deleted_at: null,
+      },
+      take: 3,
+    });
 
     return {
-      product: this.mapProduct(product),
-      relatedProducts: relatedProducts.map((item) => this.mapProduct(item)),
+      product: this.mapPostgresProduct(row),
+      relatedProducts: relatedRows.map((r) => this.mapPostgresProduct(r)),
     };
   }
 
   async createProduct(createProductDto: any): Promise<CatalogProduct> {
-    const slug = createProductDto.name
-      .toLowerCase()
-      .replace(/ /g, '-')
-      .replace(/[^\w-]+/g, '');
+    const price = Number(createProductDto.price) || 0;
+    const stock = Number(createProductDto.inventoryCount) || 10;
 
-    const newProduct = new this.productModel({
-      ...createProductDto,
-      slug,
-      rating: createProductDto.rating ?? 5,
-      reviewCount: createProductDto.reviewCount ?? 0,
-      inventoryCount: createProductDto.inventoryCount ?? 10,
-      featured: createProductDto.featured ?? true,
-      bestSeller: createProductDto.bestSeller ?? false,
-      newArrival: createProductDto.newArrival ?? true,
-      tags: createProductDto.tags ?? [],
-      keyHighlights: createProductDto.keyHighlights ?? [],
-      specs: createProductDto.specs ?? [],
+    const created = await this.prisma.products.create({
+      data: {
+        name: createProductDto.name,
+        category: createProductDto.categoryName || createProductDto.category || 'General',
+        price,
+        stock,
+        description: createProductDto.description || createProductDto.shortDescription || '',
+        featured: Boolean(createProductDto.featured),
+        status: 'active',
+      },
     });
 
-    const savedProduct = await newProduct.save();
-    return this.mapProduct(savedProduct);
+    return this.mapPostgresProduct(created);
   }
 
   async seedProducts(count: number = 4): Promise<CatalogProduct[]> {
     const products: CatalogProduct[] = [];
-
     const categories = await this.listCategories();
-
     if (categories.length === 0) return [];
 
-    const adjectives = [
-      'Ultra',
-      'Smart',
-      'Elite',
-      'Pro',
-      'NextGen',
-      'Cloud',
-      'Hyper',
-    ];
-    const nouns = [
-      'Monitor',
-      'Keyboard',
-      'CPU',
-      'Controller',
-      'Node',
-      'Gateway',
-      'Interface',
-    ];
+    const adjectives = ['Ultra', 'Smart', 'Elite', 'Pro', 'NextGen', 'Cloud', 'Hyper'];
+    const nouns = ['Monitor', 'Keyboard', 'CPU', 'Controller', 'Node', 'Gateway', 'Interface'];
 
     for (let i = 0; i < count; i++) {
-      const category =
-        categories[Math.floor(Math.random() * categories.length)];
+      const category = categories[Math.floor(Math.random() * categories.length)];
       const name = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]} ${Math.floor(Math.random() * 900) + 100}`;
 
       const productData = {
         name,
-        subtitle: `Performance optimized ${category.name}`,
-        shortDescription: `The ultimate tool for your ${category.name.toLowerCase()} workflow.`,
-        description: `Experience unparalleled efficiency with the ${name}. Engineered for professionals who demand the best in ${category.name.toLowerCase()} technology.`,
-        price: Math.floor(Math.random() * 800) + 99,
-        categorySlug: category.slug,
         categoryName: category.name,
-        heroBadge: 'New Release',
-        visual: {
-          gradientFrom: '#3b82f6',
-          gradientTo: '#8b5cf6',
-          accent: '#3b82f6',
-          glyph: nouns[Math.floor(Math.random() * nouns.length)].toLowerCase(),
-        },
+        shortDescription: `The ultimate tool for your ${category.name.toLowerCase()} workflow.`,
+        price: Math.floor(Math.random() * 800) + 99,
+        inventoryCount: 50,
+        featured: true,
       };
 
       products.push(await this.createProduct(productData));
@@ -365,105 +205,7 @@ export class CatalogService {
     return products;
   }
 
-  private buildProductFilter(
-    query: ListProductsQueryDto,
-  ): FilterQuery<ProductDocument> {
-    const filter: FilterQuery<ProductDocument> = {
-      deletedAt: null,
-      status: { $ne: 'draft' },
-    };
-
-    if (query.category) {
-      filter.categorySlug = query.category;
-    }
-
-    if (query.featured !== undefined) {
-      filter.featured = query.featured;
-    }
-
-    if (query.search) {
-      const safeSearch = query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.$or = [
-        { name: { $regex: safeSearch, $options: 'i' } },
-        { subtitle: { $regex: safeSearch, $options: 'i' } },
-        { tags: { $elemMatch: { $regex: safeSearch, $options: 'i' } } },
-      ];
-    }
-
-    return filter;
-  }
-
-  private async getCategoryCounts(): Promise<Record<string, number>> {
-    const counts = await this.productModel.aggregate<{
-      _id: string;
-      total: number;
-    }>([
-      {
-        $group: {
-          _id: '$categorySlug',
-          total: { $sum: 1 },
-        },
-      },
-    ]);
-
-    return counts.reduce<Record<string, number>>((accumulator, entry) => {
-      accumulator[entry._id] = entry.total;
-      return accumulator;
-    }, {});
-  }
-
-  private mapCategory(
-    category: CategoryDocument | Category,
-    categoryCounts: Record<string, number>,
-  ): CatalogCategory {
-    return {
-      id: String('_id' in category ? category._id : category.slug),
-      slug: category.slug,
-      name: category.name,
-      description: category.description,
-      accentColor: category.accentColor,
-      icon: category.icon,
-      featuredCopy: category.featuredCopy,
-      productCount: categoryCounts[category.slug] ?? 0,
-    };
-  }
-
-  private mapProduct(product: ProductDocument | Product): CatalogProduct {
-    return {
-      id: String('_id' in product ? product._id : product.slug),
-      slug: product.slug,
-      name: product.name,
-      subtitle: product.subtitle,
-      shortDescription: product.shortDescription,
-      description: product.description,
-      price: product.price,
-      compareAtPrice: product.compareAtPrice ?? null,
-      currency: product.currency,
-      rating: product.rating,
-      reviewCount: product.reviewCount,
-      inventoryCount: product.inventoryCount,
-      categorySlug: product.categorySlug,
-      categoryName: product.categoryName,
-      tags: [...product.tags],
-      keyHighlights: [...product.keyHighlights],
-      heroBadge: product.heroBadge,
-      featured: product.featured,
-      bestSeller: product.bestSeller,
-      newArrival: product.newArrival,
-      visual: {
-        gradientFrom: product.visual.gradientFrom,
-        gradientTo: product.visual.gradientTo,
-        accent: product.visual.accent,
-        glyph: product.visual.glyph,
-      },
-      specs: product.specs.map((spec) => ({
-        label: spec.label,
-        value: spec.value,
-      })),
-    };
-  }
-
-  private mapPostgresCategory(row: any): CatalogCategory {
+  private mapPostgresCategory(row: { category: string; count: number }): CatalogCategory {
     const cat = row.category || 'General';
     const slug = cat.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const glyphMap: Record<string, string> = {
@@ -478,11 +220,11 @@ export class CatalogService {
       id: slug,
       slug,
       name: cat,
-      description: `Browse ${cat} queried directly from Neon PostgreSQL`,
+      description: `Browse ${cat} queried directly from PostgreSQL via Prisma`,
       accentColor: '#00e599',
       icon: glyphMap[cat] || '📦',
-      featuredCopy: `Curated ${cat} collection in Neon`,
-      productCount: parseInt(row.count, 10) || 0,
+      featuredCopy: `Curated ${cat} collection in PostgreSQL`,
+      productCount: row.count || 0,
     };
   }
 
@@ -510,7 +252,7 @@ export class CatalogService {
       id: String(row.id),
       slug,
       name: row.name,
-      subtitle: `${row.category} • Neon Serverless SQL`,
+      subtitle: `${row.category} • PostgreSQL Prisma ORM`,
       shortDescription: row.description || '',
       description: row.description || '',
       price,
@@ -523,16 +265,16 @@ export class CatalogService {
       categoryName: row.category,
       tags: [
         row.category ? row.category.toLowerCase() : 'gear',
-        'neon',
+        'prisma',
         'postgresql',
         'sql',
       ],
       keyHighlights: [
-        `Live query directly from Neon PostgreSQL (ID: ${row.id})`,
+        `Live query directly from Neon PostgreSQL via Prisma (ID: ${row.id})`,
         `Category: ${row.category}`,
         `Current inventory: ${row.stock} units`,
       ],
-      heroBadge: row.featured ? 'Neon SQL' : 'In Stock',
+      heroBadge: row.featured ? 'Prisma ORM' : 'In Stock',
       featured: Boolean(row.featured),
       bestSeller: row.id % 2 === 0,
       newArrival: row.id % 3 === 0,
@@ -543,8 +285,8 @@ export class CatalogService {
         glyph,
       },
       specs: [
-        { label: 'Database Engine', value: 'Neon PostgreSQL (v16)' },
-        { label: 'Source', value: 'PostgreSQL table "products"' },
+        { label: 'ORM', value: 'Prisma Client v6' },
+        { label: 'Database', value: 'Neon PostgreSQL (v16)' },
         { label: 'Stock Available', value: `${row.stock} units` },
       ],
     };
