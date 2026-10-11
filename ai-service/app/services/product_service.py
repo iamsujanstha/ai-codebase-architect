@@ -186,7 +186,7 @@ class ProductService:
                         collection_name=COLLECTION_NAME,
                         query=q_vec,
                         limit=limit * 2,
-                        score_threshold=0.35,
+                        score_threshold=0.55,
                     )
                     score_map = {
                         str(pt.payload.get("product_id")): pt.score
@@ -196,24 +196,79 @@ class ProductService:
                     
                     # Sort filtered authoritative items by semantic similarity score
                     scored_items = []
-                    unscored_items = []
                     for p in filtered_products:
                         pid = str(p.get("id"))
                         if pid in score_map:
                             scored_items.append((score_map[pid], p))
-                        else:
-                            unscored_items.append(p)
                     
                     scored_items.sort(key=lambda x: x[0], reverse=True)
                     ranked_products = [p for _, p in scored_items]
                     
-                    # If semantic items were found, return them (up to limit)
+                    # If semantic items passed threshold, return them
                     if ranked_products:
                         return ranked_products[:limit]
+                    # If query was given but no items reached similarity threshold, return empty
+                    return []
                 except Exception as e:
-                    logger.warning(f"Semantic search query error, falling back to structured list: {e}")
+                    logger.warning(f"Semantic search query error: {e}")
+                    return []
 
         return filtered_products[:limit]
+
+    async def extract_semantic_intent(self, user_prompt: str) -> dict:
+        """
+        Translates customer natural language query into concrete semantic search intent via LLM.
+        Pipeline:
+        Semantic Query ("Something comfortable for long walks")
+            ↓
+           LLM
+            ↓
+        Semantic Intent ("walking shoes sneakers athletic footwear")
+            ↓
+          Qdrant
+        """
+        # Baseline regex extraction for prices and structured hints
+        filters = self.extract_search_filters(user_prompt)
+
+        try:
+            prompt = (
+                "You are an eCommerce search query understanding module for Atlas Commerce.\n"
+                "Translate the user's natural language shopping request into concise English search keywords "
+                "representing the concrete physical items they want to buy.\n\n"
+                "Examples:\n"
+                "Query: \"Something comfortable for long walks\"\n"
+                "Intent: \"walking shoes sneakers athletic footwear\"\n\n"
+                "Query: \"Something comfortable to sit on for long coding sessions\"\n"
+                "Intent: \"ergonomic office chair desk chair\"\n\n"
+                "Query: \"A crisp display for my laptop\"\n"
+                "Intent: \"4K computer monitor screen\"\n\n"
+                "Query: \"A quiet mouse for work\"\n"
+                "Intent: \"silent ergonomic wireless mouse\"\n\n"
+                f"Query: \"{user_prompt}\"\n"
+                "Intent:"
+            )
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                res = await client.post(
+                    f"{self.ollama_base_url}/api/generate",
+                    json={
+                        "model": os.getenv("DEFAULT_MODEL", "qwen"),
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.0,
+                            "stop": ["\n", "Query:"],
+                        },
+                    },
+                )
+                if res.status_code == 200:
+                    intent_text = res.json().get("response", "").strip().strip('"').strip()
+                    if intent_text and len(intent_text) > 2:
+                        filters["query"] = intent_text
+                        logger.info(f"LLM semantic intent extracted: '{user_prompt}' -> '{intent_text}'")
+        except Exception as e:
+            logger.warning(f"LLM semantic intent extraction failed, using fallback filters: {e}")
+
+        return filters
 
     def extract_search_filters(self, user_prompt: str) -> dict:
         """

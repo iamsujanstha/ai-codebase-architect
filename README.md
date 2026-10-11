@@ -18,10 +18,13 @@ The stack uses:
 The goal is to show how a real SaaS can combine commerce, backend orchestration, AI capabilities, and payment providers inside one clean architecture.
 
 ## 📖 Detailed Documentation
-For a deep dive into specific systems, refer to the following guides in the `docs/` folder:
-- [AI Infrastructure (Redis & Qdrant)](./docs/ai_infrastructure.md)
-- [Authentication & Google OAuth Flow](./docs/authentication_flow.md)
-- [Product Management Dashboard](./docs/product_dashboard.md)
+For deep dives into architecture, database, features, and deployment, explore our [**Documentation Hub (`docs/`)**](./docs/README.md):
+- [**System Architecture**](./docs/architecture/ARCHITECTURE.md)
+- [**AI Infrastructure (FastAPI & Qdrant)**](./docs/ai-infrastructure/ai_infrastructure.md)
+- [**Authentication Flow**](./docs/features/authentication_flow.md)
+- [**Product Dashboard**](./docs/features/product_dashboard.md)
+- [**Payment Integration (eSewa & Stripe)**](./docs/features/PAYMENT_INTEGRATION_GUIDE.md)
+- [**Full Documentation Index**](./docs/README.md)
 
 ## 🎓 PostgreSQL Interview Preparation
 This repository includes a comprehensive PostgreSQL learning system for Staff/Principal Engineer interviews:
@@ -33,11 +36,11 @@ npx ts-node src/database/exercises/01-data-modeling.ts
 ```
 
 ### Complete Learning Resources
-- **[QUICK_START_POSTGRESQL.md](./QUICK_START_POSTGRESQL.md)** - 5-minute quick start guide
-- **[POSTGRESQL_INTERVIEW_EXERCISES.md](./POSTGRESQL_INTERVIEW_EXERCISES.md)** - 15 complete exercises with theory + hands-on + interview Q&A
-- **[POSTGRESQL_PRODUCTION_COMMANDS.md](./POSTGRESQL_PRODUCTION_COMMANDS.md)** - Production SQL command reference (most commonly used)
-- **[POSTGRESQL_MASTERY_COMPLETE.md](./POSTGRESQL_MASTERY_COMPLETE.md)** - Achievement summary and study plan
-- **[DATABASE_LEARNING_ROADMAP.md](./DATABASE_LEARNING_ROADMAP.md)** - 4-week learning roadmap
+- **[QUICK_START_POSTGRESQL.md](./docs/database/QUICK_START_POSTGRESQL.md)** - 5-minute quick start guide
+- **[POSTGRESQL_INTERVIEW_EXERCISES.md](./docs/database/POSTGRESQL_INTERVIEW_EXERCISES.md)** - 15 complete exercises with theory + hands-on + interview Q&A
+- **[POSTGRESQL_PRODUCTION_COMMANDS.md](./docs/database/POSTGRESQL_PRODUCTION_COMMANDS.md)** - Production SQL command reference (most commonly used)
+- **[POSTGRESQL_MASTERY_COMPLETE.md](./docs/database/POSTGRESQL_MASTERY_COMPLETE.md)** - Achievement summary and study plan
+- **[DATABASE_LEARNING_ROADMAP.md](./docs/database/DATABASE_LEARNING_ROADMAP.md)** - 4-week learning roadmap
 
 ### What You'll Master
 - ✅ Data Modeling & Normalization (1NF, 2NF, 3NF)
@@ -70,7 +73,7 @@ npx ts-node src/database/exercises/run-all.ts
 - **46 indexes** optimized for various query patterns
 - **Complete schema** with constraints, triggers, and materialized views
 
-See [QUICK_START_POSTGRESQL.md](./QUICK_START_POSTGRESQL.md) for detailed instructions.
+See [QUICK_START_POSTGRESQL.md](./docs/database/QUICK_START_POSTGRESQL.md) for detailed instructions.
 
 ## What this project demonstrates
 

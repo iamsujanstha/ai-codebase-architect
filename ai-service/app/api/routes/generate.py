@@ -13,37 +13,56 @@ from app.services.product_service import product_service
 router = APIRouter(tags=["generation"])
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def service(request: Request) -> ChatService:
     return request.app.state.chat
 
 
 async def _get_shopping_context(query: str = "") -> tuple[list[dict], str]:
     try:
-        filters = product_service.extract_search_filters(query)
+        # Pipeline: Semantic query -> LLM -> semantic intent -> Qdrant
+        filters = await product_service.extract_semantic_intent(query)
         retrieved_products = await product_service.search_catalog(**filters)
-        if not retrieved_products:
-            # Fallback to general catalog if no specific filters matched
-            retrieved_products = (await product_service.get_all_products())[:5]
 
-        items_str = "\n".join([
-            f"- {p['name']} (Price: ${p['price']}): {p.get('shortDescription') or p.get('description', '')}"
-            for p in retrieved_products
-        ])
-        system_instruction = (
-            "You are Atlas AI Concierge, the official shopping assistant for Atlas Commerce.\n"
-            "Your job is to answer customer questions about our products, setups, and prices accurately based ONLY on the verified catalog items below.\n\n"
-            "CRITICAL RULES:\n"
-            "1. ONLY discuss and recommend products listed in the RETRIEVED PRODUCTS below. NEVER invent, mention, or hallucinate products outside this list.\n"
-            "2. Always quote the exact product name and price from the list below.\n"
-            "3. If a requested product is not in our catalog, clearly state that we do not carry it and recommend the closest available catalog item instead.\n"
-            "4. Keep answers concise, direct, polite, and well-formatted in Markdown.\n\n"
-            f"### RETRIEVED PRODUCTS:\n"
-            f"{items_str}"
-        )
+        if retrieved_products:
+            items_str = "\n".join([
+                f"- {p['name']} (Price: ${p['price']}, Category: {p.get('categoryName', '')}): {p.get('shortDescription') or p.get('description', '')}"
+                for p in retrieved_products
+            ])
+            system_instruction = (
+                "You are Atlas AI Concierge, the official shopping assistant for Atlas Commerce.\n"
+                "Atlas Commerce specializes in workspace & developer equipment: Electronics, Office Furniture, Tech Books, Desk Accessories, and Software.\n"
+                "Your job is to answer customer questions accurately based on the verified catalog items below.\n\n"
+                "CRITICAL RULES:\n"
+                "1. ONLY discuss and recommend products listed in the RETRIEVED PRODUCTS below.\n"
+                "2. Always quote the exact product name and price from the verified list below.\n"
+                "3. Explain directly why the retrieved items suit their request.\n"
+                "4. Keep answers concise, polite, helpful, and formatted in Markdown.\n\n"
+                f"### RETRIEVED PRODUCTS:\n"
+                f"{items_str}"
+            )
+        else:
+            system_instruction = (
+                "You are Atlas AI Concierge, the official shopping assistant for Atlas Commerce.\n"
+                "Atlas Commerce is a specialized tech, developer, and home-office workspace retailer.\n"
+                "We ONLY sell: Electronics (laptops, audio, mice, keyboards), Office Furniture (ergonomic chairs, standing desks, footrests), Programming Books, Desk Accessories (webcams, mics), and Software.\n"
+                "We DO NOT sell apparel, shoes, footwear, clothing, sporting goods, groceries, or outdoor gear.\n\n"
+                "CRITICAL RULES:\n"
+                "1. There are NO products in our catalog matching the customer's request.\n"
+                "2. Clearly and politely explain that Atlas Commerce does not carry this product (e.g. walking shoes, sneakers, or apparel).\n"
+                "3. NEVER recommend, list, or invent external brands or external products (NEVER mention Nike, Adidas, New Balance, Under Armour, etc.). You represent Atlas Commerce only.\n"
+                "4. Briefly inform them of what our store carries (tech, workspace, and office products) and ask if they need anything for their desk or workspace setup instead.\n"
+                "5. Keep answers concise, direct, polite, and well-formatted in Markdown."
+            )
+
         return retrieved_products, system_instruction
     except Exception as e:
         logger.error(f"Error retrieving shopping context: {e}")
-        return [], "You are a helpful eCommerce shopping assistant."
+        return [], "You are Atlas AI Concierge, a helpful eCommerce shopping assistant for tech and workspace gear."
 
 
 @router.get("/models", response_model=ModelsResponse)
@@ -77,9 +96,8 @@ async def generate_response_stream(
     retrieved_products, system_instruction = await _get_shopping_context(payload.prompt)
 
     async def event_generator():
-        # 1. Emit structured citations event with authoritative product records
-        if retrieved_products:
-            yield json.dumps({"type": "citations", "products": retrieved_products}) + "\n"
+        # 1. Emit structured citations event with authoritative product records (or empty list if no matches)
+        yield json.dumps({"type": "citations", "products": retrieved_products}) + "\n"
 
         full_response_text = ""
         events = chat.events(payload, model, system_prompt=system_instruction)
