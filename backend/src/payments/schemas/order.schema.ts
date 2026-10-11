@@ -109,9 +109,9 @@ export class Order {
   orderNumber!: string;
 
   // userId links this order to an authenticated user account.
-  // Null for anonymous/legacy orders — backward compatible.
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true })
-  userId!: mongoose.Types.ObjectId | null;
+  // Can be integer string (from Postgres) or Mongo ObjectId or null.
+  @Prop({ type: mongoose.Schema.Types.Mixed, default: null, index: true })
+  userId!: any;
 
   @Prop({
     required: true,

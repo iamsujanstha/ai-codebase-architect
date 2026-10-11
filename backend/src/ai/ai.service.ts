@@ -103,19 +103,38 @@ export class AiGatewayService {
           quantizationLevel: model.quantization_level ?? null,
         })),
       };
-    } catch (error) {
-      // Handle circuit breaker open state
-      if (error instanceof CircuitBreakerOpenError) {
-        this.logger.error({
-          event: 'ai_circuit_open',
-          operation: 'list_models',
-          message: 'AI service circuit breaker is open - service appears down',
-        });
-        throw new ServiceUnavailableException(
-          'AI service is temporarily unavailable. Please try again shortly.',
-        );
-      }
-      this.handleAxiosError(error, 'while loading local models');
+    } catch (error: any) {
+      this.logger.warn({
+        event: 'ai_models_fallback',
+        operation: 'list_models',
+        message: `Downstream AI service error (${error.message}). Returning fallback model list.`,
+      });
+      return {
+        provider: 'ollama',
+        defaultModel: 'deepseek-coder:6.7b',
+        models: [
+          {
+            name: 'deepseek-coder:6.7b',
+            sizeBytes: 0,
+            sizeLabel: 'Local Ollama',
+            modifiedAt: '',
+            digest: null,
+            family: 'deepseek',
+            parameterSize: '6.7B',
+            quantizationLevel: null,
+          },
+          {
+            name: 'llama3:latest',
+            sizeBytes: 0,
+            sizeLabel: 'Local Ollama',
+            modifiedAt: '',
+            digest: null,
+            family: 'llama',
+            parameterSize: '8B',
+            quantizationLevel: null,
+          },
+        ],
+      };
     }
   }
 

@@ -5,14 +5,16 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import axios from 'axios';
 import { createHmac, randomBytes } from 'crypto';
-import { FilterQuery, Model } from 'mongoose';
+import { FilterQuery, Model, Types } from 'mongoose';
 import Stripe from 'stripe';
 import { Product, ProductDocument } from '../catalog/schemas/product.schema';
+import { PostgresService } from '../database/postgres.service';
 import { CheckoutCustomerDto } from './dto/checkout-customer.dto';
 import { CreatePaymentSessionDto } from './dto/create-payment-session.dto';
 import { PaymentQuoteRequestDto } from './dto/payment-quote-request.dto';
@@ -154,6 +156,8 @@ export class PaymentsService {
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
     private readonly mailService: MailService,
+    @Optional()
+    private readonly postgresService?: PostgresService,
   ) {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? '';
     this.stripeClient = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
@@ -540,8 +544,69 @@ export class PaymentsService {
   }
 
   async getOrdersForUser(userId: string): Promise<OrderSummaryResponse[]> {
+    if (this.postgresService?.isReady()) {
+      const numericUserId = parseInt(userId, 10);
+      if (!isNaN(numericUserId)) {
+        try {
+          const pgRes = await this.postgresService.query(
+            `SELECT o.*, 
+                    COALESCE(json_agg(json_build_object(
+                      'productId', oi.product_id::text,
+                      'name', oi.name,
+                      'quantity', oi.quantity,
+                      'unitAmount', oi.price,
+                      'lineTotal', oi.subtotal,
+                      'currency', 'USD'
+                    )) FILTER (WHERE oi.id IS NOT NULL), '[]') as items
+             FROM orders o
+             LEFT JOIN order_items oi ON oi.order_id = o.id
+             WHERE o.user_id = $1
+             GROUP BY o.id
+             ORDER BY o.created_at DESC
+             LIMIT 100`,
+            [numericUserId],
+          );
+          if (pgRes.rows.length > 0) {
+            return pgRes.rows.map((row) => ({
+              orderNumber: row.order_number,
+              status: row.status,
+              paymentProvider: row.payment_method || 'stripe',
+              customer: {
+                fullName: 'Customer',
+                email: '',
+                phone: undefined,
+                addressLine1: undefined,
+                city: undefined,
+                country: undefined,
+              },
+              items: row.items || [],
+              pricing: {
+                currency: 'USD',
+                subtotal: parseFloat(row.total_amount) || 0,
+                taxAmount: 0,
+                serviceCharge: 0,
+                deliveryCharge: 0,
+                total: parseFloat(row.total_amount) || 0,
+              },
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            }));
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to fetch orders from Postgres: ${(err as any)?.message}`);
+        }
+      }
+    }
+
+    const query: any = {
+      $or: [{ userId }],
+    };
+    if (Types.ObjectId.isValid(userId)) {
+      query.$or.push({ userId: new Types.ObjectId(userId) });
+    }
+
     const orders = await this.orderModel
-      .find({ userId })
+      .find(query)
       .sort({ createdAt: -1 })
       .limit(100)
       .exec();
@@ -646,6 +711,62 @@ export class PaymentsService {
   ): Promise<PricedCartLine[]> {
     const normalizedItems = this.mergeDuplicateCartItems(items);
     const requestedIds = normalizedItems.map((item) => item.productId);
+
+    // If Neon PostgreSQL is available, query Postgres products table
+    if (this.postgresService?.isReady()) {
+      try {
+        const intIds = requestedIds
+          .map((id) => parseInt(id, 10))
+          .filter((id) => !isNaN(id));
+
+        if (intIds.length > 0) {
+          const pgRes = await this.postgresService.query(
+            `SELECT * FROM products WHERE id = ANY($1::int[])`,
+            [intIds],
+          );
+
+          if (pgRes.rows.length === normalizedItems.length) {
+            const productMap = new Map(
+              pgRes.rows.map((r) => [String(r.id), r] as const),
+            );
+
+            return normalizedItems.map((item) => {
+              const product = productMap.get(item.productId);
+              if (!product) {
+                throw new BadRequestException(
+                  'A requested cart item could not be found in the catalog.',
+                );
+              }
+              const price = Number(product.price) || 0;
+              const stock = product.stock ?? 50;
+
+              if (stock < item.quantity) {
+                throw new BadRequestException(
+                  `${product.name} only has ${stock} units left in stock.`,
+                );
+              }
+
+              const slug = (product.name || `product-${product.id}`)
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/(^-|-$)/g, '');
+
+              return {
+                productId: String(product.id),
+                slug,
+                name: product.name,
+                quantity: item.quantity,
+                unitAmountUsd: price,
+                unitAmountNpr: Math.round(price * 135),
+              };
+            });
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`PostgreSQL cart lookup: ${err.message}. Trying Mongo fallback.`);
+      }
+    }
+
     const products = await this.productModel
       .find({ _id: { $in: requestedIds } } as FilterQuery<ProductDocument>)
       .lean();
@@ -857,7 +978,7 @@ export class PaymentsService {
   ): Promise<OrderDocument> {
     const orderNumber = this.generateOrderNumber();
 
-    return this.orderModel.create({
+    const orderDoc = await this.orderModel.create({
       orderNumber,
       userId: userId ?? null,
       paymentProvider: provider,
@@ -902,6 +1023,65 @@ export class PaymentsService {
         },
       ],
     });
+
+    // Also persist order to Neon PostgreSQL
+    if (this.postgresService?.isReady()) {
+      try {
+        let numericUserId: number | null = null;
+        if (userId && !isNaN(parseInt(userId, 10))) {
+          numericUserId = parseInt(userId, 10);
+        } else {
+          const userRes = await this.postgresService.query(
+            `SELECT id FROM users WHERE email = $1 LIMIT 1`,
+            [customer.email.toLowerCase()],
+          );
+          if (userRes.rows.length > 0) {
+            numericUserId = userRes.rows[0].id;
+          }
+        }
+
+        const pgOrderRes = await this.postgresService.query(
+          `INSERT INTO orders (user_id, order_number, total_amount, status, payment_method, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+           RETURNING id`,
+          [
+            numericUserId,
+            orderNumber,
+            quote.total,
+            'pending',
+            provider.toLowerCase(),
+          ],
+        );
+
+        const pgOrderId = pgOrderRes.rows[0]?.id;
+        if (pgOrderId) {
+          for (const item of pricedCart) {
+            const intProdId = parseInt(item.productId, 10);
+            const unitPrice =
+              provider === PaymentProvider.STRIPE
+                ? item.unitAmountUsd
+                : item.unitAmountNpr ?? 0;
+            await this.postgresService.query(
+              `INSERT INTO order_items (order_id, product_id, name, price, quantity)
+               VALUES ($1, $2, $3, $4, $5)`,
+              [
+                pgOrderId,
+                !isNaN(intProdId) ? intProdId : null,
+                item.name,
+                unitPrice,
+                item.quantity,
+              ],
+            );
+          }
+          this.logger.log(`✅ Order ${orderNumber} persisted to Neon PostgreSQL (ID: ${pgOrderId})`);
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not save order snapshot to Neon PostgreSQL: ${err.message}`);
+      }
+    }
+
+    return orderDoc;
+
   }
 
   private async syncOrderWithStripeSession(
@@ -977,6 +1157,28 @@ export class PaymentsService {
       changedAt: new Date(),
     });
     await order.save();
+
+    // Sync paid status and decrement inventory in Neon PostgreSQL
+    if (this.postgresService?.isReady()) {
+      try {
+        await this.postgresService.query(
+          `UPDATE orders SET status = 'paid', payment_intent_id = $1, updated_at = NOW() WHERE order_number = $2`,
+          [options.paymentReference ?? options.providerReference ?? null, orderNumber],
+        );
+        for (const item of order.items) {
+          const intId = parseInt(item.productId, 10);
+          if (!isNaN(intId)) {
+            await this.postgresService.query(
+              `UPDATE products SET stock = GREATEST(0, stock - $1), updated_at = NOW() WHERE id = $2`,
+              [item.quantity, intId],
+            );
+          }
+        }
+        this.logger.log(`✅ Order ${orderNumber} updated to paid in Neon PostgreSQL`);
+      } catch (pgErr: any) {
+        this.logger.warn(`Could not update order status in Neon PostgreSQL: ${pgErr.message}`);
+      }
+    }
 
     // Send confirmation email to the customer.
     // We await it properly so errors surface in logs instead of being silently swallowed.

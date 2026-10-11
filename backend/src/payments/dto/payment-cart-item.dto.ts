@@ -1,7 +1,8 @@
-import { IsInt, IsMongoId, Max, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, Max, Min } from 'class-validator';
 
 export class PaymentCartItemDto {
-  @IsMongoId()
+  @IsString()
+  @IsNotEmpty()
   productId!: string;
 
   @IsInt()
@@ -9,3 +10,4 @@ export class PaymentCartItemDto {
   @Max(10)
   quantity!: number;
 }
+
