@@ -42,7 +42,10 @@ export class Order {
   @Prop({ required: true })
   currency!: string;
 
-  @Prop({ default: 'pending', enum: ['pending', 'paid', 'failed', 'cancelled'] })
+  @Prop({
+    default: 'pending',
+    enum: ['pending', 'paid', 'failed', 'cancelled'],
+  })
   status!: string;
 
   @Prop()

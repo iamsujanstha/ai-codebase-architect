@@ -158,4 +158,7 @@ export type OrderDocument = HydratedDocument<Order>;
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
 
-OrderSchema.index({ 'providerMetadata.stripeCheckoutSessionId': 1 }, { sparse: true });
+OrderSchema.index(
+  { 'providerMetadata.stripeCheckoutSessionId': 1 },
+  { sparse: true },
+);

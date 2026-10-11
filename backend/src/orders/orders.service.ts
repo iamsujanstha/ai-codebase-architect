@@ -33,7 +33,11 @@ export class OrdersService {
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
   ) {}
 
-  async createOrder(userId: string, userEmail: string, dto: CreateOrderDto): Promise<Order> {
+  async createOrder(
+    userId: string,
+    userEmail: string,
+    dto: CreateOrderDto,
+  ): Promise<Order> {
     const order = new this.orderModel({
       userId,
       userEmail,
@@ -44,21 +48,24 @@ export class OrdersService {
   }
 
   async getOrdersByUser(userId: string): Promise<Order[]> {
-    return this.orderModel
-      .find({ userId })
-      .sort({ createdAt: -1 })
-      .lean();
+    return this.orderModel.find({ userId }).sort({ createdAt: -1 }).lean();
   }
 
   async getOrderById(orderId: string, userId: string): Promise<Order> {
-    const order = await this.orderModel.findOne({ _id: orderId, userId }).lean();
+    const order = await this.orderModel
+      .findOne({ _id: orderId, userId })
+      .lean();
     if (!order) {
       throw new NotFoundException('Order not found.');
     }
     return order;
   }
 
-  async updateOrderStatus(orderId: string, status: string, paymentReference?: string): Promise<Order | null> {
+  async updateOrderStatus(
+    orderId: string,
+    status: string,
+    paymentReference?: string,
+  ): Promise<Order | null> {
     return this.orderModel.findByIdAndUpdate(
       orderId,
       { status, ...(paymentReference ? { paymentReference } : {}) },

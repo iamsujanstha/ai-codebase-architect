@@ -10,47 +10,47 @@ import { Connection } from 'mongoose';
 
 /**
  * Idempotency Middleware
- * 
+ *
  * CRITICAL: Prevents duplicate processing of payment webhooks and sensitive operations.
- * 
+ *
  * HOW IT WORKS:
  * 1. Client sends `Idempotency-Key` header (UUID)
  * 2. First request: Store key + response in database
  * 3. Duplicate request: Return cached response (409 or original)
- * 
+ *
  * USE CASES:
  * - Stripe webhook arrives twice → Only process once
  * - User double-clicks "Pay" → Only charge once
  * - Network retry → Return original result
- * 
+ *
  * IMPLEMENTATION:
  * - Uses MongoDB capped collection for automatic TTL
  * - 24-hour retention (Stripe retries for 3 days, but we want faster cleanup)
  * - Atomic findOneAndUpdate prevents race conditions
- * 
+ *
  * SECURITY:
  * - Keys are scoped to endpoint + user (prevents cross-user replay)
  * - Keys expire after 24 hours
  * - Random UUID required (prevents guessing)
- * 
+ *
  * STRIPE INTEGRATION:
  * - Stripe doesn't send Idempotency-Key in webhooks
  * - We use Stripe event ID as idempotency key
  * - See webhook handler for implementation
- * 
+ *
  * INTERVIEW POINTS:
  * - Q: "Why not use Redis?"
  *   A: MongoDB already in stack. Redis would be faster but adds dependency.
  *      For < 1000 req/sec, Mongo is sufficient. Would switch to Redis at scale.
- * 
+ *
  * - Q: "Why 24 hours?"
  *   A: Balances safety (Stripe retries for 3 days) vs storage (old keys cleaned up).
  *      Configurable per route if needed.
- * 
+ *
  * - Q: "What if MongoDB is down?"
  *   A: Request fails (safe default). Better than processing twice.
  *      Alternative: Fall back to in-memory cache (loses idempotency across restarts).
- * 
+ *
  * TRADEOFFS:
  * - ✅ Prevents duplicate operations (critical for payments)
  * - ✅ Simple implementation (one MongoDB collection)
@@ -83,13 +83,10 @@ export class IdempotencyMiddleware implements NestMiddleware {
   private async ensureIndexes() {
     try {
       const collection = this.connection.collection(this.COLLECTION_NAME);
-      
+
       // TTL index for automatic expiry
-      await collection.createIndex(
-        { expiresAt: 1 },
-        { expireAfterSeconds: 0 },
-      );
-      
+      await collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
       // Unique index on composite key
       await collection.createIndex({ key: 1 }, { unique: true });
     } catch (error: any) {
@@ -100,7 +97,11 @@ export class IdempotencyMiddleware implements NestMiddleware {
 
   async use(req: Request, res: Response, next: NextFunction) {
     // Only apply to mutating operations
-    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    if (
+      req.method === 'GET' ||
+      req.method === 'HEAD' ||
+      req.method === 'OPTIONS'
+    ) {
       return next();
     }
 
@@ -135,7 +136,7 @@ export class IdempotencyMiddleware implements NestMiddleware {
       if (existing) {
         // DUPLICATE REQUEST DETECTED
         // Return cached response instead of reprocessing
-        
+
         console.log(
           `[Idempotency] Duplicate request detected: ${compositeKey}`,
         );
@@ -170,7 +171,7 @@ export class IdempotencyMiddleware implements NestMiddleware {
       res.send = (body: any) => {
         if (!responseCaptured) {
           responseCaptured = true;
-          
+
           // Try to parse body as JSON
           let parsedBody = body;
           if (typeof body === 'string') {
@@ -180,7 +181,7 @@ export class IdempotencyMiddleware implements NestMiddleware {
               parsedBody = { body }; // Non-JSON response
             }
           }
-          
+
           this.cacheResponse(
             compositeKey,
             res.statusCode,
@@ -255,10 +256,10 @@ export class IdempotencyMiddleware implements NestMiddleware {
 
 /**
  * USAGE IN MODULE:
- * 
+ *
  * import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
  * import { IdempotencyMiddleware } from './common/middleware/idempotency.middleware';
- * 
+ *
  * @Module({ ... })
  * export class PaymentsModule implements NestModule {
  *   configure(consumer: MiddlewareConsumer) {
@@ -270,11 +271,11 @@ export class IdempotencyMiddleware implements NestMiddleware {
  *       );
  *   }
  * }
- * 
+ *
  * FRONTEND USAGE:
- * 
+ *
  * import { v4 as uuidv4 } from 'uuid';
- * 
+ *
  * const response = await fetch('/payments/stripe/checkout-session', {
  *   method: 'POST',
  *   headers: {
@@ -283,30 +284,30 @@ export class IdempotencyMiddleware implements NestMiddleware {
  *   },
  *   body: JSON.stringify({ items: [...] }),
  * });
- * 
+ *
  * if (response.status === 409) {
  *   // Request already processed, use cached result
  *   const { originalResponse } = await response.json();
  *   return originalResponse;
  * }
- * 
+ *
  * WEBHOOK USAGE (Stripe event ID as idempotency key):
- * 
+ *
  * async handleStripeWebhook(event: Stripe.Event) {
  *   // Use Stripe event ID as idempotency key
  *   const idempotencyKey = event.id; // e.g., "evt_abc123"
- *   
+ *
  *   // Check if we've processed this event before
  *   const collection = this.connection.collection('idempotency_keys');
  *   const existing = await collection.findOne({ key: idempotencyKey });
- *   
+ *
  *   if (existing) {
  *     console.log(`Duplicate webhook ignored: ${idempotencyKey}`);
  *     return; // Already processed
  *   }
- *   
+ *
  *   // Process event...
- *   
+ *
  *   // Mark as processed
  *   await collection.insertOne({
  *     key: idempotencyKey,

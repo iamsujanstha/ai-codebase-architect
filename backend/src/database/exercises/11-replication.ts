@@ -2,13 +2,13 @@ import { getPool } from './db';
 
 /**
  * EXERCISE 11: Replication, WAL (Write-Ahead Logging), & Architecture
- * 
+ *
  * MongoDB vs PostgreSQL:
  * - MongoDB Replica Sets:
  *   - Replicates via the `local.oplog.rs` collection.
  *   - Automatic failover using internal Raft-like elections (Primary + Secondaries).
  *   - Read preferences: primary, primaryPreferred, secondary, nearest.
- * 
+ *
  * - PostgreSQL Replication:
  *   - Write-Ahead Log (WAL): Before any page is modified in RAM or written to disk,
  *     the change is sequentially written to the WAL for crash-safety and replication.
@@ -16,7 +16,7 @@ import { getPool } from './db';
  *   - Logical Replication: Uses Publications and Subscriptions to stream decoded row changes (useful for cross-version or selective table replication).
  *   - Neon Architecture: Separates compute from storage! Postgres runs as a stateless compute node,
  *     streaming WAL to distributed "Safekeepers", while "Pageservers" manage tiered storage in S3.
- * 
+ *
  * Concepts Demonstrated:
  * 1. Current WAL Location (`pg_current_wal_lsn()`)
  * 2. System Replication views (`pg_stat_replication`, `pg_stat_wal`)
@@ -32,9 +32,13 @@ export async function runReplicationExercise(): Promise<void> {
     // 1. Inspect WAL Status
     console.log('--- 1. Current WAL Location (Log Sequence Number) ---');
     try {
-      const walRes = await pool.query(`SELECT pg_current_wal_lsn() as current_lsn, pg_is_in_recovery() as in_recovery;`);
+      const walRes = await pool.query(
+        `SELECT pg_current_wal_lsn() as current_lsn, pg_is_in_recovery() as in_recovery;`,
+      );
       console.log(`Current LSN:      ${walRes.rows[0].current_lsn}`);
-      console.log(`Is in Recovery:   ${walRes.rows[0].in_recovery} (false = Primary / Compute Writer)`);
+      console.log(
+        `Is in Recovery:   ${walRes.rows[0].in_recovery} (false = Primary / Compute Writer)`,
+      );
     } catch (err: any) {
       console.log(`Note on WAL query: ${err.message}`);
     }
@@ -52,7 +56,9 @@ export async function runReplicationExercise(): Promise<void> {
         console.log(`WAL Buffers Full: ${walStats.rows[0].wal_buffers_full}`);
       }
     } catch {
-      console.log('pg_stat_wal stats not available or restricted on this instance.');
+      console.log(
+        'pg_stat_wal stats not available or restricted on this instance.',
+      );
     }
 
     // 3. Inspect Active Replication Standbys
@@ -63,16 +69,20 @@ export async function runReplicationExercise(): Promise<void> {
         FROM pg_stat_replication;
       `);
       if (repStats.rows.length === 0) {
-        console.log('ℹ️  No external physical streaming standbys connected (In Neon, Safekeepers manage WAL durability externally).');
+        console.log(
+          'ℹ️  No external physical streaming standbys connected (In Neon, Safekeepers manage WAL durability externally).',
+        );
       } else {
-        repStats.rows.forEach(r => console.log('Standby:', r));
+        repStats.rows.forEach((r) => console.log('Standby:', r));
       }
     } catch {
       console.log('Replication view access restricted by provider policy.');
     }
 
     // 4. Theoretical Comparison Matrix
-    console.log('\n--- 4. Summary Matrix: MongoDB Replica Sets vs PostgreSQL Replication ---');
+    console.log(
+      '\n--- 4. Summary Matrix: MongoDB Replica Sets vs PostgreSQL Replication ---',
+    );
     console.log(`
 ┌─────────────────────┬────────────────────────────────┬────────────────────────────────┐
 │ Dimension           │ MongoDB                        │ PostgreSQL                     │
@@ -92,5 +102,7 @@ export async function runReplicationExercise(): Promise<void> {
 }
 
 if (require.main === module) {
-  runReplicationExercise().then(() => process.exit(0)).catch(() => process.exit(1));
+  runReplicationExercise()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
 }

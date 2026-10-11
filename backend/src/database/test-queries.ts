@@ -6,7 +6,8 @@
 
 import { Client } from 'pg';
 
-const connectionString = process.env.POSTGRES_URL || 
+const connectionString =
+  process.env.POSTGRES_URL ||
   'postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
 
 async function runQueries() {
@@ -23,12 +24,14 @@ async function runQueries() {
     // LESSON 1: Basic SELECT
     // ========================================
     console.log('📚 LESSON 1: Basic SELECT\n');
-    
+
     const users = await client.query('SELECT * FROM users;');
     console.log('All users:');
     console.table(users.rows);
 
-    const products = await client.query('SELECT name, price, category FROM products ORDER BY price DESC;');
+    const products = await client.query(
+      'SELECT name, price, category FROM products ORDER BY price DESC;',
+    );
     console.log('Products (sorted by price):');
     console.table(products.rows);
 
@@ -82,14 +85,14 @@ async function runQueries() {
       EXPLAIN ANALYZE SELECT * FROM products WHERE name LIKE '%Laptop%';
     `);
     console.log('Query 1: Text search (should show Seq Scan):');
-    console.log(explain1.rows.map(r => r['QUERY PLAN']).join('\n'));
+    console.log(explain1.rows.map((r) => r['QUERY PLAN']).join('\n'));
 
     // Query using index (Index Scan)
     const explain2 = await client.query(`
       EXPLAIN ANALYZE SELECT * FROM products WHERE category = 'Electronics';
     `);
     console.log('\nQuery 2: Category filter (should show Index Scan):');
-    console.log(explain2.rows.map(r => r['QUERY PLAN']).join('\n'));
+    console.log(explain2.rows.map((r) => r['QUERY PLAN']).join('\n'));
 
     // ========================================
     // LESSON 5: Transactions (Atomicity)
@@ -108,11 +111,14 @@ async function runQueries() {
     console.log('Created order:', orderResult.rows[0]);
 
     // Insert order items
-    const itemResult = await client.query(`
+    const itemResult = await client.query(
+      `
       INSERT INTO order_items (order_id, product_id, name, price, quantity)
       VALUES ($1, 1, 'Laptop Pro 15', 1299.99, 1)
       RETURNING *;
-    `, [orderResult.rows[0].id]);
+    `,
+      [orderResult.rows[0].id],
+    );
     console.log('Created order item:', itemResult.rows[0]);
 
     // Rollback (for testing - won't persist)
@@ -183,7 +189,7 @@ async function runQueries() {
     // Summary
     // ========================================
     console.log('\n✅ Learning Complete!\n');
-    console.log('📚 You\'ve practiced:');
+    console.log("📚 You've practiced:");
     console.log('   ✓ SELECT, WHERE, ORDER BY');
     console.log('   ✓ Aggregations (COUNT, AVG, SUM, GROUP BY)');
     console.log('   ✓ EXPLAIN ANALYZE (understanding indexes)');
@@ -193,11 +199,12 @@ async function runQueries() {
     console.log('   ✓ Window Functions (ROW_NUMBER, AVG OVER)\n');
 
     console.log('🎯 Next Steps:');
-    console.log('   1. Practice isolation levels (see POSTGRES_SETUP_COMMANDS.md)');
+    console.log(
+      '   1. Practice isolation levels (see POSTGRES_SETUP_COMMANDS.md)',
+    );
     console.log('   2. Trigger deadlocks and understand resolution');
     console.log('   3. Optimize slow queries with EXPLAIN ANALYZE');
     console.log('   4. Implement idempotency with UNIQUE constraints\n');
-
   } catch (error) {
     console.error('❌ Error:', error);
   } finally {

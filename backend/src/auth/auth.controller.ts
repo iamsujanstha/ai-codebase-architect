@@ -1,4 +1,12 @@
-import { Controller, Post, Body, UseGuards, Get, Req, Res } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Get,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -9,7 +17,7 @@ import { RateLimit, RateLimitGuard } from '../common/guards/rate-limit.guard';
 
 /**
  * Authentication Controller
- * 
+ *
  * PHASE 1 PRODUCTION IMPROVEMENTS:
  * - Rate limiting applied to prevent brute-force attacks
  * - Login: 5 attempts per 15 minutes
@@ -55,7 +63,10 @@ export class AuthController {
   @Post('reset-password')
   @RateLimit(5, 60 * 60 * 1000) // 5 per hour
   @UseGuards(RateLimitGuard)
-  async resetPassword(@Body('token') token: string, @Body('password') password: string) {
+  async resetPassword(
+    @Body('token') token: string,
+    @Body('password') password: string,
+  ) {
     return this.authService.resetPassword(token, password);
   }
 
@@ -69,9 +80,10 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   async googleAuthRedirect(@Req() req: any, @Res() res: Response) {
     const result = await this.authService.googleLogin(req.user);
-    const frontendUrl = this.configService.get('FRONTEND_PUBLIC_URL') || 'http://localhost:8080';
+    const frontendUrl =
+      this.configService.get('FRONTEND_PUBLIC_URL') || 'http://localhost:8080';
 
-    const token   = result.access_token;
+    const token = result.access_token;
     const userStr = JSON.stringify(result.user);
 
     // After Google OAuth, always land on home unless a specific redirect was

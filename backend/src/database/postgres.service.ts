@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, QueryResult, QueryResultRow } from 'pg';
 
@@ -37,25 +42,36 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
         try {
           const client = await this.pool.connect();
           try {
-            const res = await client.query('SELECT current_database() as db, version() as ver;');
+            const res = await client.query(
+              'SELECT current_database() as db, version() as ver;',
+            );
             this.isConnected = true;
-            this.logger.log(`✅ Connected to Neon PostgreSQL database: ${res.rows[0].db}`);
+            this.logger.log(
+              `✅ Connected to Neon PostgreSQL database: ${res.rows[0].db}`,
+            );
             break;
           } finally {
             client.release();
           }
         } catch (err: any) {
           retries--;
-          this.logger.warn(`PostgreSQL connect attempt failed: ${err.message}. Retries remaining: ${retries}`);
+          this.logger.warn(
+            `PostgreSQL connect attempt failed: ${err.message}. Retries remaining: ${retries}`,
+          );
           if (retries === 0) {
-            this.logger.error(`❌ Failed to connect to PostgreSQL after retries: ${err.message}`);
+            this.logger.error(
+              `❌ Failed to connect to PostgreSQL after retries: ${err.message}`,
+            );
           } else {
             await new Promise((resolve) => setTimeout(resolve, 2000));
           }
         }
       }
     } catch (err: any) {
-      this.logger.error(`❌ Failed to initialize PostgreSQL pool: ${err.message}`, err.stack);
+      this.logger.error(
+        `❌ Failed to initialize PostgreSQL pool: ${err.message}`,
+        err.stack,
+      );
     }
   }
 

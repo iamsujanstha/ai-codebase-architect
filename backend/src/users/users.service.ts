@@ -164,7 +164,9 @@ export class UsersService {
         // Fallback
       }
     }
-    return this.userModel.findByIdAndUpdate(id, updateData, { new: true }).exec();
+    return this.userModel
+      .findByIdAndUpdate(id, updateData, { new: true })
+      .exec();
   }
 
   async findByResetToken(token: string): Promise<any> {
@@ -181,10 +183,11 @@ export class UsersService {
         // Fallback
       }
     }
-    return this.userModel.findOne({
-      resetToken: token,
-      resetTokenExpires: { $gt: new Date() },
-    }).exec();
+    return this.userModel
+      .findOne({
+        resetToken: token,
+        resetTokenExpires: { $gt: new Date() },
+      })
+      .exec();
   }
 }
-

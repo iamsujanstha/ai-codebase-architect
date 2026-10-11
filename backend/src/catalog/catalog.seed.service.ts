@@ -1,7 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CATEGORY_SEED_DATA, PRODUCT_SEED_DATA } from './data/catalog-seed.data';
+import {
+  CATEGORY_SEED_DATA,
+  PRODUCT_SEED_DATA,
+} from './data/catalog-seed.data';
 import { Category, CategoryDocument } from './schemas/category.schema';
 import { Product, ProductDocument } from './schemas/product.schema';
 

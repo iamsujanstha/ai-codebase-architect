@@ -6,7 +6,8 @@
 
 import { Client } from 'pg';
 
-const connectionString = process.env.POSTGRES_URL || 
+const connectionString =
+  process.env.POSTGRES_URL ||
   'postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
 
 async function seedData() {
@@ -23,7 +24,7 @@ async function seedData() {
     // 1. USERS (10 users: 2 admins, 8 regular)
     // ========================================
     console.log('👥 Seeding users...');
-    
+
     await client.query(`
       INSERT INTO users (email, password, name, role, google_id, avatar, is_active, last_login_at)
       VALUES
@@ -48,7 +49,7 @@ async function seedData() {
     // 2. PRODUCTS (30 products across 5 categories)
     // ========================================
     console.log('📦 Seeding products...');
-    
+
     await client.query(`
       INSERT INTO products (name, description, price, category, stock, image_url, featured)
       VALUES
@@ -99,35 +100,152 @@ async function seedData() {
     // 3. ORDERS (15 orders with various statuses)
     // ========================================
     console.log('🛒 Seeding orders...');
-    
+
     // Get user IDs
-    const usersResult = await client.query('SELECT id FROM users WHERE role = $1 LIMIT 8', ['user']);
-    const userIds = usersResult.rows.map(r => r.id);
+    const usersResult = await client.query(
+      'SELECT id FROM users WHERE role = $1 LIMIT 8',
+      ['user'],
+    );
+    const userIds = usersResult.rows.map((r) => r.id);
 
     // Create orders
     const orders = [
-      { userId: userIds[0], orderNumber: 'ORD-241001-001', totalAmount: 2499.99, status: 'paid', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '30 days'" },
-      { userId: userIds[0], orderNumber: 'ORD-241005-002', totalAmount: 449.99, status: 'paid', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '25 days'" },
-      { userId: userIds[1], orderNumber: 'ORD-241008-003', totalAmount: 1899.99, status: 'paid', paymentMethod: 'esewa', createdAt: "NOW() - INTERVAL '22 days'" },
-      { userId: userIds[1], orderNumber: 'ORD-241012-004', totalAmount: 89.99, status: 'paid', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '19 days'" },
-      { userId: userIds[2], orderNumber: 'ORD-241015-005', totalAmount: 1099.99, status: 'paid', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '16 days'" },
-      { userId: userIds[2], orderNumber: 'ORD-241018-006', totalAmount: 399.99, status: 'paid', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '13 days'" },
-      { userId: userIds[3], orderNumber: 'ORD-241020-007', totalAmount: 699.99, status: 'paid', paymentMethod: 'esewa', createdAt: "NOW() - INTERVAL '11 days'" },
-      { userId: userIds[3], orderNumber: 'ORD-241022-008', totalAmount: 249.99, status: 'paid', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '9 days'" },
-      { userId: userIds[4], orderNumber: 'ORD-241025-009', totalAmount: 599.99, status: 'paid', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '6 days'" },
-      { userId: userIds[4], orderNumber: 'ORD-241027-010', totalAmount: 49.99, status: 'paid', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '4 days'" },
-      { userId: userIds[5], orderNumber: 'ORD-241029-011', totalAmount: 129.99, status: 'paid', paymentMethod: 'esewa', createdAt: "NOW() - INTERVAL '2 days'" },
-      { userId: userIds[5], orderNumber: 'ORD-241030-012', totalAmount: 849.98, status: 'pending', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '1 day'" },
-      { userId: userIds[6], orderNumber: 'ORD-241031-013', totalAmount: 2499.99, status: 'pending', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '12 hours'" },
-      { userId: userIds[6], orderNumber: 'ORD-241031-014', totalAmount: 159.98, status: 'cancelled', paymentMethod: 'stripe', createdAt: "NOW() - INTERVAL '6 hours'" },
-      { userId: userIds[7], orderNumber: 'ORD-241031-015', totalAmount: 99.99, status: 'pending', paymentMethod: 'esewa', createdAt: "NOW() - INTERVAL '2 hours'" },
+      {
+        userId: userIds[0],
+        orderNumber: 'ORD-241001-001',
+        totalAmount: 2499.99,
+        status: 'paid',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '30 days'",
+      },
+      {
+        userId: userIds[0],
+        orderNumber: 'ORD-241005-002',
+        totalAmount: 449.99,
+        status: 'paid',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '25 days'",
+      },
+      {
+        userId: userIds[1],
+        orderNumber: 'ORD-241008-003',
+        totalAmount: 1899.99,
+        status: 'paid',
+        paymentMethod: 'esewa',
+        createdAt: "NOW() - INTERVAL '22 days'",
+      },
+      {
+        userId: userIds[1],
+        orderNumber: 'ORD-241012-004',
+        totalAmount: 89.99,
+        status: 'paid',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '19 days'",
+      },
+      {
+        userId: userIds[2],
+        orderNumber: 'ORD-241015-005',
+        totalAmount: 1099.99,
+        status: 'paid',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '16 days'",
+      },
+      {
+        userId: userIds[2],
+        orderNumber: 'ORD-241018-006',
+        totalAmount: 399.99,
+        status: 'paid',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '13 days'",
+      },
+      {
+        userId: userIds[3],
+        orderNumber: 'ORD-241020-007',
+        totalAmount: 699.99,
+        status: 'paid',
+        paymentMethod: 'esewa',
+        createdAt: "NOW() - INTERVAL '11 days'",
+      },
+      {
+        userId: userIds[3],
+        orderNumber: 'ORD-241022-008',
+        totalAmount: 249.99,
+        status: 'paid',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '9 days'",
+      },
+      {
+        userId: userIds[4],
+        orderNumber: 'ORD-241025-009',
+        totalAmount: 599.99,
+        status: 'paid',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '6 days'",
+      },
+      {
+        userId: userIds[4],
+        orderNumber: 'ORD-241027-010',
+        totalAmount: 49.99,
+        status: 'paid',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '4 days'",
+      },
+      {
+        userId: userIds[5],
+        orderNumber: 'ORD-241029-011',
+        totalAmount: 129.99,
+        status: 'paid',
+        paymentMethod: 'esewa',
+        createdAt: "NOW() - INTERVAL '2 days'",
+      },
+      {
+        userId: userIds[5],
+        orderNumber: 'ORD-241030-012',
+        totalAmount: 849.98,
+        status: 'pending',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '1 day'",
+      },
+      {
+        userId: userIds[6],
+        orderNumber: 'ORD-241031-013',
+        totalAmount: 2499.99,
+        status: 'pending',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '12 hours'",
+      },
+      {
+        userId: userIds[6],
+        orderNumber: 'ORD-241031-014',
+        totalAmount: 159.98,
+        status: 'cancelled',
+        paymentMethod: 'stripe',
+        createdAt: "NOW() - INTERVAL '6 hours'",
+      },
+      {
+        userId: userIds[7],
+        orderNumber: 'ORD-241031-015',
+        totalAmount: 99.99,
+        status: 'pending',
+        paymentMethod: 'esewa',
+        createdAt: "NOW() - INTERVAL '2 hours'",
+      },
     ];
 
     for (const order of orders) {
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO orders (user_id, order_number, total_amount, status, payment_method, created_at)
         VALUES ($1, $2, $3, $4, $5, ${order.createdAt})
-      `, [order.userId, order.orderNumber, order.totalAmount, order.status, order.paymentMethod]);
+      `,
+        [
+          order.userId,
+          order.orderNumber,
+          order.totalAmount,
+          order.status,
+          order.paymentMethod,
+        ],
+      );
     }
     console.log('✅ Orders seeded (15 orders)\n');
 
@@ -135,67 +253,188 @@ async function seedData() {
     // 4. ORDER ITEMS (products in orders)
     // ========================================
     console.log('📋 Seeding order items...');
-    
+
     // Get order IDs
-    const ordersResult = await client.query('SELECT id, order_number FROM orders ORDER BY created_at');
-    const orderIdMap = Object.fromEntries(ordersResult.rows.map(r => [r.order_number, r.id]));
+    const ordersResult = await client.query(
+      'SELECT id, order_number FROM orders ORDER BY created_at',
+    );
+    const orderIdMap = Object.fromEntries(
+      ordersResult.rows.map((r) => [r.order_number, r.id]),
+    );
 
     const orderItems = [
       // Order 1: MacBook Pro
-      { orderId: orderIdMap['ORD-241001-001'], productId: 1, name: 'MacBook Pro 16"', price: 2499.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241001-001'],
+        productId: 1,
+        name: 'MacBook Pro 16"',
+        price: 2499.99,
+        quantity: 1,
+      },
+
       // Order 2: Ergonomic chair
-      { orderId: orderIdMap['ORD-241005-002'], productId: 11, name: 'ErgoChair Pro', price: 449.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241005-002'],
+        productId: 11,
+        name: 'ErgoChair Pro',
+        price: 449.99,
+        quantity: 1,
+      },
+
       // Order 3: Dell laptop
-      { orderId: orderIdMap['ORD-241008-003'], productId: 2, name: 'Dell XPS 15', price: 1899.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241008-003'],
+        productId: 2,
+        name: 'Dell XPS 15',
+        price: 1899.99,
+        quantity: 1,
+      },
+
       // Order 4: Multiple accessories
-      { orderId: orderIdMap['ORD-241012-004'], productId: 7, name: 'Logitech MX Master 3S', price: 99.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241012-004'],
+        productId: 7,
+        name: 'Logitech MX Master 3S',
+        price: 99.99,
+        quantity: 1,
+      },
+
       // Order 5: iPad
-      { orderId: orderIdMap['ORD-241015-005'], productId: 3, name: 'iPad Pro 12.9"', price: 1099.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241015-005'],
+        productId: 3,
+        name: 'iPad Pro 12.9"',
+        price: 1099.99,
+        quantity: 1,
+      },
+
       // Order 6: Headphones
-      { orderId: orderIdMap['ORD-241018-006'], productId: 5, name: 'Sony WH-1000XM5', price: 399.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241018-006'],
+        productId: 5,
+        name: 'Sony WH-1000XM5',
+        price: 399.99,
+        quantity: 1,
+      },
+
       // Order 7: Standing desk
-      { orderId: orderIdMap['ORD-241020-007'], productId: 12, name: 'Standing Desk Pro', price: 699.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241020-007'],
+        productId: 12,
+        name: 'Standing Desk Pro',
+        price: 699.99,
+        quantity: 1,
+      },
+
       // Order 8: AirPods
-      { orderId: orderIdMap['ORD-241022-008'], productId: 6, name: 'Apple AirPods Pro 2', price: 249.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241022-008'],
+        productId: 6,
+        name: 'Apple AirPods Pro 2',
+        price: 249.99,
+        quantity: 1,
+      },
+
       // Order 9: Monitor
-      { orderId: orderIdMap['ORD-241025-009'], productId: 9, name: 'LG 27" 4K Monitor', price: 599.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241025-009'],
+        productId: 9,
+        name: 'LG 27" 4K Monitor',
+        price: 599.99,
+        quantity: 1,
+      },
+
       // Order 10: Books
-      { orderId: orderIdMap['ORD-241027-010'], productId: 10, name: 'USB-C Hub 8-in-1', price: 49.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241027-010'],
+        productId: 10,
+        name: 'USB-C Hub 8-in-1',
+        price: 49.99,
+        quantity: 1,
+      },
+
       // Order 11: Multiple items
-      { orderId: orderIdMap['ORD-241029-011'], productId: 8, name: 'Keychron K8 Pro', price: 109.99, quantity: 1 },
-      { orderId: orderIdMap['ORD-241029-011'], productId: 15, name: 'Cable Management Box', price: 24.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241029-011'],
+        productId: 8,
+        name: 'Keychron K8 Pro',
+        price: 109.99,
+        quantity: 1,
+      },
+      {
+        orderId: orderIdMap['ORD-241029-011'],
+        productId: 15,
+        name: 'Cable Management Box',
+        price: 24.99,
+        quantity: 1,
+      },
+
       // Order 12: Books bundle
-      { orderId: orderIdMap['ORD-241030-012'], productId: 19, name: 'Clean Code by Robert Martin', price: 39.99, quantity: 1 },
-      { orderId: orderIdMap['ORD-241030-012'], productId: 20, name: 'Designing Data-Intensive Applications', price: 49.99, quantity: 1 },
-      { orderId: orderIdMap['ORD-241030-012'], productId: 21, name: 'System Design Interview Vol 1', price: 34.99, quantity: 2 },
-      
+      {
+        orderId: orderIdMap['ORD-241030-012'],
+        productId: 19,
+        name: 'Clean Code by Robert Martin',
+        price: 39.99,
+        quantity: 1,
+      },
+      {
+        orderId: orderIdMap['ORD-241030-012'],
+        productId: 20,
+        name: 'Designing Data-Intensive Applications',
+        price: 49.99,
+        quantity: 1,
+      },
+      {
+        orderId: orderIdMap['ORD-241030-012'],
+        productId: 21,
+        name: 'System Design Interview Vol 1',
+        price: 34.99,
+        quantity: 2,
+      },
+
       // Order 13: MacBook (pending)
-      { orderId: orderIdMap['ORD-241031-013'], productId: 1, name: 'MacBook Pro 16"', price: 2499.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241031-013'],
+        productId: 1,
+        name: 'MacBook Pro 16"',
+        price: 2499.99,
+        quantity: 1,
+      },
+
       // Order 14: Accessories (cancelled)
-      { orderId: orderIdMap['ORD-241031-014'], productId: 28, name: 'Laptop Stand Aluminum', price: 49.99, quantity: 1 },
-      { orderId: orderIdMap['ORD-241031-014'], productId: 7, name: 'Logitech MX Master 3S', price: 99.99, quantity: 1 },
-      
+      {
+        orderId: orderIdMap['ORD-241031-014'],
+        productId: 28,
+        name: 'Laptop Stand Aluminum',
+        price: 49.99,
+        quantity: 1,
+      },
+      {
+        orderId: orderIdMap['ORD-241031-014'],
+        productId: 7,
+        name: 'Logitech MX Master 3S',
+        price: 99.99,
+        quantity: 1,
+      },
+
       // Order 15: Logitech mouse (pending)
-      { orderId: orderIdMap['ORD-241031-015'], productId: 7, name: 'Logitech MX Master 3S', price: 99.99, quantity: 1 },
+      {
+        orderId: orderIdMap['ORD-241031-015'],
+        productId: 7,
+        name: 'Logitech MX Master 3S',
+        price: 99.99,
+        quantity: 1,
+      },
     ];
 
     for (const item of orderItems) {
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO order_items (order_id, product_id, name, price, quantity)
         VALUES ($1, $2, $3, $4, $5)
-      `, [item.orderId, item.productId, item.name, item.price, item.quantity]);
+      `,
+        [item.orderId, item.productId, item.name, item.price, item.quantity],
+      );
     }
     console.log('✅ Order items seeded (20 items)\n');
 
@@ -203,7 +442,7 @@ async function seedData() {
     // 5. CHAT THREADS (5 threads with messages)
     // ========================================
     console.log('💬 Seeding chat threads and messages...');
-    
+
     const chatThreads = [
       { userId: userIds[0], title: 'Help with MacBook setup' },
       { userId: userIds[1], title: 'Product recommendations for home office' },
@@ -213,29 +452,35 @@ async function seedData() {
     ];
 
     for (const thread of chatThreads) {
-      const threadResult = await client.query(`
+      const threadResult = await client.query(
+        `
         INSERT INTO chat_threads (user_id, title)
         VALUES ($1, $2)
         RETURNING id
-      `, [thread.userId, thread.title]);
-      
+      `,
+        [thread.userId, thread.title],
+      );
+
       const threadId = threadResult.rows[0].id;
 
       // Add messages to each thread
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO chat_messages (thread_id, role, content, timestamp)
         VALUES
           ($1, 'user', $2, NOW() - INTERVAL '10 minutes'),
           ($1, 'assistant', $3, NOW() - INTERVAL '9 minutes'),
           ($1, 'user', $4, NOW() - INTERVAL '5 minutes'),
           ($1, 'assistant', $5, NOW() - INTERVAL '4 minutes')
-      `, [
-        threadId,
-        `Hello, I need help with: ${thread.title}`,
-        `I'd be happy to help you with ${thread.title}. Let me provide you with some information...`,
-        'That sounds great! Can you tell me more details?',
-        'Of course! Here are the details you requested...'
-      ]);
+      `,
+        [
+          threadId,
+          `Hello, I need help with: ${thread.title}`,
+          `I'd be happy to help you with ${thread.title}. Let me provide you with some information...`,
+          'That sounds great! Can you tell me more details?',
+          'Of course! Here are the details you requested...',
+        ],
+      );
     }
     console.log('✅ Chat threads seeded (5 threads with 20 messages)\n');
 
@@ -243,14 +488,15 @@ async function seedData() {
     // 6. PAYMENT AUDIT LOGS (sample audit events)
     // ========================================
     console.log('📝 Seeding payment audit logs...');
-    
+
     // Get some order numbers
     const paidOrders = await client.query(`
       SELECT order_number FROM orders WHERE status = 'paid' LIMIT 5
     `);
 
     for (const order of paidOrders.rows) {
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO payment_audit_logs 
         (order_number, event_type, provider, user_id, actor, previous_status, new_status, details, ip_address, correlation_id, success, message)
         VALUES
@@ -268,7 +514,9 @@ async function seedData() {
           ($1, 'ORDER_FULFILLED', 'SYSTEM', $2, 'SYSTEM', 'paid', 'paid',
            '{"fulfillment_id": "ff_abc123", "tracking_number": "1Z999AA10123456784"}'::jsonb,
            NULL, gen_random_uuid(), true, 'Order marked as fulfilled')
-      `, [order.order_number, userIds[0]]);
+      `,
+        [order.order_number, userIds[0]],
+      );
     }
     console.log('✅ Payment audit logs seeded (15 events)\n');
 
@@ -276,7 +524,7 @@ async function seedData() {
     // 7. RATE LIMITS (sample rate limit entries)
     // ========================================
     console.log('🚦 Seeding rate limits...');
-    
+
     await client.query(`
       INSERT INTO rate_limits (key, count, window_start, expires_at)
       VALUES
@@ -291,7 +539,7 @@ async function seedData() {
     // 8. IDEMPOTENCY KEYS (sample idempotency entries)
     // ========================================
     console.log('🔑 Seeding idempotency keys...');
-    
+
     await client.query(`
       INSERT INTO idempotency_keys (key, response, status, expires_at)
       VALUES
@@ -312,10 +560,12 @@ async function seedData() {
     // ========================================
     // SUMMARY
     // ========================================
-    console.log('═══════════════════════════════════════════════════════════\n');
+    console.log(
+      '═══════════════════════════════════════════════════════════\n',
+    );
     console.log('✅ DATABASE SEEDING COMPLETE!\n');
     console.log('📊 Summary:');
-    
+
     const summary = await client.query(`
       SELECT 
         'users' as table_name, COUNT(*) as row_count FROM users
@@ -342,14 +592,17 @@ async function seedData() {
 
     console.log('\n🎯 What you can practice now:');
     console.log('   ✓ Complex JOINs (users + orders + order_items)');
-    console.log('   ✓ Aggregations (total spent per user, products per category)');
+    console.log(
+      '   ✓ Aggregations (total spent per user, products per category)',
+    );
     console.log('   ✓ Window functions (rank users by spending)');
     console.log('   ✓ Date filtering (orders in last 7 days, 30 days)');
     console.log('   ✓ Full-text search (products by name)');
     console.log('   ✓ JSONB queries (payment audit logs)');
     console.log('   ✓ Materialized views (user_order_stats)');
-    console.log('\n🚀 Run test queries: npx ts-node src/database/test-queries.ts\n');
-
+    console.log(
+      '\n🚀 Run test queries: npx ts-node src/database/test-queries.ts\n',
+    );
   } catch (error) {
     console.error('❌ Seeding failed:', error);
     throw error;
@@ -361,7 +614,9 @@ async function seedData() {
 // Run seeding
 seedData()
   .then(() => {
-    console.log('✅ Done! Your database is now fully populated with realistic data.\n');
+    console.log(
+      '✅ Done! Your database is now fully populated with realistic data.\n',
+    );
     process.exit(0);
   })
   .catch((error) => {

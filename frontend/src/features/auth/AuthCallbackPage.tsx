@@ -26,7 +26,11 @@ export const AuthCallbackPage: React.FC = () => {
         const user = JSON.parse(decodeURIComponent(userStr));
         login(token, user);
         // Replace so the callback URL doesn't stay in browser history
-        navigate(redirectTo, { replace: true });
+        if (user.role === 'admin') {
+          navigate('/admin', { replace: true });
+        } else {
+          navigate(redirectTo, { replace: true });
+        }
       } catch (err) {
         console.error('Failed to parse Google login response:', err);
         navigate(ROUTES.LOGIN, { replace: true });

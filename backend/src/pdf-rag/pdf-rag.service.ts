@@ -82,7 +82,9 @@ export class PdfRagService implements OnModuleInit {
     const chunks = this.chunkText(text);
 
     if (chunks.length === 0) {
-      throw new BadRequestException('The uploaded PDF did not contain readable text.');
+      throw new BadRequestException(
+        'The uploaded PDF did not contain readable text.',
+      );
     }
 
     const documentId = randomUUID();
@@ -102,7 +104,13 @@ export class PdfRagService implements OnModuleInit {
           `INSERT INTO pdf_document_chunks
              (id, document_id, chunk_index, content, embedding)
            VALUES ($1, $2, $3, $4, $5::vector)`,
-          [randomUUID(), documentId, index, content, this.toVectorLiteral(embedding)],
+          [
+            randomUUID(),
+            documentId,
+            index,
+            content,
+            this.toVectorLiteral(embedding),
+          ],
         );
       }
 
@@ -194,7 +202,10 @@ export class PdfRagService implements OnModuleInit {
       });
 
       upstream.data.on('error', (error: Error) => {
-        this.logger.error('Ollama stream failed.', error.stack ?? error.message);
+        this.logger.error(
+          'Ollama stream failed.',
+          error.stack ?? error.message,
+        );
         if (!response.writableEnded) response.end();
       });
     } catch (error) {
@@ -204,7 +215,9 @@ export class PdfRagService implements OnModuleInit {
       );
 
       if (!response.headersSent) {
-        throw new BadGatewayException('The local model could not answer the PDF question.');
+        throw new BadGatewayException(
+          'The local model could not answer the PDF question.',
+        );
       }
 
       response.write('\nThe local model could not complete this answer.');
@@ -242,8 +255,12 @@ export class PdfRagService implements OnModuleInit {
 
     const models =
       ollama.status === 'fulfilled'
-        ? ((ollama.value.data as { models?: Array<{ name?: string; model?: string }> })
-            .models ?? []
+        ? (
+            (
+              ollama.value.data as {
+                models?: Array<{ name?: string; model?: string }>;
+              }
+            ).models ?? []
           ).map((model) => model.name ?? model.model ?? 'unknown')
         : [];
 
@@ -316,7 +333,9 @@ export class PdfRagService implements OnModuleInit {
     );
 
     if (rows.length === 0) {
-      throw new BadRequestException('No indexed chunks were found for this PDF.');
+      throw new BadRequestException(
+        'No indexed chunks were found for this PDF.',
+      );
     }
 
     return rows;
@@ -399,7 +418,8 @@ Answer:`;
 
     if (!latestUser) return '';
 
-    if (typeof latestUser.content === 'string') return latestUser.content.trim();
+    if (typeof latestUser.content === 'string')
+      return latestUser.content.trim();
 
     const parts = Array.isArray(latestUser.parts) ? latestUser.parts : [];
     return parts
@@ -481,7 +501,7 @@ Answer:`;
     const payloadMessage =
       typeof payload === 'string'
         ? payload
-        : payload?.error ?? payload?.message ?? '';
+        : (payload?.error ?? payload?.message ?? '');
 
     if (payloadMessage) return payloadMessage;
     if (error.response?.status) return `HTTP ${error.response.status}`;

@@ -2,9 +2,9 @@ import { Logger } from '@nestjs/common';
 
 /**
  * Circuit Breaker Pattern
- * 
+ *
  * PHASE 2 CRITICAL: Prevent cascading failures in distributed systems
- * 
+ *
  * PROBLEM:
  * External service goes down (Stripe API, AI service, MongoDB)
  *   ↓
@@ -17,7 +17,7 @@ import { Logger } from '@nestjs/common';
  * All threads/connections exhausted
  *   ↓
  * Entire system crashes
- * 
+ *
  * SOLUTION:
  * Circuit breaker "opens" after N failures
  *   ↓
@@ -30,25 +30,25 @@ import { Logger } from '@nestjs/common';
  * If success: Circuit closes (back to normal)
  *   ↓
  * If failure: Circuit opens again
- * 
+ *
  * STATES:
- * 
+ *
  * CLOSED (Normal):
  * - All requests go through
  * - Track failures
  * - If failures > threshold: Open circuit
- * 
+ *
  * OPEN (Failing):
  * - All requests fail immediately (no timeout)
  * - After cooldown period: Half-open
- * 
+ *
  * HALF_OPEN (Testing):
  * - Allow one request through
  * - If success: Close circuit
  * - If failure: Open circuit again
- * 
+ *
  * PRODUCTION SCENARIO:
- * 
+ *
  * Without Circuit Breaker:
  * - Stripe API goes down at 14:00
  * - Every payment request waits 30 seconds for timeout
@@ -56,7 +56,7 @@ import { Logger } from '@nestjs/common';
  * - 100 × 30s = 3000 seconds of waiting
  * - All connection slots exhausted
  * - System crashes
- * 
+ *
  * With Circuit Breaker:
  * - Stripe API goes down at 14:00
  * - First 5 requests fail (threshold = 5)
@@ -66,9 +66,9 @@ import { Logger } from '@nestjs/common';
  * - System stays healthy
  * - After 60 seconds, circuit half-opens
  * - If Stripe is back: Circuit closes, payments resume
- * 
+ *
  * INTERVIEW POINTS:
- * 
+ *
  * Q: "How do you handle external service failures?"
  * A: Circuit breakers. After N consecutive failures, we stop trying and fail fast.
  *    This prevents cascading failures. For example, if Stripe goes down, we don't
@@ -76,17 +76,17 @@ import { Logger } from '@nestjs/common';
  *    our connection pool and crash the system. Instead, after 5 failures, we open
  *    the circuit and return errors immediately. After a cooldown (60s), we try again.
  *    This keeps the system responsive during partial outages.
- * 
+ *
  * Q: "What's the difference between circuit breaker and retry?"
  * A: Retry: Try the same request again (good for transient failures)
  *    Circuit breaker: Stop trying after N failures (good for sustained outages)
  *    Use both: Retry 3 times with backoff, then open circuit if still failing.
- * 
+ *
  * Q: "How do you decide the failure threshold?"
  * A: Balance false positives vs response time. Too low (threshold=1) and transient
  *    errors trigger circuit. Too high (threshold=100) and system suffers before
  *    circuit opens. We use 5-10 for most services (empirical testing in staging).
- * 
+ *
  * TRADEOFFS:
  * - ✅ Prevents cascading failures
  * - ✅ Fast failure (no timeout wait)
@@ -106,10 +106,10 @@ interface CircuitBreakerOptions {
   /**
    * Number of failures before opening circuit
    * Default: 5
-   * 
+   *
    * Too low: Transient errors trigger circuit
    * Too high: System suffers before circuit opens
-   * 
+   *
    * Recommendation:
    * - Critical services (payment): 3
    * - Important services (AI): 5
@@ -120,10 +120,10 @@ interface CircuitBreakerOptions {
   /**
    * Milliseconds to wait before trying again after circuit opens
    * Default: 60000 (60 seconds)
-   * 
+   *
    * Too short: Circuit reopens immediately (thrashing)
    * Too long: Service stays down even after recovery
-   * 
+   *
    * Recommendation:
    * - Fast recovery services (Redis): 10s
    * - Normal services (APIs): 60s
@@ -150,7 +150,7 @@ export class CircuitBreaker {
 
   /**
    * Execute function with circuit breaker protection
-   * 
+   *
    * @param fn Function to execute
    * @returns Result of function
    * @throws CircuitBreakerOpenError if circuit is open
@@ -316,15 +316,15 @@ export class CircuitBreakerOpenError extends Error {
 
 /**
  * USAGE EXAMPLES:
- * 
+ *
  * 1. STRIPE API CALLS
- * 
+ *
  * const stripeCircuit = new CircuitBreaker({
  *   name: 'stripe-api',
  *   failureThreshold: 3,
  *   resetTimeout: 60000, // 60 seconds
  * });
- * 
+ *
  * async createCheckoutSession() {
  *   try {
  *     return await stripeCircuit.execute(async () => {
@@ -340,15 +340,15 @@ export class CircuitBreakerOpenError extends Error {
  *     throw error;
  *   }
  * }
- * 
+ *
  * 2. AI SERVICE CALLS
- * 
+ *
  * const aiCircuit = new CircuitBreaker({
  *   name: 'ai-service',
  *   failureThreshold: 5,
  *   resetTimeout: 30000, // 30 seconds
  * });
- * 
+ *
  * async generateResponse(prompt: string) {
  *   try {
  *     return await aiCircuit.execute(async () => {
@@ -369,15 +369,15 @@ export class CircuitBreakerOpenError extends Error {
  *     throw error;
  *   }
  * }
- * 
+ *
  * 3. DATABASE CALLS (WITH RETRY)
- * 
+ *
  * const dbCircuit = new CircuitBreaker({
  *   name: 'mongodb',
  *   failureThreshold: 10,
  *   resetTimeout: 120000, // 2 minutes
  * });
- * 
+ *
  * async function findUser(id: string) {
  *   // Combine circuit breaker with retry
  *   return await dbCircuit.execute(async () => {
@@ -387,9 +387,9 @@ export class CircuitBreakerOpenError extends Error {
  *     );
  *   });
  * }
- * 
+ *
  * MONITORING:
- * 
+ *
  * // Expose circuit breaker state via health endpoint
  * @Get('health/circuits')
  * getCircuitStatus() {
@@ -399,7 +399,7 @@ export class CircuitBreakerOpenError extends Error {
  *     database: dbCircuit.getState(),
  *   };
  * }
- * 
+ *
  * // Result:
  * {
  *   "stripe": {
@@ -415,15 +415,15 @@ export class CircuitBreakerOpenError extends Error {
  *     "nextAttemptTime": 1696950000
  *   }
  * }
- * 
+ *
  * ALERTING:
- * 
+ *
  * if (circuit.getState().state === CircuitState.OPEN) {
  *   alert('Circuit breaker open for ${name}! Service is down.');
  * }
- * 
+ *
  * TESTING:
- * 
+ *
  * describe('Circuit Breaker', () => {
  *   it('opens after threshold failures', async () => {
  *     const circuit = new CircuitBreaker({
@@ -431,45 +431,45 @@ export class CircuitBreakerOpenError extends Error {
  *       failureThreshold: 3,
  *       resetTimeout: 1000,
  *     });
- *     
+ *
  *     const failingFn = async () => { throw new Error('Fail'); };
- *     
+ *
  *     // First 3 failures
  *     await expect(circuit.execute(failingFn)).rejects.toThrow();
  *     await expect(circuit.execute(failingFn)).rejects.toThrow();
  *     await expect(circuit.execute(failingFn)).rejects.toThrow();
- *     
+ *
  *     // Circuit should now be open
  *     expect(circuit.getState().state).toBe(CircuitState.OPEN);
- *     
+ *
  *     // Next request fails fast
  *     await expect(circuit.execute(failingFn))
  *       .rejects.toThrow(CircuitBreakerOpenError);
  *   });
  * });
- * 
+ *
  * PRODUCTION BEST PRACTICES:
- * 
+ *
  * 1. Different Thresholds Per Service:
  *    - Payment: 3 (fail fast, critical)
  *    - AI: 5 (some transient errors expected)
  *    - Email: 10 (non-critical, can tolerate failures)
- * 
+ *
  * 2. Combine with Retries:
  *    - Retry 3 times with exponential backoff
  *    - If all retries fail, count as 1 circuit breaker failure
  *    - This distinguishes transient errors (fixed by retry) from outages
- * 
+ *
  * 3. Monitor Circuit State:
  *    - Alert if circuit open for > 5 minutes
  *    - Dashboard showing open circuits
  *    - Track failure rate per service
- * 
+ *
  * 4. User-Friendly Errors:
  *    - Don't expose technical details ("circuit breaker open")
  *    - Show: "Service temporarily unavailable, try again in X minutes"
  *    - Provide alternative actions if possible
- * 
+ *
  * 5. Admin Controls:
  *    - Endpoint to manually reset circuit
  *    - Endpoint to temporarily disable circuit (during maintenance)

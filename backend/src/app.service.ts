@@ -7,7 +7,8 @@ import { PostgresService } from './database/postgres.service';
 export class AppService {
   constructor(
     @Optional()
-    @InjectConnection() private readonly mongoConnection: Connection,
+    @InjectConnection()
+    private readonly mongoConnection: Connection,
     private readonly postgresService: PostgresService,
   ) {}
 
@@ -87,21 +88,23 @@ export class AppService {
       timestamp: new Date().toISOString(),
       aiServiceUrl: process.env.AI_SERVICE_URL ?? 'http://localhost:8000',
       databaseMode,
-      database: isPostgresPrimary && pgDetails
-        ? pgDetails
-        : {
-            engine: 'mongodb',
-            provider:
-              process.env.MONGODB_URI?.includes('mongodb+srv://') === true
-                ? 'atlas'
-                : 'local-or-self-hosted',
-            name:
-              this.mongoConnection?.name ||
-              process.env.MONGODB_DB_NAME ||
-              'ai_commerce_platform',
-            state:
-              mongoReadyStateMap[this.mongoConnection?.readyState ?? 0] ?? 'unknown',
-          },
+      database:
+        isPostgresPrimary && pgDetails
+          ? pgDetails
+          : {
+              engine: 'mongodb',
+              provider:
+                process.env.MONGODB_URI?.includes('mongodb+srv://') === true
+                  ? 'atlas'
+                  : 'local-or-self-hosted',
+              name:
+                this.mongoConnection?.name ||
+                process.env.MONGODB_DB_NAME ||
+                'ai_commerce_platform',
+              state:
+                mongoReadyStateMap[this.mongoConnection?.readyState ?? 0] ??
+                'unknown',
+            },
       payments: {
         stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
         esewaConfigured: Boolean(
@@ -111,4 +114,3 @@ export class AppService {
     };
   }
 }
-

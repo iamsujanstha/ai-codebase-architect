@@ -3,33 +3,33 @@ import { Document } from 'mongoose';
 
 /**
  * Payment Audit Log Schema
- * 
+ *
  * PHASE 2 CRITICAL: Immutable audit trail for payment operations
- * 
+ *
  * WHY AUDIT LOGS:
- * 
+ *
  * 1. COMPLIANCE:
  *    - PCI DSS requires audit trails for payment data access
  *    - SOX compliance for financial transactions
  *    - GDPR requires audit of data processing
- * 
+ *
  * 2. FORENSICS:
  *    - Investigate payment disputes
  *    - Debug webhook processing issues
  *    - Track who did what when
- * 
+ *
  * 3. SECURITY:
  *    - Detect unauthorized access
  *    - Identify attack patterns
  *    - Prove innocence in disputes
- * 
+ *
  * 4. BUSINESS INTELLIGENCE:
  *    - Track payment success rates
  *    - Identify provider issues
  *    - Analyze failure patterns
- * 
+ *
  * IMMUTABILITY:
- * 
+ *
  * Audit logs MUST be immutable (write-once, never update/delete)
  *   ↓
  * Why: If logs can be modified, attacker can cover tracks
@@ -41,9 +41,9 @@ import { Document } from 'mongoose';
  * - Separate collection (not embedded in order)
  *   ↓
  * Result: Tamper-proof audit trail
- * 
+ *
  * WHAT TO LOG:
- * 
+ *
  * ✅ DO LOG:
  * - All payment state changes
  * - Webhook deliveries
@@ -51,28 +51,28 @@ import { Document } from 'mongoose';
  * - User actions (checkout, cancel)
  * - System actions (timeout, retry)
  * - Security events (signature verification)
- * 
+ *
  * ❌ DO NOT LOG:
  * - Full credit card numbers (PCI violation)
  * - CVV codes (PCI violation)
  * - Unencrypted sensitive data
- * 
+ *
  * ✅ LOG THESE INSTEAD:
  * - Last 4 digits of card
  * - Masked card number (****-****-****-1234)
  * - Tokenized references (Stripe customer ID)
- * 
+ *
  * PRODUCTION SCENARIO:
- * 
+ *
  * Customer dispute:
  * "I was charged twice for order #ACL-241010-ABC123"
- * 
+ *
  * Without Audit Log:
  * - Check current order status: PAID
  * - No history of what happened
  * - Cannot prove single vs double charge
  * - Refund to be safe (lose money)
- * 
+ *
  * With Audit Log:
  * - Query audit logs for order
  * - See complete timeline:
@@ -85,21 +85,21 @@ import { Document } from 'mongoose';
  *   14:30:10 WEBHOOK_IGNORED (already processed)
  * - Proof: Webhook arrived twice, processed once
  * - No refund needed (saved money)
- * 
+ *
  * RETENTION POLICY:
- * 
+ *
  * Balance between:
  * - Compliance requirements (often 7 years)
  * - Storage costs (audit logs can be large)
  * - Query performance (old data slows queries)
- * 
+ *
  * Strategy:
  * - Hot data (< 90 days): MongoDB primary
  * - Warm data (90 days - 1 year): MongoDB with compression
  * - Cold data (> 1 year): Archive to S3/Glacier
- * 
+ *
  * INTERVIEW POINTS:
- * 
+ *
  * Q: "Why separate audit logs from order documents?"
  * A: Three reasons. First, audit logs are append-only and never modified, while
  *    orders may be updated (status changes). Mixing mutable and immutable data
@@ -107,7 +107,7 @@ import { Document } from 'mongoose';
  *    retention requirements (7 years for compliance vs 1 year for orders).
  *    Third, audit queries have different access patterns (time-based forensics
  *    vs order lookup). Separate collections allow independent optimization.
- * 
+ *
  * Q: "How do you prevent audit log tampering?"
  * A: Multiple layers. First, application code has no update/delete operations
  *    for audit logs—only insert. Second, database permissions restrict write
@@ -116,7 +116,7 @@ import { Document } from 'mongoose';
  *    needs, we could implement cryptographic signing (each log entry signed with
  *    private key, verified with public key). Finally, audit logs themselves are
  *    audited—we log who accessed audit logs.
- * 
+ *
  * Q: "What's the performance impact of audit logging?"
  * A: Minimal. Audit log writes are fire-and-forget (async, no blocking). We use
  *    bulk inserts when possible. MongoDB handles ~10k writes/sec easily. The
@@ -188,12 +188,12 @@ export class PaymentAuditLog {
 
   /**
    * Event details (JSON)
-   * 
+   *
    * Examples:
    * - Webhook: { eventId, type, verified, duplicate }
    * - Checkout: { sessionId, amount, currency }
    * - Status change: { reason, triggeredBy }
-   * 
+   *
    * SECURITY: Do NOT include sensitive data
    * - ❌ Full card number
    * - ❌ CVV
@@ -253,11 +253,12 @@ export class PaymentAuditLog {
   metadata?: Record<string, any>;
 }
 
-export const PaymentAuditLogSchema = SchemaFactory.createForClass(PaymentAuditLog);
+export const PaymentAuditLogSchema =
+  SchemaFactory.createForClass(PaymentAuditLog);
 
 /**
  * Indexes for performance
- * 
+ *
  * Compound indexes for common query patterns
  */
 PaymentAuditLogSchema.index({ orderNumber: 1, timestamp: 1 }); // Order timeline
@@ -268,7 +269,7 @@ PaymentAuditLogSchema.index({ correlationId: 1 }); // Request tracing
 /**
  * TTL index for automatic expiration
  * Comply with data retention policies
- * 
+ *
  * Example: Keep audit logs for 7 years (PCI compliance)
  */
 PaymentAuditLogSchema.index(
@@ -281,19 +282,19 @@ PaymentAuditLogSchema.index(
 
 /**
  * Payment Audit Event Types
- * 
+ *
  * Comprehensive list of loggable events
  */
 export enum PaymentAuditEventType {
   // User-initiated events
   CHECKOUT_INITIATED = 'CHECKOUT_INITIATED',
   CHECKOUT_CANCELED = 'CHECKOUT_CANCELED',
-  
+
   // Provider session events
   STRIPE_SESSION_CREATED = 'STRIPE_SESSION_CREATED',
   STRIPE_SESSION_EXPIRED = 'STRIPE_SESSION_EXPIRED',
   ESEWA_REDIRECT_PREPARED = 'ESEWA_REDIRECT_PREPARED',
-  
+
   // Webhook events
   WEBHOOK_RECEIVED = 'WEBHOOK_RECEIVED',
   WEBHOOK_SIGNATURE_VERIFIED = 'WEBHOOK_SIGNATURE_VERIFIED',
@@ -302,7 +303,7 @@ export enum PaymentAuditEventType {
   WEBHOOK_PROCESSING_STARTED = 'WEBHOOK_PROCESSING_STARTED',
   WEBHOOK_PROCESSING_COMPLETED = 'WEBHOOK_PROCESSING_COMPLETED',
   WEBHOOK_PROCESSING_FAILED = 'WEBHOOK_PROCESSING_FAILED',
-  
+
   // Order state changes
   ORDER_CREATED = 'ORDER_CREATED',
   ORDER_STATUS_CHANGED = 'ORDER_STATUS_CHANGED',
@@ -310,31 +311,31 @@ export enum PaymentAuditEventType {
   ORDER_MARKED_FAILED = 'ORDER_MARKED_FAILED',
   ORDER_MARKED_CANCELED = 'ORDER_MARKED_CANCELED',
   ORDER_MARKED_EXPIRED = 'ORDER_MARKED_EXPIRED',
-  
+
   // Payment verification
   PAYMENT_VERIFIED = 'PAYMENT_VERIFIED',
   PAYMENT_VERIFICATION_FAILED = 'PAYMENT_VERIFICATION_FAILED',
-  
+
   // Provider API calls
   PROVIDER_API_CALL_SUCCESS = 'PROVIDER_API_CALL_SUCCESS',
   PROVIDER_API_CALL_FAILED = 'PROVIDER_API_CALL_FAILED',
   PROVIDER_CIRCUIT_BREAKER_OPENED = 'PROVIDER_CIRCUIT_BREAKER_OPENED',
   PROVIDER_CIRCUIT_BREAKER_CLOSED = 'PROVIDER_CIRCUIT_BREAKER_CLOSED',
-  
+
   // Idempotency
   IDEMPOTENCY_KEY_USED = 'IDEMPOTENCY_KEY_USED',
   IDEMPOTENCY_CHECK_PASSED = 'IDEMPOTENCY_CHECK_PASSED',
   IDEMPOTENCY_DUPLICATE_DETECTED = 'IDEMPOTENCY_DUPLICATE_DETECTED',
-  
+
   // Email notifications
   CONFIRMATION_EMAIL_SENT = 'CONFIRMATION_EMAIL_SENT',
   CONFIRMATION_EMAIL_FAILED = 'CONFIRMATION_EMAIL_FAILED',
-  
+
   // Refunds (future)
   REFUND_INITIATED = 'REFUND_INITIATED',
   REFUND_COMPLETED = 'REFUND_COMPLETED',
   REFUND_FAILED = 'REFUND_FAILED',
-  
+
   // Security events
   SUSPICIOUS_ACTIVITY_DETECTED = 'SUSPICIOUS_ACTIVITY_DETECTED',
   RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
@@ -342,17 +343,17 @@ export enum PaymentAuditEventType {
 
 /**
  * USAGE EXAMPLE:
- * 
+ *
  * In payments.service.ts:
- * 
+ *
  * import { PaymentAuditLog, PaymentAuditEventType } from './schemas/payment-audit-log.schema';
- * 
+ *
  * // In constructor
  * constructor(
  *   @InjectModel(PaymentAuditLog.name)
  *   private readonly auditLogModel: Model<PaymentAuditLogDocument>,
  * ) {}
- * 
+ *
  * // Log checkout initiation
  * await this.auditLogModel.create({
  *   orderNumber: order.orderNumber,
@@ -376,7 +377,7 @@ export enum PaymentAuditEventType {
  *   success: true,
  *   message: 'User initiated Stripe checkout',
  * });
- * 
+ *
  * // Log webhook received
  * await this.auditLogModel.create({
  *   orderNumber: orderNumber,
@@ -395,13 +396,13 @@ export enum PaymentAuditEventType {
  *   success: true,
  *   message: 'Stripe webhook confirmed payment',
  * });
- * 
+ *
  * // Query audit logs for order
  * const auditTrail = await this.auditLogModel
  *   .find({ orderNumber })
  *   .sort({ timestamp: 1 })
  *   .exec();
- * 
+ *
  * // Result: Complete timeline of order lifecycle
  * [
  *   { eventType: 'CHECKOUT_INITIATED', timestamp: '2024-10-10T14:30:00Z', ... },

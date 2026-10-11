@@ -1,6 +1,6 @@
 /**
  * Exercise 1: Data Modeling & Normalization
- * 
+ *
  * Goal: Understand normalization forms and when to denormalize
  */
 
@@ -43,10 +43,14 @@ async function demonstrateNormalization() {
     console.table(denormalized.rows);
 
     console.log('\n❌ Problems with denormalized design:');
-    console.log('1. Data duplication (Alice\'s info repeated)');
-    console.log('2. Update anomaly (changing Alice\'s email requires updating multiple rows)');
-    console.log('3. Insert anomaly (can\'t store customer without order)');
-    console.log('4. Delete anomaly (deleting last order deletes customer info)\n');
+    console.log("1. Data duplication (Alice's info repeated)");
+    console.log(
+      "2. Update anomaly (changing Alice's email requires updating multiple rows)",
+    );
+    console.log("3. Insert anomaly (can't store customer without order)");
+    console.log(
+      '4. Delete anomaly (deleting last order deletes customer info)\n',
+    );
 
     // Task 2: Show normalized design (good)
     console.log('\nTask 2: Normalized Tables (Good Design - 3NF)');
@@ -163,7 +167,9 @@ async function demonstrateNormalization() {
     console.log('Why we denormalize price_at_purchase:\n');
 
     // Update product price
-    await pool.query(`UPDATE products_demo SET price = 1399.99 WHERE name = 'Laptop'`);
+    await pool.query(
+      `UPDATE products_demo SET price = 1399.99 WHERE name = 'Laptop'`,
+    );
 
     const priceComparison = await pool.query(`
       SELECT 
@@ -182,9 +188,13 @@ async function demonstrateNormalization() {
     console.table(priceComparison.rows);
 
     console.log('\n💡 Denormalization Tradeoff:');
-    console.log('✅ Pros: Historical accuracy (orders show purchase-time price)');
+    console.log(
+      '✅ Pros: Historical accuracy (orders show purchase-time price)',
+    );
     console.log('❌ Cons: Data duplication');
-    console.log('✅ Decision: Worth it! Orders must reflect actual purchase price.\n');
+    console.log(
+      '✅ Decision: Worth it! Orders must reflect actual purchase price.\n',
+    );
 
     // Cleanup
     await pool.query(`
@@ -194,7 +204,6 @@ async function demonstrateNormalization() {
       DROP TABLE IF EXISTS customers_demo CASCADE;
       DROP TABLE IF EXISTS orders_bad CASCADE;
     `);
-
   } catch (error) {
     console.error('Error:', error);
   }
@@ -205,21 +214,45 @@ function printInterviewQuestions() {
   console.log('\n=== Interview Questions ===\n');
 
   console.log('Q1: "Explain 3NF with an example"\n');
-  console.log('A: "3NF eliminates transitive dependencies. For example, in an orders table,');
-  console.log('if we store customer_id, customer_name, and customer_city, there\'s a transitive');
-  console.log('dependency: order → customer_id → customer_city. The city depends on customer_id,');
-  console.log('not on the order itself. To normalize to 3NF, we separate customers into their');
-  console.log('own table with customer_id as foreign key in orders. This prevents update');
-  console.log('anomalies—if a customer moves cities, we update one row in customers table,');
+  console.log(
+    'A: "3NF eliminates transitive dependencies. For example, in an orders table,',
+  );
+  console.log(
+    "if we store customer_id, customer_name, and customer_city, there's a transitive",
+  );
+  console.log(
+    'dependency: order → customer_id → customer_city. The city depends on customer_id,',
+  );
+  console.log(
+    'not on the order itself. To normalize to 3NF, we separate customers into their',
+  );
+  console.log(
+    'own table with customer_id as foreign key in orders. This prevents update',
+  );
+  console.log(
+    'anomalies—if a customer moves cities, we update one row in customers table,',
+  );
   console.log('not all their orders."\n');
 
   console.log('Q2: "When would you denormalize?"\n');
-  console.log('A: "I denormalize when read performance is critical and data rarely changes.');
-  console.log('For example, in our order_items table, I store price_at_purchase even though');
-  console.log('product price exists in products table. Why? Product prices change, but historical');
-  console.log('orders must reflect the price at time of purchase. The tradeoff is data duplication,');
-  console.log('but historical accuracy is non-negotiable for orders. I wouldn\'t denormalize if');
-  console.log('data changes frequently—synchronization overhead would outweigh benefits."\n');
+  console.log(
+    'A: "I denormalize when read performance is critical and data rarely changes.',
+  );
+  console.log(
+    'For example, in our order_items table, I store price_at_purchase even though',
+  );
+  console.log(
+    'product price exists in products table. Why? Product prices change, but historical',
+  );
+  console.log(
+    'orders must reflect the price at time of purchase. The tradeoff is data duplication,',
+  );
+  console.log(
+    "but historical accuracy is non-negotiable for orders. I wouldn't denormalize if",
+  );
+  console.log(
+    'data changes frequently—synchronization overhead would outweigh benefits."\n',
+  );
 }
 
 // Run the exercise

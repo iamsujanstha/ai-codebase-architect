@@ -61,7 +61,7 @@ export class ChatThreadsService {
       )
       .exec();
 
-    return thread!;
+    return thread;
   }
 
   /** Delete a thread — silently succeeds if it doesn't exist. */

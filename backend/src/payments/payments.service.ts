@@ -41,7 +41,6 @@ import {
 } from '../common/utils/circuit-breaker.util';
 import { retryWithBackoff } from '../common/utils/retry.util';
 
-
 interface PricedCartLine {
   productId: string;
   slug: string;
@@ -119,11 +118,11 @@ export class PaymentsService {
 
   /**
    * PHASE 2: Circuit breaker for Stripe API calls
-   * 
+   *
    * Why: Stripe API failures should not cascade to entire system
    * Threshold: 3 failures (payments are critical, fail fast)
    * Reset: 60 seconds (give Stripe time to recover)
-   * 
+   *
    * Behavior:
    * - First 3 Stripe failures: Try normally (with retry)
    * - After 3 failures: Circuit opens
@@ -140,7 +139,7 @@ export class PaymentsService {
 
   /**
    * PHASE 2: Circuit breaker for eSewa API calls
-   * 
+   *
    * Threshold: 5 failures (less critical, more tolerant)
    * Reset: 120 seconds (longer recovery time)
    */
@@ -213,7 +212,7 @@ export class PaymentsService {
     try {
       /**
        * PHASE 2: Circuit breaker + retry for Stripe API calls
-       * 
+       *
        * Flow:
        * 1. Check circuit state (closed/open/half-open)
        * 2. If open: Throw immediately (fail fast)
@@ -221,79 +220,84 @@ export class PaymentsService {
        * 4. Retry up to 3 times with exponential backoff (100ms → 200ms → 400ms)
        * 5. If all retries fail: Circuit breaker counts as 1 failure
        * 6. After 3 failures: Circuit opens
-       * 
+       *
        * Benefits:
        * - Transient errors: Recovered by retry (user doesn't see error)
        * - Sustained outage: Circuit opens (fail fast, no timeout wait)
        * - Better UX: "Payment system unavailable, try again in 1 minute"
        */
-      const stripeSession = await this.stripeCircuitBreaker.execute(async () => {
-        return await retryWithBackoff(
-          async () => {
-            return await this.stripeClient!.checkout.sessions.create(
-              {
-                mode: 'payment',
-                client_reference_id: order.orderNumber,
-                customer_creation: 'always',
-                customer_email: request.customer.email,
-                billing_address_collection: 'auto',
-                phone_number_collection: {
-                  enabled: true,
-                },
-                automatic_tax: {
-                  enabled: this.stripeAutomaticTaxEnabled,
-                },
-                success_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&session_id={CHECKOUT_SESSION_ID}`,
-                cancel_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&status=canceled`,
-                line_items: this.buildStripeLineItems(pricedCart, quote),
-                metadata: {
-                  orderNumber: order.orderNumber,
-                  customerEmail: request.customer.email,
-                  paymentProvider: PaymentProvider.STRIPE,
-                },
-                payment_intent_data: {
+      const stripeSession = await this.stripeCircuitBreaker.execute(
+        async () => {
+          return await retryWithBackoff(
+            async () => {
+              return await this.stripeClient!.checkout.sessions.create(
+                {
+                  mode: 'payment',
+                  client_reference_id: order.orderNumber,
+                  customer_creation: 'always',
+                  customer_email: request.customer.email,
+                  billing_address_collection: 'auto',
+                  phone_number_collection: {
+                    enabled: true,
+                  },
+                  automatic_tax: {
+                    enabled: this.stripeAutomaticTaxEnabled,
+                  },
+                  success_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&session_id={CHECKOUT_SESSION_ID}`,
+                  cancel_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&status=canceled`,
+                  line_items: this.buildStripeLineItems(pricedCart, quote),
                   metadata: {
                     orderNumber: order.orderNumber,
+                    customerEmail: request.customer.email,
                     paymentProvider: PaymentProvider.STRIPE,
                   },
+                  payment_intent_data: {
+                    metadata: {
+                      orderNumber: order.orderNumber,
+                      paymentProvider: PaymentProvider.STRIPE,
+                    },
+                  },
+                  expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
                 },
-                expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-              },
-              {
-                idempotencyKey: `order-${order.orderNumber}`,
-              },
-            );
-          },
-          {
-            maxRetries: 3,
-            initialDelay: 100,
-            context: 'stripe-checkout-session',
-            shouldRetry: (error, attempt) => {
-              // Retry on network errors
-              if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-                return true;
-              }
-              // Retry on Stripe rate limit
-              if (error.type === 'StripeRateLimitError') {
-                return true;
-              }
-              // Retry on Stripe API errors (but not card errors)
-              if (error.type === 'StripeAPIError') {
-                return true;
-              }
-              // Don't retry card errors (user needs to fix)
-              if (error.type === 'StripeCardError') {
-                return false;
-              }
-              // Don't retry invalid request (our bug, not transient)
-              if (error.type === 'StripeInvalidRequestError') {
-                return false;
-              }
-              return false;
+                {
+                  idempotencyKey: `order-${order.orderNumber}`,
+                },
+              );
             },
-          },
-        );
-      });
+            {
+              maxRetries: 3,
+              initialDelay: 100,
+              context: 'stripe-checkout-session',
+              shouldRetry: (error, attempt) => {
+                // Retry on network errors
+                if (
+                  error.code === 'ECONNREFUSED' ||
+                  error.code === 'ETIMEDOUT'
+                ) {
+                  return true;
+                }
+                // Retry on Stripe rate limit
+                if (error.type === 'StripeRateLimitError') {
+                  return true;
+                }
+                // Retry on Stripe API errors (but not card errors)
+                if (error.type === 'StripeAPIError') {
+                  return true;
+                }
+                // Don't retry card errors (user needs to fix)
+                if (error.type === 'StripeCardError') {
+                  return false;
+                }
+                // Don't retry invalid request (our bug, not transient)
+                if (error.type === 'StripeInvalidRequestError') {
+                  return false;
+                }
+                return false;
+              },
+            },
+          );
+        },
+      );
 
       order.providerMetadata.stripeCheckoutSessionId = stripeSession.id;
       order.history.push({
@@ -452,12 +456,12 @@ export class PaymentsService {
       switch (event.type) {
         case 'checkout.session.completed':
         case 'checkout.session.async_payment_succeeded': {
-          const session = event.data.object as Stripe.Checkout.Session;
+          const session = event.data.object;
           await this.syncOrderWithStripeSession(session);
           break;
         }
         case 'checkout.session.async_payment_failed': {
-          const session = event.data.object as Stripe.Checkout.Session;
+          const session = event.data.object;
           await this.markOrderAsFailed(
             this.extractOrderNumberFromStripeSession(session),
             'Stripe reported that the asynchronous payment failed.',
@@ -465,7 +469,7 @@ export class PaymentsService {
           break;
         }
         case 'checkout.session.expired': {
-          const session = event.data.object as Stripe.Checkout.Session;
+          const session = event.data.object;
           const orderNumber = this.extractOrderNumberFromStripeSession(session);
           if (orderNumber) {
             await this.updateOrderStatus(
@@ -505,9 +509,8 @@ export class PaymentsService {
       throw new BadRequestException('Stripe is not configured.');
     }
 
-    const session = await this.stripeClient.checkout.sessions.retrieve(
-      checkoutSessionId,
-    );
+    const session =
+      await this.stripeClient.checkout.sessions.retrieve(checkoutSessionId);
 
     const orderNumber =
       requestedOrderNumber || this.extractOrderNumberFromStripeSession(session);
@@ -593,7 +596,9 @@ export class PaymentsService {
             }));
           }
         } catch (err) {
-          this.logger.warn(`Failed to fetch orders from Postgres: ${(err as any)?.message}`);
+          this.logger.warn(
+            `Failed to fetch orders from Postgres: ${(err as any)?.message}`,
+          );
         }
       }
     }
@@ -626,33 +631,47 @@ export class PaymentsService {
         orderNumber,
         'eSewa returned without an encoded success payload.',
       );
-      return this.buildFrontendResultUrl(orderNumber, PaymentProvider.ESEWA, 'failed');
+      return this.buildFrontendResultUrl(
+        orderNumber,
+        PaymentProvider.ESEWA,
+        'failed',
+      );
     }
 
     const successPayload = this.parseEsewaSuccessPayload(encodedPayload);
     const verifiedLocally =
       successPayload.signature &&
       successPayload.signed_field_names &&
-      this.verifyEsewaSignature(successPayload, successPayload.signed_field_names);
+      this.verifyEsewaSignature(
+        successPayload,
+        successPayload.signed_field_names,
+      );
 
     if (!verifiedLocally) {
       await this.markOrderAsFailed(
         orderNumber,
         'The eSewa success callback signature could not be verified.',
       );
-      return this.buildFrontendResultUrl(orderNumber, PaymentProvider.ESEWA, 'failed');
+      return this.buildFrontendResultUrl(
+        orderNumber,
+        PaymentProvider.ESEWA,
+        'failed',
+      );
     }
 
     const statusResponse = await this.queryEsewaStatus({
       transactionUuid:
-        successPayload.transaction_uuid || order.providerMetadata.esewaTransactionUuid,
+        successPayload.transaction_uuid ||
+        order.providerMetadata.esewaTransactionUuid,
       totalAmount: String(successPayload.total_amount ?? order.pricing.total),
     });
 
     if (statusResponse.status === 'COMPLETE') {
       await this.markOrderAsPaid(order.orderNumber, {
-        providerReference: statusResponse.ref_id ?? successPayload.transaction_code,
-        paymentReference: successPayload.transaction_code ?? statusResponse.ref_id,
+        providerReference:
+          statusResponse.ref_id ?? successPayload.transaction_code,
+        paymentReference:
+          successPayload.transaction_code ?? statusResponse.ref_id,
         providerMetadata: {
           esewaTransactionUuid:
             successPayload.transaction_uuid ??
@@ -673,7 +692,8 @@ export class PaymentsService {
     const mappedStatus =
       statusResponse.status === 'CANCELED'
         ? OrderStatus.CANCELED
-        : statusResponse.status === 'PENDING' || statusResponse.status === 'AMBIGUOUS'
+        : statusResponse.status === 'PENDING' ||
+            statusResponse.status === 'AMBIGUOUS'
           ? OrderStatus.PENDING_PAYMENT
           : OrderStatus.FAILED;
 
@@ -763,16 +783,23 @@ export class PaymentsService {
           }
         }
       } catch (err: any) {
-        this.logger.warn(`PostgreSQL cart lookup: ${err.message}. Trying Mongo fallback.`);
+        this.logger.warn(
+          `PostgreSQL cart lookup: ${err.message}. Trying Mongo fallback.`,
+        );
       }
     }
 
-    const validMongoIds = requestedIds.filter((id) => Types.ObjectId.isValid(id));
-    const products = validMongoIds.length > 0
-      ? await this.productModel
-          .find({ _id: { $in: validMongoIds } } as FilterQuery<ProductDocument>)
-          .lean()
-      : [];
+    const validMongoIds = requestedIds.filter((id) =>
+      Types.ObjectId.isValid(id),
+    );
+    const products =
+      validMongoIds.length > 0
+        ? await this.productModel
+            .find({
+              _id: { $in: validMongoIds },
+            } as FilterQuery<ProductDocument>)
+            .lean()
+        : [];
 
     if (products.length !== normalizedItems.length) {
       throw new BadRequestException(
@@ -855,8 +882,7 @@ export class PaymentsService {
       serviceCharge: breakdown.serviceCharge,
       deliveryCharge: breakdown.deliveryCharge,
       total: breakdown.total,
-      note:
-        'Stripe redirects customers to a hosted Checkout page. Payment confirmation is finalized server-side through signed webhooks.',
+      note: 'Stripe redirects customers to a hosted Checkout page. Payment confirmation is finalized server-side through signed webhooks.',
     };
   }
 
@@ -878,8 +904,7 @@ export class PaymentsService {
         serviceCharge: 0,
         deliveryCharge: 0,
         total: 0,
-        note:
-          'eSewa requires merchant-signed NPR totals, so prices must be explicit rather than converted loosely at checkout time.',
+        note: 'eSewa requires merchant-signed NPR totals, so prices must be explicit rather than converted loosely at checkout time.',
       };
     }
 
@@ -910,8 +935,7 @@ export class PaymentsService {
       serviceCharge: breakdown.serviceCharge,
       deliveryCharge: breakdown.deliveryCharge,
       total: breakdown.total,
-      note:
-        'eSewa uses a signed form POST and a server-side status verification call before the order is marked paid.',
+      note: 'eSewa uses a signed form POST and a server-side status verification call before the order is marked paid.',
     };
   }
 
@@ -1006,7 +1030,7 @@ export class PaymentsService {
         lineTotal:
           (provider === PaymentProvider.STRIPE
             ? item.unitAmountUsd
-            : item.unitAmountNpr ?? 0) * item.quantity,
+            : (item.unitAmountNpr ?? 0)) * item.quantity,
         currency: quote.currency,
       })),
       pricing: {
@@ -1063,7 +1087,7 @@ export class PaymentsService {
             const unitPrice =
               provider === PaymentProvider.STRIPE
                 ? item.unitAmountUsd
-                : item.unitAmountNpr ?? 0;
+                : (item.unitAmountNpr ?? 0);
             await this.postgresService.query(
               `INSERT INTO order_items (order_id, product_id, name, price, quantity)
                VALUES ($1, $2, $3, $4, $5)`,
@@ -1076,15 +1100,18 @@ export class PaymentsService {
               ],
             );
           }
-          this.logger.log(`✅ Order ${orderNumber} persisted to Neon PostgreSQL (ID: ${pgOrderId})`);
+          this.logger.log(
+            `✅ Order ${orderNumber} persisted to Neon PostgreSQL (ID: ${pgOrderId})`,
+          );
         }
       } catch (err: any) {
-        this.logger.warn(`Could not save order snapshot to Neon PostgreSQL: ${err.message}`);
+        this.logger.warn(
+          `Could not save order snapshot to Neon PostgreSQL: ${err.message}`,
+        );
       }
     }
 
     return orderDoc;
-
   }
 
   private async syncOrderWithStripeSession(
@@ -1121,9 +1148,7 @@ export class PaymentsService {
   private extractOrderNumberFromStripeSession(
     session: Stripe.Checkout.Session,
   ): string | null {
-    return (
-      session.metadata?.orderNumber ?? session.client_reference_id ?? null
-    );
+    return session.metadata?.orderNumber ?? session.client_reference_id ?? null;
   }
 
   private async markOrderAsPaid(
@@ -1144,7 +1169,8 @@ export class PaymentsService {
     order.status = OrderStatus.PAID;
     order.paidAt = new Date();
     order.failureReason = null;
-    order.providerReference = options.providerReference ?? order.providerReference;
+    order.providerReference =
+      options.providerReference ?? order.providerReference;
     order.paymentReference = options.paymentReference ?? order.paymentReference;
 
     if (options.providerMetadata) {
@@ -1166,7 +1192,10 @@ export class PaymentsService {
       try {
         await this.postgresService.query(
           `UPDATE orders SET status = 'paid', payment_intent_id = $1, updated_at = NOW() WHERE order_number = $2`,
-          [options.paymentReference ?? options.providerReference ?? null, orderNumber],
+          [
+            options.paymentReference ?? options.providerReference ?? null,
+            orderNumber,
+          ],
         );
         for (const item of order.items) {
           const intId = parseInt(item.productId, 10);
@@ -1177,9 +1206,13 @@ export class PaymentsService {
             );
           }
         }
-        this.logger.log(`✅ Order ${orderNumber} updated to paid in Neon PostgreSQL`);
+        this.logger.log(
+          `✅ Order ${orderNumber} updated to paid in Neon PostgreSQL`,
+        );
       } catch (pgErr: any) {
-        this.logger.warn(`Could not update order status in Neon PostgreSQL: ${pgErr.message}`);
+        this.logger.warn(
+          `Could not update order status in Neon PostgreSQL: ${pgErr.message}`,
+        );
       }
     }
 
@@ -1193,11 +1226,12 @@ export class PaymentsService {
       // Email failure must never roll back a confirmed payment — log and continue.
       this.logger.error(
         `Order ${orderNumber} was paid but confirmation email failed: ` +
-        (emailError instanceof Error ? emailError.message : String(emailError)),
+          (emailError instanceof Error
+            ? emailError.message
+            : String(emailError)),
       );
     }
   }
-
 
   private async markOrderAsFailed(
     orderNumber: string | null,
@@ -1207,7 +1241,11 @@ export class PaymentsService {
       return;
     }
 
-    await this.updateOrderStatus(orderNumber, OrderStatus.FAILED, failureReason);
+    await this.updateOrderStatus(
+      orderNumber,
+      OrderStatus.FAILED,
+      failureReason,
+    );
   }
 
   private async updateOrderStatus(
@@ -1263,9 +1301,13 @@ export class PaymentsService {
     return data;
   }
 
-  private parseEsewaSuccessPayload(encodedPayload: string): EsewaSuccessPayload {
+  private parseEsewaSuccessPayload(
+    encodedPayload: string,
+  ): EsewaSuccessPayload {
     try {
-      const decodedJson = Buffer.from(encodedPayload, 'base64').toString('utf-8');
+      const decodedJson = Buffer.from(encodedPayload, 'base64').toString(
+        'utf-8',
+      );
       return JSON.parse(decodedJson) as EsewaSuccessPayload;
     } catch (error) {
       throw new BadRequestException(
@@ -1315,7 +1357,10 @@ export class PaymentsService {
       .filter(Boolean);
 
     const message = signedFields
-      .map((fieldName) => `${fieldName}=${(payload as Record<string, unknown>)[fieldName] ?? ''}`)
+      .map(
+        (fieldName) =>
+          `${fieldName}=${(payload as Record<string, unknown>)[fieldName] ?? ''}`,
+      )
       .join(',');
 
     const expectedSignature = createHmac('sha256', this.esewaSecretKey)
@@ -1420,31 +1465,31 @@ export class PaymentsService {
 
   /**
    * PHASE 1: Webhook Idempotency Helpers
-   * 
+   *
    * These methods prevent duplicate webhook processing using MongoDB as storage.
-   * 
+   *
    * CRITICAL: Stripe may send the same webhook multiple times due to:
    * - Network retry (if we respond with 5xx or timeout)
    * - Stripe failover (server restarts)
    * - Manual replay (in Stripe dashboard)
-   * 
+   *
    * We use Stripe event ID as idempotency key because:
    * - It's unique per event
    * - It's stable (same event always has same ID)
    * - It's provided by Stripe (we don't generate it)
-   * 
+   *
    * Flow:
    * 1. Webhook arrives with event.id = "evt_abc123"
    * 2. Check if evt_abc123 exists in idempotency collection
    * 3. If exists: Return success (already processed)
    * 4. If not: Process and store evt_abc123
-   * 
+   *
    * Race condition handling:
    * - Multiple webhook deliveries arrive simultaneously
    * - Both try to insert same event ID
    * - MongoDB unique index ensures only one succeeds
    * - Loser gets duplicate key error → treated as already processed
-   * 
+   *
    * TTL: 72 hours (Stripe retries for 3 days)
    * After 72 hours, MongoDB automatically deletes the record.
    */
@@ -1480,11 +1525,8 @@ export class PaymentsService {
       });
 
       // Ensure TTL index exists
-      await collection.createIndex(
-        { expiresAt: 1 },
-        { expireAfterSeconds: 0 },
-      );
-      
+      await collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
       // Ensure unique index on key
       await collection.createIndex({ key: 1 }, { unique: true });
     } catch (error) {
@@ -1496,7 +1538,7 @@ export class PaymentsService {
         });
         throw new ConflictException('Webhook is already being processed');
       }
-      
+
       this.logger.error({
         event: 'webhook_idempotency_insert_failed',
         key,
@@ -1552,4 +1594,3 @@ export class PaymentsService {
     }
   }
 }
-

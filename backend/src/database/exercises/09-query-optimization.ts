@@ -2,13 +2,13 @@ import { getPool } from './db';
 
 /**
  * EXERCISE 09: Query Optimization & EXPLAIN ANALYZE
- * 
+ *
  * MongoDB vs PostgreSQL:
  * - MongoDB: `db.collection.explain("executionStats")` gives winningPlan (COLLSCAN vs IXSCAN).
  * - PostgreSQL: `EXPLAIN (ANALYZE, BUFFERS, VERBOSE, COSTS)` provides deep relational planner execution stats:
  *   cost estimates, actual execution time, buffer hits (shared hit vs read from disk), join mechanisms
  *   (Nested Loop, Hash Join, Merge Join), and sort spills.
- * 
+ *
  * Concepts Demonstrated:
  * 1. Sequential Scan vs Index Scan
  * 2. Hash Join vs Nested Loop Join
@@ -55,7 +55,9 @@ export async function runQueryOptimizationExercise(): Promise<void> {
         CASE WHEN i % 3 = 0 THEN 'COMPLETED' ELSE 'PENDING' END
       FROM generate_series(1, 4000) AS i;
     `);
-    console.log('✅ Generated 2,000 users and 4,000 orders for query planner analysis.');
+    console.log(
+      '✅ Generated 2,000 users and 4,000 orders for query planner analysis.',
+    );
 
     // 2. Unindexed Query: Sequential Scan
     console.log('\n--- 1. Query Plan WITHOUT Index (Seq Scan) ---');
@@ -63,20 +65,26 @@ export async function runQueryOptimizationExercise(): Promise<void> {
       EXPLAIN (ANALYZE, BUFFERS)
       SELECT * FROM exercise_opt_users WHERE country = 'JAPAN';
     `);
-    seqPlan.rows.forEach(r => console.log('  ', r['QUERY PLAN']));
+    seqPlan.rows.forEach((r) => console.log('  ', r['QUERY PLAN']));
 
     // 3. Add Index and Compare: Index Scan / Bitmap Index Scan
-    console.log('\n--- 2. Creating Index on country & Re-running EXPLAIN ANALYZE ---');
-    await pool.query(`CREATE INDEX idx_opt_users_country ON exercise_opt_users(country);`);
+    console.log(
+      '\n--- 2. Creating Index on country & Re-running EXPLAIN ANALYZE ---',
+    );
+    await pool.query(
+      `CREATE INDEX idx_opt_users_country ON exercise_opt_users(country);`,
+    );
 
     const idxPlan = await pool.query(`
       EXPLAIN (ANALYZE, BUFFERS)
       SELECT * FROM exercise_opt_users WHERE country = 'JAPAN';
     `);
-    idxPlan.rows.forEach(r => console.log('  ', r['QUERY PLAN']));
+    idxPlan.rows.forEach((r) => console.log('  ', r['QUERY PLAN']));
 
     // 4. Join Query Planning: Hash Join vs Nested Loop
-    console.log('\n--- 3. Analyzing Join Strategy (Hash Join between Users and Orders) ---');
+    console.log(
+      '\n--- 3. Analyzing Join Strategy (Hash Join between Users and Orders) ---',
+    );
     const joinPlan = await pool.query(`
       EXPLAIN (ANALYZE, BUFFERS)
       SELECT u.username, u.country, SUM(o.amount) as total_spent
@@ -85,7 +93,7 @@ export async function runQueryOptimizationExercise(): Promise<void> {
       WHERE u.country = 'USA'
       GROUP BY u.username, u.country;
     `);
-    joinPlan.rows.forEach(r => console.log('  ', r['QUERY PLAN']));
+    joinPlan.rows.forEach((r) => console.log('  ', r['QUERY PLAN']));
 
     // Clean up
     await pool.query(`
@@ -100,5 +108,7 @@ export async function runQueryOptimizationExercise(): Promise<void> {
 }
 
 if (require.main === module) {
-  runQueryOptimizationExercise().then(() => process.exit(0)).catch(() => process.exit(1));
+  runQueryOptimizationExercise()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
 }

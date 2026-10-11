@@ -5,42 +5,42 @@ import { Connection } from 'mongoose';
 
 /**
  * MongoDB Index Creation Script
- * 
+ *
  * PHASE 1 CRITICAL: Production Performance
- * 
+ *
  * WHY INDEXES MATTER:
  * - Without indexes: MongoDB scans ALL documents (slow, CPU-intensive)
  * - With indexes: MongoDB uses B-tree lookup (fast, minimal CPU)
- * 
+ *
  * EXAMPLE:
  * Query: db.products.find({ category: "audio" })
- * 
+ *
  * Without index:
  * - Scans 10,000 products (COLLSCAN)
  * - Takes 500ms
  * - Uses 100% CPU
- * 
+ *
  * With index on category:
  * - Index lookup finds 50 matching products (IXSCAN)
  * - Takes 5ms
  * - Uses 2% CPU
- * 
+ *
  * PRODUCTION SCENARIO:
  * Homepage loads products: GET /catalog/products?category=audio&featured=true
  * - 1000 concurrent users = 1000 queries/sec
  * - Without indexes: 500ms × 1000 = 500 seconds of work (server melts)
  * - With indexes: 5ms × 1000 = 5 seconds of work (server handles easily)
- * 
+ *
  * INTERVIEW POINTS:
  * - Q: "How do you optimize database queries?"
  *   A: Indexes. Analyze slow queries with explain(), identify missing indexes,
  *      create compound indexes for common query patterns. Monitor index usage
  *      and remove unused indexes (they slow down writes).
- * 
+ *
  * - Q: "What's the tradeoff of indexes?"
  *   A: Faster reads, slower writes. Each index adds overhead on INSERT/UPDATE.
  *      Balance: Index frequently-queried fields, don't over-index.
- * 
+ *
  * USAGE:
  * npm run build
  * node dist/scripts/create-indexes.js
@@ -346,17 +346,17 @@ createIndexes()
 
 /**
  * EXPLAIN PLAN ANALYSIS
- * 
+ *
  * To verify indexes are being used:
- * 
+ *
  * db.products.find({ category: "audio" }).explain("executionStats")
- * 
+ *
  * Look for:
  * - stage: "IXSCAN" (good, using index)
  * - stage: "COLLSCAN" (bad, scanning all documents)
  * - executionTimeMillis: < 50ms (acceptable)
  * - totalDocsExamined vs nReturned (should be close, not 10x different)
- * 
+ *
  * Example good plan:
  * {
  *   "executionStats": {
@@ -372,7 +372,7 @@ createIndexes()
  *     }
  *   }
  * }
- * 
+ *
  * Example bad plan (needs index):
  * {
  *   "executionStats": {

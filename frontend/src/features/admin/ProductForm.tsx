@@ -65,12 +65,13 @@ export function ProductForm() {
     if (!id) return;
     try {
       setLoading(true);
-      const product = await adminApi.getProductById(id);
-      setFormData({
+      const product: any = await adminApi.getProductById(id);
+      setFormData((prev) => ({
+        ...prev,
         ...product,
         tags: product.tags?.join(', ') || '',
         keyHighlights: product.keyHighlights?.join(', ') || '',
-      });
+      }));
     } catch (error) {
       console.error('Failed to load product:', error);
       alert('Failed to load product');

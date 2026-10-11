@@ -7,9 +7,15 @@ import mongoose from 'mongoose';
 @Schema({ _id: false })
 export class ChatMessageDoc {
   @Prop({ required: true }) id!: string;
-  @Prop({ required: true, enum: ['user', 'assistant', 'system'] }) role!: string;
+  @Prop({ required: true, enum: ['user', 'assistant', 'system'] })
+  role!: string;
   @Prop({ required: true, default: '' }) content!: string;
-  @Prop({ required: true, enum: ['complete', 'streaming', 'error'], default: 'complete' }) status!: string;
+  @Prop({
+    required: true,
+    enum: ['complete', 'streaming', 'error'],
+    default: 'complete',
+  })
+  status!: string;
   @Prop({ required: true }) createdAt!: string;
   @Prop({ type: String, default: null }) requestId!: string | null;
   @Prop({ type: String, default: null }) provider!: string | null;

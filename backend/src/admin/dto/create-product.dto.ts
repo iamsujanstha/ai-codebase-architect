@@ -1,8 +1,64 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, IsArray, Min } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsBoolean,
+  IsArray,
+  Min,
+  IsIn,
+} from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
-  name!: string;
+  @IsOptional()
+  title?: string;
+
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsString()
+  @IsOptional()
+  categorySlug?: string;
+
+  @IsString()
+  @IsOptional()
+  categoryName?: string;
+
+  @IsNumber()
+  @Min(0)
+  price!: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  stock?: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  inventoryCount?: number;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['draft', 'published', 'live'])
+  status?: string;
+
+  @IsString()
+  @IsOptional()
+  sku?: string;
 
   @IsString()
   @IsOptional()
@@ -12,13 +68,6 @@ export class CreateProductDto {
   @IsOptional()
   shortDescription?: string;
 
-  @IsString()
-  description!: string;
-
-  @IsNumber()
-  @Min(0)
-  price!: number;
-
   @IsNumber()
   @IsOptional()
   @Min(0)
@@ -27,16 +76,6 @@ export class CreateProductDto {
   @IsString()
   @IsOptional()
   currency?: string;
-
-  @IsNumber()
-  @Min(0)
-  inventoryCount!: number;
-
-  @IsString()
-  categorySlug!: string;
-
-  @IsString()
-  categoryName!: string;
 
   @IsArray()
   @IsOptional()
@@ -61,26 +100,4 @@ export class CreateProductDto {
   @IsBoolean()
   @IsOptional()
   newArrival?: boolean;
-
-  @IsOptional()
-  visual?: {
-    gradientFrom: string;
-    gradientTo: string;
-    accent: string;
-    glyph: string;
-  };
-
-  @IsArray()
-  @IsOptional()
-  specs?: Array<{ label: string; value: string }>;
-
-  @IsNumber()
-  @IsOptional()
-  @Min(0)
-  rating?: number;
-
-  @IsNumber()
-  @IsOptional()
-  @Min(0)
-  reviewCount?: number;
 }

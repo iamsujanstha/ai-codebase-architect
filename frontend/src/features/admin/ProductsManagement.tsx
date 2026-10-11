@@ -1,510 +1,430 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  Plus, 
-  Search, 
-  Edit, 
-  Trash2, 
-  Package, 
-  ChevronLeft, 
-  ChevronRight, 
-  ChevronsLeft, 
-  ChevronsRight,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  DollarSign,
-  Tag,
-  Warehouse
-} from 'lucide-react';
-import { adminApi } from './api/adminApi';
-import { ConfirmModal } from './components/ConfirmModal';
-import { TableSkeleton } from './components/TableSkeleton';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { Plus } from 'lucide-react';
+import { adminApi, AdminProduct } from './api/adminApi';
+import { ProductDrawer } from './ProductDrawer';
+import { DeleteProductDialog } from './DeleteProductDialog';
 import styles from './Admin.module.css';
 
-interface Product {
-  _id: string;
-  name: string;
-  subtitle?: string;
-  categoryName?: string;
-  price: number;
-  inventoryCount: number;
-  createdAt: string;
-}
+const CATEGORIES: Record<string, string> = {
+  desk: 'Desks',
+  lighting: 'Lighting',
+  keyboard: 'Keyboards',
+  audio: 'Audio',
+  display: 'Displays',
+  accessory: 'Accessories',
+};
 
-export function ProductsManagement() {
-  const navigate = useNavigate();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, ] = useState('');
-  const [stockFilter, setStockFilter] = useState('');
-  const [sortField, setSortField] = useState<string>('createdAt');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalProducts, setTotalProducts] = useState(0);
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    action: 'delete' | null;
-    productId: string;
-    productName: string;
-    isLoading: boolean;
-  }>({
-    isOpen: false,
-    action: null,
-    productId: '',
-    productName: '',
-    isLoading: false,
-  });
+const EMOJI_MAP: Record<string, string> = {
+  desk: '🪑',
+  lighting: '💡',
+  keyboard: '⌨️',
+  audio: '🎧',
+  display: '🖥️',
+  accessory: '🧰',
+};
 
-  const stockOptions = [
-    { value: '', label: 'All Stock Levels' },
-    { value: 'in-stock', label: 'In Stock (>10)' },
-    { value: 'low-stock', label: 'Low Stock (1-10)' },
-    { value: 'out-of-stock', label: 'Out of Stock (0)' },
-  ];
+const GRADIENTS = [
+  ['#f6d9b8', '#e8b98a'],
+  ['#fff1b8', '#ffd36b'],
+  ['#d6e4ff', '#a9c2ff'],
+  ['#ffd6e0', '#ff9fb6'],
+  ['#d4f1e4', '#9fdcc0'],
+  ['#e6ddf7', '#c7b4ee'],
+];
+
+export const ProductsManagement: React.FC = () => {
+  const { refreshStats } = useOutletContext<{ refreshStats?: () => void }>() || {};
+
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState({ all: 0, published: 0, draft: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Filters & Sorting & Pagination
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState<string>('title');
+  const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+
+  // Drawer & Dialog State
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<AdminProduct | null>(null);
+  const [deleteProduct, setDeleteProduct] = useState<AdminProduct | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Toast
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  const loadProducts = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await adminApi.getProducts({
+        status: statusFilter,
+        q: searchQuery,
+        sort: sortDir === -1 ? `-${sortKey}` : sortKey,
+        page,
+        pageSize,
+      });
+      setProducts(res.items);
+      setTotal(res.total);
+      if (res.counts) setCounts(res.counts);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load products');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [statusFilter, searchQuery, sortKey, sortDir, page]);
 
   useEffect(() => {
     loadProducts();
-  }, [currentPage, pageSize, categoryFilter, sortField, sortDirection]);
+  }, [loadProducts]);
 
-  useEffect(() => {
-    const delayedSearch = setTimeout(() => {
-      if (currentPage !== 1) {
-        setCurrentPage(1);
-      } else {
-        loadProducts();
-      }
-    }, 300);
-
-    return () => clearTimeout(delayedSearch);
-  }, [searchTerm]);
-
-  const loadProducts = async () => {
-    try {
-      setLoading(true);
-      const data = await adminApi.getProducts(currentPage, pageSize, searchTerm || undefined, categoryFilter || undefined);
-      
-      // Filter by stock level on frontend (in production, this should be done on backend)
-      let filteredProducts = data.products;
-      if (stockFilter) {
-        filteredProducts = data.products.filter((product: Product) => {
-          if (stockFilter === 'in-stock') return product.inventoryCount > 10;
-          if (stockFilter === 'low-stock') return product.inventoryCount > 0 && product.inventoryCount <= 10;
-          if (stockFilter === 'out-of-stock') return product.inventoryCount === 0;
-          return true;
-        });
-      }
-
-      // Sort products
-      filteredProducts.sort((a: Product, b: Product) => {
-        let aValue: any = a[sortField as keyof Product];
-        let bValue: any = b[sortField as keyof Product];
-
-        if (sortField === 'createdAt') {
-          aValue = new Date(aValue).getTime();
-          bValue = new Date(bValue).getTime();
-        } else if (sortField === 'price' || sortField === 'inventoryCount') {
-          aValue = Number(aValue);
-          bValue = Number(bValue);
-        }
-
-        if (sortDirection === 'asc') {
-          return aValue > bValue ? 1 : -1;
-        } else {
-          return aValue < bValue ? 1 : -1;
-        }
-      });
-
-      setProducts(filteredProducts);
-      setTotalPages(data.totalPages);
-      setTotalProducts(data.total);
-    } catch (error) {
-      console.error('Failed to load products:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === 1 ? -1 : 1);
     } else {
-      setSortField(field);
-      setSortDirection('desc');
+      setSortKey(key);
+      setSortDir(1);
     }
+    setPage(1);
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    setConfirmModal({
-      isOpen: true,
-      action: 'delete',
-      productId: id,
-      productName: name,
-      isLoading: false,
-    });
+  const handleCreateClick = () => {
+    setSelectedProduct(null);
+    setDrawerOpen(true);
+  };
+
+  const handleEditClick = (p: AdminProduct) => {
+    setSelectedProduct(p);
+    setDrawerOpen(true);
+  };
+
+  const handleDeleteClick = (p: AdminProduct) => {
+    setDeleteProduct(p);
   };
 
   const handleConfirmDelete = async () => {
+    if (!deleteProduct) return;
     try {
-      setConfirmModal(prev => ({ ...prev, isLoading: true }));
-      await adminApi.deleteProduct(confirmModal.productId);
-      setConfirmModal({ isOpen: false, action: null, productId: '', productName: '', isLoading: false });
+      setIsDeleting(true);
+      await adminApi.deleteProduct(deleteProduct.id);
+      showToast('Product deleted');
+      setDeleteProduct(null);
+      // Invalidate public catalog so storefront reflects deletion
+      window.dispatchEvent(new Event('atlas:catalog-updated'));
       loadProducts();
-    } catch (error) {
-      console.error('Failed to delete product:', error);
-      alert('Failed to delete product');
-      setConfirmModal(prev => ({ ...prev, isLoading: false }));
+      if (refreshStats) refreshStats();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to delete product');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const handleStockUpdate = async (id: string, currentStock: number) => {
-    const newStock = prompt(`Update stock for this product (current: ${currentStock}):`, String(currentStock));
-    if (newStock === null) return;
-
-    try {
-      await adminApi.updateProductStock(id, parseInt(newStock));
-      loadProducts();
-    } catch (error) {
-      console.error('Failed to update stock:', error);
-      alert('Failed to update stock');
-    }
+  const handleSaved = () => {
+    showToast(selectedProduct ? 'Changes saved' : 'Product created');
+    // Invalidate public storefront queries
+    window.dispatchEvent(new Event('atlas:catalog-updated'));
+    loadProducts();
+    if (refreshStats) refreshStats();
   };
 
-  const getStockStatusClass = (inventoryCount: number) => {
-    if (inventoryCount > 10) return `${styles.badge} ${styles.completed}`;
-    if (inventoryCount > 0) return `${styles.badge} ${styles.pending}`;
-    return `${styles.badge} ${styles.cancelled}`;
-  };
-
-  const getStockStatusText = (inventoryCount: number) => {
-    if (inventoryCount > 10) return 'In Stock';
-    if (inventoryCount > 0) return 'Low Stock';
-    return 'Out of Stock';
-  };
-
-  const getSortIcon = (field: string) => {
-    if (sortField !== field) return <ArrowUpDown size={16} className={styles.sortIcon} />;
-    return sortDirection === 'asc' ? 
-      <ArrowUp size={16} className={styles.sortIcon} /> : 
-      <ArrowDown size={16} className={styles.sortIcon} />;
-  };
-
-  const renderPagination = () => {
-    const pages = [];
-    const maxVisiblePages = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-    if (endPage - startPage + 1 < maxVisiblePages) {
-      startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(
-        <button
-          key={i}
-          onClick={() => setCurrentPage(i)}
-          className={`${styles.pageNumber} ${i === currentPage ? styles.active : ''}`}
-        >
-          {i}
-        </button>
-      );
-    }
-
-    return pages;
-  };
-
-  if (loading) {
-    return (
-      <div className={styles.adminContent}>
-        <div className={styles.pageHeader}>
-          <h1 className={styles.pageTitle}>Products Management</h1>
-          <p className={styles.pageSubtitle}>Manage your product catalog, inventory, and pricing</p>
-        </div>
-        <div style={{ marginBottom: '2rem' }}>
-          <button
-            disabled
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            style={{ opacity: 0.6 }}
-          >
-            <Plus size={20} />
-            Add Product
-          </button>
-        </div>
-        <div className={styles.tableContainer}>
-          <div className={styles.tableToolbar}>
-            <div className={styles.searchContainer}>
-              <Search className={styles.searchIcon} />
-              <input
-                type="text"
-                placeholder="Search products by name or description..."
-                disabled
-                className={styles.searchInput}
-              />
-            </div>
-            <div className={styles.filtersContainer}>
-              <select disabled className={styles.filterSelect}>
-                <option>All Stock Levels</option>
-              </select>
-            </div>
-          </div>
-          <TableSkeleton rows={10} columns={6} />
-        </div>
-      </div>
-    );
-  }
+  const totalPages = Math.ceil(total / pageSize) || 1;
 
   return (
-    <div className={styles.adminContent}>
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Products Management</h1>
-        <p className={styles.pageSubtitle}>Manage your product catalog, inventory, and pricing</p>
-      </div>
-
-      <div style={{ marginBottom: '2rem' }}>
+    <div>
+      {/* Top Bar with Title and Add Button */}
+      <div className={styles.bar} style={{ marginTop: 0 }}>
+        <div>
+          <h1 className={styles.title}>Products</h1>
+          <p className={styles.sub} style={{ margin: 0 }}>
+            Create, edit and remove what shoppers see in the store.
+          </p>
+        </div>
         <button
-          onClick={() => navigate('/admin/products/new')}
+          type="button"
           className={`${styles.btn} ${styles.btnPrimary}`}
+          onClick={handleCreateClick}
         >
-          <Plus size={20} />
-          Add Product
+          <Plus size={18} />
+          <span>Add product</span>
         </button>
       </div>
 
-      <div className={styles.tableContainer}>
-        {/* Toolbar */}
-        <div className={styles.tableToolbar}>
-          <div className={styles.searchContainer}>
-            <Search className={styles.searchIcon} />
-            <input
-              type="text"
-              placeholder="Search products by name or description..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={styles.searchInput}
-            />
-          </div>
-          
-          <div className={styles.filtersContainer}>
-            <select
-              value={stockFilter}
-              onChange={(e) => setStockFilter(e.target.value)}
-              className={styles.filterSelect}
-            >
-              {stockOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Filter and Search Bar */}
+      <div className={styles.bar}>
+        <div className={styles.seg} role="group" aria-label="Product status filters">
+          <button
+            type="button"
+            className={styles.segBtn}
+            aria-pressed={statusFilter === 'all'}
+            onClick={() => {
+              setStatusFilter('all');
+              setPage(1);
+            }}
+          >
+            All {counts.all}
+          </button>
+          <button
+            type="button"
+            className={styles.segBtn}
+            aria-pressed={statusFilter === 'published'}
+            onClick={() => {
+              setStatusFilter('published');
+              setPage(1);
+            }}
+          >
+            Published {counts.published}
+          </button>
+          <button
+            type="button"
+            className={styles.segBtn}
+            aria-pressed={statusFilter === 'draft'}
+            onClick={() => {
+              setStatusFilter('draft');
+              setPage(1);
+            }}
+          >
+            Drafts {counts.draft}
+          </button>
         </div>
 
-        {/* Table */}
-        {products.length === 0 ? (
-          <div className={styles.emptyState}>
-            <Package className={styles.emptyIcon} />
-            <div className={styles.emptyTitle}>No products found</div>
-            <div className={styles.emptyText}>
-              {searchTerm || stockFilter 
-                ? 'Try adjusting your search or filter criteria'
-                : 'Start by adding your first product to the catalog'
-              }
-            </div>
-            <button
-              onClick={() => navigate('/admin/products/new')}
-              className={styles.emptyAction}
-            >
-              <Plus size={20} />
-              Add First Product
-            </button>
-          </div>
-        ) : (
-          <>
-            <table className={styles.table}>
-              <thead className={styles.tableHeader}>
-                <tr>
-                  <th 
-                    className={styles.sortableHeader}
-                    onClick={() => handleSort('name')}
-                  >
-                    Product
-                    {getSortIcon('name')}
-                  </th>
-                  <th>Category</th>
-                  <th 
-                    className={styles.sortableHeader}
-                    onClick={() => handleSort('price')}
-                  >
-                    Price
-                    {getSortIcon('price')}
-                  </th>
-                  <th 
-                    className={styles.sortableHeader}
-                    onClick={() => handleSort('inventoryCount')}
-                  >
-                    Stock
-                    {getSortIcon('inventoryCount')}
-                  </th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody className={styles.tableBody}>
-                {products.map((product) => (
-                  <tr key={product._id}>
-                    <td>
-                      <div className={styles.customerCell}>
-                        <div className={styles.customerAvatar}>
-                          <Package size={16} />
-                        </div>
-                        <div className={styles.tableCellContent}>
-                          <div className={styles.primaryText}>
-                            {product.name}
-                          </div>
-                          <div className={styles.secondaryText}>
-                            {product.subtitle || 'No description'}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div className={styles.tableCell}>
-                        <Tag size={16} style={{ color: '#6b7280' }} />
-                        <span className={styles.secondaryText}>
-                          {product.categoryName || 'Uncategorized'}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className={styles.tableCell}>
-                        <DollarSign size={16} style={{ color: '#10b981' }} />
-                        <span className={styles.totalCell}>
-                          ${product.price.toFixed(2)}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <button
-                        onClick={() => handleStockUpdate(product._id, product.inventoryCount)}
-                        className={styles.tableCell}
-                        style={{ cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}
-                      >
-                        <Warehouse size={16} style={{ color: '#6b7280' }} />
-                        <span className={styles.primaryText}>
-                          {product.inventoryCount} units
-                        </span>
-                      </button>
-                    </td>
-                    <td>
-                      <span className={getStockStatusClass(product.inventoryCount)}>
-                        {getStockStatusText(product.inventoryCount)}
-                      </span>
-                    </td>
-                    <td>
-                      <div className={styles.actionsCell}>
-                        <button
-                          onClick={() => navigate(`/admin/products/${product._id}/edit`)}
-                          className={`${styles.actionBtn} ${styles.editBtn}`}
-                          title="Edit Product"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product._id, product.name)}
-                          className={`${styles.actionBtn} ${styles.deleteBtn}`}
-                          title="Delete Product"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Pagination */}
-            <div className={styles.paginationContainer}>
-              <div className={styles.paginationInfo}>
-                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalProducts)} of {totalProducts} products
-              </div>
-              
-              <div className={styles.paginationControls}>
-                <button
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1}
-                  className={styles.paginationBtn}
-                >
-                  <ChevronsLeft size={16} />
-                </button>
-                
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className={styles.paginationBtn}
-                >
-                  <ChevronLeft size={16} />
-                  Previous
-                </button>
-
-                <div className={styles.pageNumbers}>
-                  {renderPagination()}
-                </div>
-
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className={styles.paginationBtn}
-                >
-                  Next
-                  <ChevronRight size={16} />
-                </button>
-                
-                <button
-                  onClick={() => setCurrentPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className={styles.paginationBtn}
-                >
-                  <ChevronsRight size={16} />
-                </button>
-              </div>
-
-              <div className={styles.pageSizeSelector}>
-                <span>Show</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className={styles.pageSizeSelect}
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-                <span>per page</span>
-              </div>
-            </div>
-          </>
-        )}
+        <input
+          type="search"
+          className={styles.search}
+          placeholder="Search name or SKU"
+          aria-label="Search products"
+          value={searchQuery}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setPage(1);
+          }}
+        />
       </div>
 
-      <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal({ isOpen: false, action: null, productId: '', productName: '', isLoading: false })}
-        onConfirm={handleConfirmDelete}
-        isLoading={confirmModal.isLoading}
-        title="Delete Product"
-        message={`Are you sure you want to delete "${confirmModal.productName}"? This action cannot be undone.`}
-        confirmText="Delete Product"
-        variant="danger"
+      {/* Products Table */}
+      <div className={styles.tw}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.thCell}>
+                <button
+                  type="button"
+                  className={styles.sortBtn}
+                  onClick={() => handleSort('title')}
+                >
+                  Product {sortKey === 'title' ? (sortDir === 1 ? '↑' : '↓') : ''}
+                </button>
+              </th>
+              <th className={styles.thCell}>
+                <button
+                  type="button"
+                  className={styles.sortBtn}
+                  onClick={() => handleSort('category')}
+                >
+                  Category {sortKey === 'category' ? (sortDir === 1 ? '↑' : '↓') : ''}
+                </button>
+              </th>
+              <th className={styles.thCell}>
+                <button
+                  type="button"
+                  className={styles.sortBtn}
+                  onClick={() => handleSort('price')}
+                >
+                  Price {sortKey === 'price' ? (sortDir === 1 ? '↑' : '↓') : ''}
+                </button>
+              </th>
+              <th className={styles.thCell}>
+                <button
+                  type="button"
+                  className={styles.sortBtn}
+                  onClick={() => handleSort('stock')}
+                >
+                  Stock {sortKey === 'stock' ? (sortDir === 1 ? '↑' : '↓') : ''}
+                </button>
+              </th>
+              <th className={styles.thCell}>
+                <button
+                  type="button"
+                  className={styles.sortBtn}
+                  onClick={() => handleSort('status')}
+                >
+                  Status {sortKey === 'status' ? (sortDir === 1 ? '↑' : '↓') : ''}
+                </button>
+              </th>
+              <th className={styles.thCell} style={{ textAlign: 'right' }}>
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={6} className={styles.tdCell} style={{ textAlign: 'center', padding: '40px' }}>
+                  <span className={styles.sub}>Loading products…</span>
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={6} className={styles.tdCell} style={{ textAlign: 'center', padding: '40px', color: 'var(--bad)' }}>
+                  <b>Error loading products:</b> {error}
+                </td>
+              </tr>
+            ) : products.length === 0 ? (
+              <tr>
+                <td colSpan={6} className={styles.tdCell}>
+                  <div className={styles.empty}>
+                    <b>No products found</b>
+                    Try another filter, or add a product.
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              products.map((p, idx) => {
+                const gradient = GRADIENTS[idx % GRADIENTS.length];
+                const emoji = EMOJI_MAP[p.category] || '📦';
+                const priceDollars = Math.round(p.price / 100);
+                const isLive = p.status === 'published';
+
+                return (
+                  <tr key={p.id} className={styles.tr}>
+                    <td className={styles.tdCell}>
+                      <div className={styles.productRow}>
+                        <div
+                          className={styles.th}
+                          style={
+                            p.imageUrl
+                              ? { backgroundImage: `url(${p.imageUrl})` }
+                              : {
+                                  background: `linear-gradient(145deg, ${gradient[0]}, ${gradient[1]})`,
+                                }
+                          }
+                        >
+                          {!p.imageUrl && emoji}
+                        </div>
+                        <div>
+                          <b>{p.title}</b>
+                          <span>{p.sku}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className={styles.tdCell}>
+                      {CATEGORIES[p.category] || p.category}
+                    </td>
+                    <td className={styles.tdCell}>${priceDollars}</td>
+                    <td className={styles.tdCell}>
+                      {p.stock === 0 ? (
+                        <span className={styles.out}>Out of stock</span>
+                      ) : p.stock <= 5 ? (
+                        <span className={styles.low}>{p.stock} left</span>
+                      ) : (
+                        p.stock
+                      )}
+                    </td>
+                    <td className={styles.tdCell}>
+                      <span
+                        className={`${styles.st} ${
+                          isLive ? styles.stLive : styles.stDraft
+                        }`}
+                      >
+                        {isLive ? 'Published' : 'Draft'}
+                      </span>
+                    </td>
+                    <td
+                      className={styles.tdCell}
+                      style={{ textAlign: 'right', whiteSpace: 'nowrap' }}
+                    >
+                      <button
+                        type="button"
+                        className={`${styles.btn} ${styles.btnSmall}`}
+                        onClick={() => handleEditClick(p)}
+                        style={{ marginRight: '8px' }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.btn} ${styles.btnSmall} ${styles.btnGhost}`}
+                        style={{ color: 'var(--bad)' }}
+                        onClick={() => handleDeleteClick(p)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '8px',
+            marginTop: '16px',
+            alignItems: 'center',
+          }}
+        >
+          <span className={styles.sub} style={{ margin: 0, fontSize: '13px' }}>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnSmall} ${styles.btnGhost}`}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnSmall} ${styles.btnGhost}`}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+          >
+            Next
+          </button>
+        </div>
+      )}
+
+      {/* Product Drawer (Create / Edit) */}
+      <ProductDrawer
+        isOpen={drawerOpen}
+        product={selectedProduct}
+        onClose={() => setDrawerOpen(false)}
+        onSaved={handleSaved}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteProductDialog
+        isOpen={!!deleteProduct}
+        product={deleteProduct}
+        isDeleting={isDeleting}
+        onClose={() => setDeleteProduct(null)}
+        onConfirm={handleConfirmDelete}
+      />
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className={styles.toast} role="status">
+          {toastMessage}
+        </div>
+      )}
     </div>
   );
-}
+};

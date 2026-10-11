@@ -1,12 +1,18 @@
 import mongoose from 'mongoose';
-import { CATEGORY_SEED_DATA, PRODUCT_SEED_DATA } from '../catalog/data/catalog-seed.data';
+import {
+  CATEGORY_SEED_DATA,
+  PRODUCT_SEED_DATA,
+} from '../catalog/data/catalog-seed.data';
 
 async function seedMongo() {
-  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27019/ai_commerce_platform';
+  const uri =
+    process.env.MONGODB_URI || 'mongodb://localhost:27019/ai_commerce_platform';
   const dbName = process.env.MONGODB_DB_NAME || 'ai_commerce_platform';
 
-  console.log(`Connecting to MongoDB at: ${uri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')} (db: ${dbName})`);
-  
+  console.log(
+    `Connecting to MongoDB at: ${uri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')} (db: ${dbName})`,
+  );
+
   await mongoose.connect(uri, { dbName });
   const db = mongoose.connection.db;
 
@@ -22,7 +28,7 @@ async function seedMongo() {
     await categoryCollection.updateOne(
       { slug: cat.slug },
       { $set: cat },
-      { upsert: true }
+      { upsert: true },
     );
   }
   console.log('✅ Categories synchronized');
@@ -32,14 +38,16 @@ async function seedMongo() {
     await productCollection.updateOne(
       { slug: prod.slug },
       { $set: prod },
-      { upsert: true }
+      { upsert: true },
     );
   }
   console.log('✅ Products synchronized');
 
   const catCount = await categoryCollection.countDocuments();
   const prodCount = await productCollection.countDocuments();
-  console.log(`\n🎉 Done! Total in DB: ${catCount} categories, ${prodCount} products.`);
+  console.log(
+    `\n🎉 Done! Total in DB: ${catCount} categories, ${prodCount} products.`,
+  );
 
   await mongoose.disconnect();
 }

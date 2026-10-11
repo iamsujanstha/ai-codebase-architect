@@ -57,17 +57,23 @@ export class CatalogService {
         ]);
 
         return {
-          announcement: '🚀 Powered by Neon Serverless PostgreSQL (Sub-millisecond Queries)',
+          announcement:
+            '🚀 Powered by Neon Serverless PostgreSQL (Sub-millisecond Queries)',
           hero: STOREFRONT_HERO,
           categories: catRows.rows.map((r) => this.mapPostgresCategory(r)),
-          featuredProducts: featRows.rows.map((r) => this.mapPostgresProduct(r)),
+          featuredProducts: featRows.rows.map((r) =>
+            this.mapPostgresProduct(r),
+          ),
           newArrivals: newRows.rows.map((r) => this.mapPostgresProduct(r)),
           catalogProducts: allRows.rows.map((r) => this.mapPostgresProduct(r)),
           valueProps: STOREFRONT_VALUE_PROPS,
           testimonials: STOREFRONT_TESTIMONIALS,
         };
       } catch (err) {
-        console.warn('PostgreSQL getHomePage failed, falling back to Mongo:', err);
+        console.warn(
+          'PostgreSQL getHomePage failed, falling back to Mongo:',
+          err,
+        );
       }
     }
     const [categories, featuredProducts, newArrivals, catalogProducts] =
@@ -98,9 +104,13 @@ export class CatalogService {
       categories: categories.map((category) =>
         this.mapCategory(category, categoryCounts),
       ),
-      featuredProducts: featuredProducts.map((product) => this.mapProduct(product)),
+      featuredProducts: featuredProducts.map((product) =>
+        this.mapProduct(product),
+      ),
       newArrivals: newArrivals.map((product) => this.mapProduct(product)),
-      catalogProducts: catalogProducts.map((product) => this.mapProduct(product)),
+      catalogProducts: catalogProducts.map((product) =>
+        this.mapProduct(product),
+      ),
       valueProps: STOREFRONT_VALUE_PROPS,
       testimonials: STOREFRONT_TESTIMONIALS,
     };
@@ -114,7 +124,10 @@ export class CatalogService {
         );
         return catRows.rows.map((r) => this.mapPostgresCategory(r));
       } catch (err) {
-        console.warn('PostgreSQL listCategories failed, falling back to Mongo:', err);
+        console.warn(
+          'PostgreSQL listCategories failed, falling back to Mongo:',
+          err,
+        );
       }
     }
 
@@ -123,7 +136,9 @@ export class CatalogService {
       this.getCategoryCounts(),
     ]);
 
-    return categories.map((category) => this.mapCategory(category, categoryCounts));
+    return categories.map((category) =>
+      this.mapCategory(category, categoryCounts),
+    );
   }
 
   async listProducts(
@@ -146,7 +161,9 @@ export class CatalogService {
         }
 
         if (query.search) {
-          conditions.push(`(name ILIKE $${paramIdx} OR description ILIKE $${paramIdx} OR category ILIKE $${paramIdx})`);
+          conditions.push(
+            `(name ILIKE $${paramIdx} OR description ILIKE $${paramIdx} OR category ILIKE $${paramIdx})`,
+          );
           params.push(`%${query.search}%`);
           paramIdx++;
         }
@@ -177,7 +194,10 @@ export class CatalogService {
           },
         };
       } catch (err) {
-        console.warn('PostgreSQL listProducts failed, falling back to Mongo:', err);
+        console.warn(
+          'PostgreSQL listProducts failed, falling back to Mongo:',
+          err,
+        );
       }
     }
 
@@ -205,7 +225,6 @@ export class CatalogService {
         featured: query.featured,
         skip: query.skip,
       },
-
     };
   }
 
@@ -234,11 +253,16 @@ export class CatalogService {
 
           return {
             product: this.mapPostgresProduct(row),
-            relatedProducts: relatedRes.rows.map((r) => this.mapPostgresProduct(r)),
+            relatedProducts: relatedRes.rows.map((r) =>
+              this.mapPostgresProduct(r),
+            ),
           };
         }
       } catch (err) {
-        console.warn('PostgreSQL getProductBySlug failed, falling back to Mongo:', err);
+        console.warn(
+          'PostgreSQL getProductBySlug failed, falling back to Mongo:',
+          err,
+        );
       }
     }
 
@@ -291,16 +315,33 @@ export class CatalogService {
     const products: CatalogProduct[] = [];
 
     const categories = await this.listCategories();
-    
+
     if (categories.length === 0) return [];
 
-    const adjectives = ['Ultra', 'Smart', 'Elite', 'Pro', 'NextGen', 'Cloud', 'Hyper'];
-    const nouns = ['Monitor', 'Keyboard', 'CPU', 'Controller', 'Node', 'Gateway', 'Interface'];
+    const adjectives = [
+      'Ultra',
+      'Smart',
+      'Elite',
+      'Pro',
+      'NextGen',
+      'Cloud',
+      'Hyper',
+    ];
+    const nouns = [
+      'Monitor',
+      'Keyboard',
+      'CPU',
+      'Controller',
+      'Node',
+      'Gateway',
+      'Interface',
+    ];
 
     for (let i = 0; i < count; i++) {
-      const category = categories[Math.floor(Math.random() * categories.length)];
+      const category =
+        categories[Math.floor(Math.random() * categories.length)];
       const name = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]} ${Math.floor(Math.random() * 900) + 100}`;
-      
+
       const productData = {
         name,
         subtitle: `Performance optimized ${category.name}`,
@@ -315,7 +356,7 @@ export class CatalogService {
           gradientTo: '#8b5cf6',
           accent: '#3b82f6',
           glyph: nouns[Math.floor(Math.random() * nouns.length)].toLowerCase(),
-        }
+        },
       };
 
       products.push(await this.createProduct(productData));
@@ -327,7 +368,10 @@ export class CatalogService {
   private buildProductFilter(
     query: ListProductsQueryDto,
   ): FilterQuery<ProductDocument> {
-    const filter: FilterQuery<ProductDocument> = {};
+    const filter: FilterQuery<ProductDocument> = {
+      deletedAt: null,
+      status: { $ne: 'draft' },
+    };
 
     if (query.category) {
       filter.categorySlug = query.category;
@@ -472,12 +516,17 @@ export class CatalogService {
       price,
       compareAtPrice: Math.round(price * 1.15),
       currency: 'USD',
-      rating: 4.8 + ((row.id % 3) * 0.1),
-      reviewCount: 30 + (row.id * 11) % 180,
+      rating: 4.8 + (row.id % 3) * 0.1,
+      reviewCount: 30 + ((row.id * 11) % 180),
       inventoryCount: row.stock ?? 50,
       categorySlug,
       categoryName: row.category,
-      tags: [row.category ? row.category.toLowerCase() : 'gear', 'neon', 'postgresql', 'sql'],
+      tags: [
+        row.category ? row.category.toLowerCase() : 'gear',
+        'neon',
+        'postgresql',
+        'sql',
+      ],
       keyHighlights: [
         `Live query directly from Neon PostgreSQL (ID: ${row.id})`,
         `Category: ${row.category}`,
@@ -501,4 +550,3 @@ export class CatalogService {
     };
   }
 }
-

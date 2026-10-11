@@ -5,7 +5,8 @@
 
 import { Client } from 'pg';
 
-const connectionString = process.env.POSTGRES_URL || 
+const connectionString =
+  process.env.POSTGRES_URL ||
   'postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
 
 async function viewData() {
@@ -32,7 +33,9 @@ async function viewData() {
     console.table(users.rows);
 
     // Products by category
-    console.log('\n═══════════════════════════════════════════════════════════');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════',
+    );
     console.log('📦 PRODUCTS BY CATEGORY (30 total)\n');
     const productCategories = await client.query(`
       SELECT 
@@ -47,7 +50,9 @@ async function viewData() {
     console.table(productCategories.rows);
 
     // Top 10 products
-    console.log('\n═══════════════════════════════════════════════════════════');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════',
+    );
     console.log('🔥 TOP 10 MOST EXPENSIVE PRODUCTS\n');
     const topProducts = await client.query(`
       SELECT name, category, 
@@ -61,7 +66,9 @@ async function viewData() {
     console.table(topProducts.rows);
 
     // Orders summary
-    console.log('\n═══════════════════════════════════════════════════════════');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════',
+    );
     console.log('🛒 ORDERS SUMMARY (15 total)\n');
     const orderSummary = await client.query(`
       SELECT 
@@ -76,7 +83,9 @@ async function viewData() {
     console.table(orderSummary.rows);
 
     // Recent orders
-    console.log('\n═══════════════════════════════════════════════════════════');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════',
+    );
     console.log('🆕 RECENT ORDERS (Last 10)\n');
     const recentOrders = await client.query(`
       SELECT 
@@ -94,7 +103,9 @@ async function viewData() {
     console.table(recentOrders.rows);
 
     // Top customers
-    console.log('\n═══════════════════════════════════════════════════════════');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════',
+    );
     console.log('💰 TOP CUSTOMERS BY SPENDING\n');
     const topCustomers = await client.query(`
       SELECT 
@@ -114,7 +125,9 @@ async function viewData() {
     console.table(topCustomers.rows);
 
     // Popular products (by orders)
-    console.log('\n═══════════════════════════════════════════════════════════');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════',
+    );
     console.log('🌟 MOST ORDERED PRODUCTS\n');
     const popularProducts = await client.query(`
       SELECT 
@@ -132,7 +145,9 @@ async function viewData() {
     console.table(popularProducts.rows);
 
     // Chat threads
-    console.log('\n═══════════════════════════════════════════════════════════');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════',
+    );
     console.log('💬 CHAT THREADS (5 total)\n');
     const chatThreads = await client.query(`
       SELECT 
@@ -150,7 +165,9 @@ async function viewData() {
     console.table(chatThreads.rows);
 
     // Payment audit logs
-    console.log('\n═══════════════════════════════════════════════════════════');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════',
+    );
     console.log('📝 PAYMENT AUDIT EVENTS (Sample)\n');
     const auditLogs = await client.query(`
       SELECT 
@@ -168,9 +185,11 @@ async function viewData() {
     console.table(auditLogs.rows);
 
     // Summary statistics
-    console.log('\n═══════════════════════════════════════════════════════════');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════',
+    );
     console.log('📊 OVERALL STATISTICS\n');
-    
+
     const stats = await client.query(`
       SELECT 
         (SELECT COUNT(*) FROM users WHERE role = 'user') as total_customers,
@@ -183,7 +202,9 @@ async function viewData() {
     `);
     console.table(stats.rows);
 
-    console.log('\n═══════════════════════════════════════════════════════════\n');
+    console.log(
+      '\n═══════════════════════════════════════════════════════════\n',
+    );
     console.log('✅ DATA OVERVIEW COMPLETE!\n');
     console.log('🎯 Ready for SQL practice:');
     console.log('   • Complex JOINs across multiple tables');
@@ -192,7 +213,6 @@ async function viewData() {
     console.log('   • Date/time filtering');
     console.log('   • JSONB queries on audit logs');
     console.log('   • Materialized views for performance\n');
-
   } catch (error) {
     console.error('❌ Error:', error);
   } finally {

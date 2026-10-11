@@ -2,13 +2,13 @@ import { getPool } from './db';
 
 /**
  * EXERCISE 08: Constraints (Enforcing Data Integrity at the Engine Level)
- * 
+ *
  * MongoDB vs PostgreSQL:
  * - MongoDB: Validation is typically soft or handled at the application layer (Mongoose schema).
  *   Orphaned references happen easily when documents are deleted.
  * - PostgreSQL: Guarantees relational and semantic validity directly in the storage engine.
  *   Transactions that violate constraints fail immediately before touching disk.
- * 
+ *
  * Concepts Demonstrated:
  * 1. CHECK Constraints (Range, format, enum-like conditions)
  * 2. FOREIGN KEY Constraints with Referencing Behaviors:
@@ -59,7 +59,9 @@ export async function runConstraintsExercise(): Promise<void> {
         CONSTRAINT uq_order_product UNIQUE (order_id, product_code)
       );
     `);
-    console.log('✅ Created tables: exercise_customers, exercise_orders, exercise_order_items with constraints');
+    console.log(
+      '✅ Created tables: exercise_customers, exercise_orders, exercise_order_items with constraints',
+    );
 
     // 2. Insert valid data
     const custRes = await pool.query(`
@@ -77,7 +79,9 @@ export async function runConstraintsExercise(): Promise<void> {
         VALUES ('Underage User', 'kid@tech.io', 14, 'ACTIVE');
       `);
     } catch (err: any) {
-      console.log(`🛡️  CHECK Constraint intercepted invalid age: "${err.message}" (code: ${err.code})`);
+      console.log(
+        `🛡️  CHECK Constraint intercepted invalid age: "${err.message}" (code: ${err.code})`,
+      );
     }
 
     // 4. Test UNIQUE constraint violation (duplicate email)
@@ -87,43 +91,69 @@ export async function runConstraintsExercise(): Promise<void> {
         VALUES ('Duplicate Alice', 'alice@tech.io', 30, 'ACTIVE');
       `);
     } catch (err: any) {
-      console.log(`🛡️  UNIQUE Constraint intercepted duplicate email: "${err.message}" (code: ${err.code})`);
+      console.log(
+        `🛡️  UNIQUE Constraint intercepted duplicate email: "${err.message}" (code: ${err.code})`,
+      );
     }
 
     // 5. Test Composite UNIQUE constraint (same product twice in order)
-    const orderRes = await pool.query(`
+    const orderRes = await pool.query(
+      `
       INSERT INTO exercise_orders (customer_id, order_total)
       VALUES ($1, 150.00) RETURNING id;
-    `, [custId]);
+    `,
+      [custId],
+    );
     const orderId = orderRes.rows[0].id;
 
-    await pool.query(`
+    await pool.query(
+      `
       INSERT INTO exercise_order_items (order_id, product_code, quantity, unit_price)
       VALUES ($1, 'PRD-M3-MAX', 1, 150.00);
-    `, [orderId]);
+    `,
+      [orderId],
+    );
     console.log(`Added product 'PRD-M3-MAX' to order ${orderId}`);
 
     try {
-      await pool.query(`
+      await pool.query(
+        `
         INSERT INTO exercise_order_items (order_id, product_code, quantity, unit_price)
         VALUES ($1, 'PRD-M3-MAX', 2, 150.00);
-      `, [orderId]);
+      `,
+        [orderId],
+      );
     } catch (err: any) {
-      console.log(`🛡️  Composite UNIQUE intercepted duplicate product in order: "${err.message}"`);
+      console.log(
+        `🛡️  Composite UNIQUE intercepted duplicate product in order: "${err.message}"`,
+      );
     }
 
     // 6. Test Foreign Key ON DELETE CASCADE
     console.log('\n--- Demonstrating Foreign Key ON DELETE CASCADE ---');
-    const itemsBefore = await pool.query('SELECT COUNT(*) FROM exercise_order_items WHERE order_id = $1;', [orderId]);
-    console.log(`Order items before deleting customer: ${itemsBefore.rows[0].count}`);
+    const itemsBefore = await pool.query(
+      'SELECT COUNT(*) FROM exercise_order_items WHERE order_id = $1;',
+      [orderId],
+    );
+    console.log(
+      `Order items before deleting customer: ${itemsBefore.rows[0].count}`,
+    );
 
     await pool.query('DELETE FROM exercise_customers WHERE id = $1;', [custId]);
     console.log(`Deleted customer ${custId}...`);
 
-    const ordersAfter = await pool.query('SELECT COUNT(*) FROM exercise_orders WHERE customer_id = $1;', [custId]);
-    const itemsAfter = await pool.query('SELECT COUNT(*) FROM exercise_order_items WHERE order_id = $1;', [orderId]);
+    const ordersAfter = await pool.query(
+      'SELECT COUNT(*) FROM exercise_orders WHERE customer_id = $1;',
+      [custId],
+    );
+    const itemsAfter = await pool.query(
+      'SELECT COUNT(*) FROM exercise_order_items WHERE order_id = $1;',
+      [orderId],
+    );
     console.log(`Orders remaining: ${ordersAfter.rows[0].count}`);
-    console.log(`Order items remaining: ${itemsAfter.rows[0].count} (automatically cascaded!)`);
+    console.log(
+      `Order items remaining: ${itemsAfter.rows[0].count} (automatically cascaded!)`,
+    );
 
     // Clean up
     await pool.query(`
@@ -139,5 +169,7 @@ export async function runConstraintsExercise(): Promise<void> {
 }
 
 if (require.main === module) {
-  runConstraintsExercise().then(() => process.exit(0)).catch(() => process.exit(1));
+  runConstraintsExercise()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
 }

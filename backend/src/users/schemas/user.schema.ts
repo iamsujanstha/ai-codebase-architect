@@ -6,6 +6,7 @@ export type UserDocument = HydratedDocument<User>;
 export enum UserRole {
   USER = 'user',
   ADMIN = 'admin',
+  CUSTOMER = 'customer',
 }
 
 @Schema({ timestamps: true })
@@ -19,7 +20,7 @@ export class User {
   @Prop({ required: true, trim: true })
   name!: string;
 
-  @Prop({ type: String, enum: UserRole, default: UserRole.USER })
+  @Prop({ type: String, enum: UserRole, default: UserRole.CUSTOMER })
   role!: UserRole;
 
   @Prop()
@@ -36,6 +37,9 @@ export class User {
 
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ default: 'active', enum: ['active', 'suspended'] })
+  status?: string;
 
   @Prop()
   lastLoginAt?: Date;

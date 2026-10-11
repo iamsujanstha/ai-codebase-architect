@@ -1,6 +1,6 @@
 /**
  * Exercise 2: Indexes Deep Dive
- * 
+ *
  * Goal: Understand B-tree, GIN, partial, composite, and covering indexes
  */
 
@@ -19,7 +19,7 @@ async function demonstrateIndexes() {
     `);
 
     console.log('EXPLAIN ANALYZE (no index on status):');
-    explainNoIndex.rows.forEach(row => console.log(row['QUERY PLAN']));
+    explainNoIndex.rows.forEach((row) => console.log(row['QUERY PLAN']));
 
     // Task 2: Create index and compare
     console.log('\n\nTask 2: Create Index and Compare Performance\n');
@@ -33,16 +33,20 @@ async function demonstrateIndexes() {
     `);
 
     console.log('EXPLAIN ANALYZE (with index on status):');
-    explainWithIndex.rows.forEach(row => console.log(row['QUERY PLAN']));
+    explainWithIndex.rows.forEach((row) => console.log(row['QUERY PLAN']));
 
-    console.log('\n✅ With index: PostgreSQL uses Index Scan instead of Seq Scan');
+    console.log(
+      '\n✅ With index: PostgreSQL uses Index Scan instead of Seq Scan',
+    );
     console.log('   Result: Much faster for large tables!\n');
 
     // Task 3: Composite Index
     console.log('\nTask 3: Composite Index (Multiple Columns)\n');
 
-    console.log('Query: Get user\'s paid orders, sorted by date');
-    console.log('SELECT * FROM orders WHERE user_id = 5 AND status = \'paid\' ORDER BY created_at DESC;\n');
+    console.log("Query: Get user's paid orders, sorted by date");
+    console.log(
+      "SELECT * FROM orders WHERE user_id = 5 AND status = 'paid' ORDER BY created_at DESC;\n",
+    );
 
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_orders_user_status_date 
@@ -57,7 +61,7 @@ async function demonstrateIndexes() {
     `);
 
     console.log('EXPLAIN ANALYZE (composite index):');
-    explainComposite.rows.forEach(row => console.log(row['QUERY PLAN']));
+    explainComposite.rows.forEach((row) => console.log(row['QUERY PLAN']));
 
     console.log('\n✅ Composite index benefits:');
     console.log('   1. Filters by user_id (first column)');
@@ -77,7 +81,9 @@ async function demonstrateIndexes() {
       WHERE status = 'paid';
     `);
 
-    console.log('Created: INDEX ON orders(user_id, created_at DESC) WHERE status = \'paid\'');
+    console.log(
+      "Created: INDEX ON orders(user_id, created_at DESC) WHERE status = 'paid'",
+    );
 
     const indexSize = await pool.query(`
       SELECT 
@@ -92,7 +98,9 @@ async function demonstrateIndexes() {
     console.table(indexSize.rows);
 
     console.log('\n✅ Partial index benefits:');
-    console.log('   1. Smaller size (only indexes 73% of rows where status=paid)');
+    console.log(
+      '   1. Smaller size (only indexes 73% of rows where status=paid)',
+    );
     console.log('   2. Faster writes (fewer rows to index)');
     console.log('   3. Faster reads (smaller index to scan)\n');
 
@@ -106,7 +114,9 @@ async function demonstrateIndexes() {
       WHERE metadata @> '{"role": "assistant"}';
     `);
 
-    console.log(`Query: Find messages where metadata contains {"role": "assistant"}`);
+    console.log(
+      `Query: Find messages where metadata contains {"role": "assistant"}`,
+    );
     console.log(`Found ${jsonbQuery.rows[0].count} messages\n`);
 
     await pool.query(`
@@ -123,18 +133,22 @@ async function demonstrateIndexes() {
     `);
 
     console.log('\nEXPLAIN ANALYZE (GIN index):');
-    explainGin.rows.forEach(row => console.log(row['QUERY PLAN']));
+    explainGin.rows.forEach((row) => console.log(row['QUERY PLAN']));
 
     console.log('\n✅ GIN index use cases:');
     console.log('   - JSONB queries (key-value lookups)');
-    console.log('   - Array containment (tags @> ARRAY[\'electronics\'])');
+    console.log("   - Array containment (tags @> ARRAY['electronics'])");
     console.log('   - Full-text search\n');
 
     // Task 6: Covering Index (Index-Only Scan)
     console.log('\nTask 6: Covering Index (INCLUDE clause)\n');
 
-    console.log('Scenario: Dashboard queries need id, user_id, total_amount for paid orders');
-    console.log('Without covering index: Index Scan + Heap Fetch (2 operations)');
+    console.log(
+      'Scenario: Dashboard queries need id, user_id, total_amount for paid orders',
+    );
+    console.log(
+      'Without covering index: Index Scan + Heap Fetch (2 operations)',
+    );
     console.log('With covering index: Index-Only Scan (1 operation)\n');
 
     await pool.query(`
@@ -156,7 +170,7 @@ async function demonstrateIndexes() {
     `);
 
     console.log('EXPLAIN ANALYZE:');
-    explainCovering.rows.forEach(row => console.log(row['QUERY PLAN']));
+    explainCovering.rows.forEach((row) => console.log(row['QUERY PLAN']));
 
     console.log('\n✅ Covering index benefits:');
     console.log('   - Index contains all needed columns');
@@ -185,7 +199,9 @@ async function demonstrateIndexes() {
 
     console.log('\n💡 Index Monitoring Tips:');
     console.log('   - idx_scan = 0: Unused index (consider dropping)');
-    console.log('   - Large size + low usage: Wasting space and slowing writes');
+    console.log(
+      '   - Large size + low usage: Wasting space and slowing writes',
+    );
     console.log('   - High idx_scan: Valuable index, keep it!\n');
 
     // Cleanup demo indexes
@@ -196,7 +212,6 @@ async function demonstrateIndexes() {
       DROP INDEX IF EXISTS idx_orders_covering;
       DROP INDEX IF EXISTS idx_chat_messages_metadata_gin;
     `);
-
   } catch (error) {
     console.error('Error:', error);
   }
@@ -206,33 +221,75 @@ function printInterviewQuestions() {
   console.log('\n=== Interview Questions ===\n');
 
   console.log('Q1: "How do you optimize a slow query?"\n');
-  console.log('A: "First, I use EXPLAIN ANALYZE to see the execution plan. I look for Seq Scan');
-  console.log('on large tables—that\'s usually the bottleneck. If I see Seq Scan, I check if');
-  console.log('there\'s a WHERE clause that could benefit from an index. For example, if querying');
-  console.log('WHERE user_id = 123, I create an index on user_id. After creating the index,');
-  console.log('I run EXPLAIN ANALYZE again to verify it\'s using the index (Index Scan instead');
-  console.log('of Seq Scan). I also check for expensive sorts—if the query has ORDER BY, I can');
-  console.log('include that column in the index with DESC if needed. The key is: don\'t guess,');
+  console.log(
+    'A: "First, I use EXPLAIN ANALYZE to see the execution plan. I look for Seq Scan',
+  );
+  console.log(
+    "on large tables—that's usually the bottleneck. If I see Seq Scan, I check if",
+  );
+  console.log(
+    "there's a WHERE clause that could benefit from an index. For example, if querying",
+  );
+  console.log(
+    'WHERE user_id = 123, I create an index on user_id. After creating the index,',
+  );
+  console.log(
+    "I run EXPLAIN ANALYZE again to verify it's using the index (Index Scan instead",
+  );
+  console.log(
+    'of Seq Scan). I also check for expensive sorts—if the query has ORDER BY, I can',
+  );
+  console.log(
+    "include that column in the index with DESC if needed. The key is: don't guess,",
+  );
   console.log('measure with EXPLAIN ANALYZE."\n');
 
   console.log('Q2: "Explain composite indexes and column order"\n');
-  console.log('A: "Composite indexes cover multiple columns and column order matters. For a query');
-  console.log('like WHERE user_id = 5 AND created_at > \'2024-01-01\', I\'d create INDEX (user_id,');
-  console.log('created_at). PostgreSQL can use this index for both conditions because user_id is');
-  console.log('the leftmost column. Column order follows the rule: most selective (filters the');
-  console.log('most rows) first. However, if I also query WHERE created_at > ? without user_id,');
-  console.log('I\'d need a separate index on created_at—composite indexes don\'t work with only');
-  console.log('the second column. Think of it like a phone book sorted by (last_name, first_name)');
-  console.log('—you can find \'Smith, John\' but not just \'John\'."\n');
+  console.log(
+    'A: "Composite indexes cover multiple columns and column order matters. For a query',
+  );
+  console.log(
+    "like WHERE user_id = 5 AND created_at > '2024-01-01', I'd create INDEX (user_id,",
+  );
+  console.log(
+    'created_at). PostgreSQL can use this index for both conditions because user_id is',
+  );
+  console.log(
+    'the leftmost column. Column order follows the rule: most selective (filters the',
+  );
+  console.log(
+    'most rows) first. However, if I also query WHERE created_at > ? without user_id,',
+  );
+  console.log(
+    "I'd need a separate index on created_at—composite indexes don't work with only",
+  );
+  console.log(
+    'the second column. Think of it like a phone book sorted by (last_name, first_name)',
+  );
+  console.log("—you can find 'Smith, John' but not just 'John'.\"\n");
 
   console.log('Q3: "What\'s a covering index? When do you use it?"\n');
-  console.log('A: "A covering index includes all columns needed by a query using the INCLUDE');
-  console.log('clause. For example, SELECT id, name FROM users WHERE email = ? can use a covering');
-  console.log('index INDEX (email) INCLUDE (id, name). This enables Index Only Scan—PostgreSQL');
-  console.log('gets all data from the index without fetching the actual table row (heap fetch).');
-  console.log('It\'s 2-3x faster. I use covering indexes for read-heavy queries like dashboards');
-  console.log('where a few milliseconds matter. The tradeoff is larger index size and slower');
-  console.log('writes. I don\'t use it for write-heavy tables or when including large columns—the');
+  console.log(
+    'A: "A covering index includes all columns needed by a query using the INCLUDE',
+  );
+  console.log(
+    'clause. For example, SELECT id, name FROM users WHERE email = ? can use a covering',
+  );
+  console.log(
+    'index INDEX (email) INCLUDE (id, name). This enables Index Only Scan—PostgreSQL',
+  );
+  console.log(
+    'gets all data from the index without fetching the actual table row (heap fetch).',
+  );
+  console.log(
+    "It's 2-3x faster. I use covering indexes for read-heavy queries like dashboards",
+  );
+  console.log(
+    'where a few milliseconds matter. The tradeoff is larger index size and slower',
+  );
+  console.log(
+    "writes. I don't use it for write-heavy tables or when including large columns—the",
+  );
   console.log('index bloat isn\'t worth it."\n');
 }
 

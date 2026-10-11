@@ -20,7 +20,9 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     DatabaseModule,
     MongooseModule.forRootAsync({
       useFactory: () => ({
-        uri: process.env.MONGODB_URI ?? 'mongodb://mongo:27017/ai-commerce-platform',
+        uri:
+          process.env.MONGODB_URI ??
+          'mongodb://mongo:27017/ai-commerce-platform',
         dbName: process.env.MONGODB_DB_NAME ?? 'ai_commerce_platform',
         autoIndex: (process.env.MONGODB_AUTO_INDEX ?? 'true') === 'true',
         serverSelectionTimeoutMS: 10000,

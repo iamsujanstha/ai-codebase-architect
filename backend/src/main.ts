@@ -4,16 +4,20 @@ import { AppModule } from './app.module';
 import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+
 async function bootstrap() {
-  // The bootstrap function is the operational entry point of the backend service.
-  // In production this is where global middleware, pipes, filters, and app-wide policies are wired together.
-  //
-  // `rawBody: true` is important for payment webhooks such as Stripe.
-  // Stripe signs the exact raw payload bytes, so the server must preserve them
-  // for signature verification rather than relying only on parsed JSON.
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });
+
+  const uploadsDir = join(process.cwd(), 'uploads');
+  if (!existsSync(uploadsDir)) {
+    mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
 
   // PHASE 1 PRODUCTION IMPROVEMENTS:
   // - Structured logging for observability (correlation IDs, JSON logs)

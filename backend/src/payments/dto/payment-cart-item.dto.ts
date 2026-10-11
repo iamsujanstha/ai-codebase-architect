@@ -10,4 +10,3 @@ export class PaymentCartItemDto {
   @Max(10)
   quantity!: number;
 }
-

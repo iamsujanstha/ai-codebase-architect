@@ -43,11 +43,11 @@ export class AiGatewayService {
 
   /**
    * PHASE 2: Circuit breaker for AI service HTTP calls
-   * 
+   *
    * Why: AI service failures should not cascade to backend
    * Threshold: 5 failures (AI is less critical than payments, more tolerant)
    * Reset: 30 seconds (AI can recover quickly)
-   * 
+   *
    * Behavior:
    * - First 5 AI failures: Try normally (with retry)
    * - After 5 failures: Circuit opens
@@ -66,7 +66,7 @@ export class AiGatewayService {
     try {
       /**
        * PHASE 2: Circuit breaker + retry for AI service calls
-       * 
+       *
        * List models is a read-only operation, safe to retry
        * Lower threshold (2 retries) since it's a quick operation
        */
@@ -149,7 +149,7 @@ export class AiGatewayService {
     try {
       /**
        * PHASE 2: Circuit breaker + retry for AI generation
-       * 
+       *
        * AI generation is expensive and slow
        * - Fewer retries (2) since each attempt is costly
        * - Longer initial delay (500ms) to give AI service time
@@ -186,7 +186,10 @@ export class AiGatewayService {
                 return false;
               }
               // Retry connection errors
-              if (error.code === 'ECONNREFUSED' || error.code === 'ECONNRESET') {
+              if (
+                error.code === 'ECONNREFUSED' ||
+                error.code === 'ECONNRESET'
+              ) {
                 return true;
               }
               // Retry 5xx server errors

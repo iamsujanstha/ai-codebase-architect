@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
@@ -73,9 +78,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+    const isPasswordValid = await bcrypt.compare(
+      loginDto.password,
+      user.password,
+    );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.status === 'suspended' || user.isActive === false) {
+      throw new UnauthorizedException('Account suspended');
     }
 
     return this.generateToken(user);
@@ -104,11 +116,11 @@ export class AuthService {
   }
 
   private generateToken(user: UserDocument) {
-    const payload = { 
-      email: user.email, 
-      sub: user._id, 
+    const payload = {
+      email: user.email,
+      sub: user._id,
       name: user.name,
-      role: user.role 
+      role: user.role,
     };
     return {
       access_token: this.jwtService.sign(payload),

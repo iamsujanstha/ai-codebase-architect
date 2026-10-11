@@ -49,7 +49,7 @@ export class MailService {
         if (err) {
           this.logger.error(
             `SMTP verification failed for ${host}:${port} — ${err.message}. ` +
-            'Check MAIL_HOST / MAIL_PORT / MAIL_USER / MAIL_PASS in .env.',
+              'Check MAIL_HOST / MAIL_PORT / MAIL_USER / MAIL_PASS in .env.',
           );
         } else {
           this.logger.log(
@@ -104,8 +104,8 @@ export class MailService {
         const response = (err as any)?.response ?? '';
         this.logger.error(
           `Email failed  to=${options.to}  ${msg}` +
-          (code ? `  [code: ${code}]` : '') +
-          (response ? `  [smtp: ${response}]` : ''),
+            (code ? `  [code: ${code}]` : '') +
+            (response ? `  [smtp: ${response}]` : ''),
         );
       }
     } else {

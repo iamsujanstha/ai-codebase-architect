@@ -1,28 +1,40 @@
+import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { CartProvider } from '@/features/store/CartContext';
 import { AIConciergeProvider } from '@/features/chat/AIConciergeContext';
 import { ToastProvider } from '@/shared/contexts/ToastContext';
 import { AppLayout } from '@/shared/ui/AppLayout';
-import { ProtectedRoute } from '@/shared/ui/ProtectedRoute';
-import { AdminLayout } from '@/features/admin/AdminLayout';
-import { AdminDashboard } from '@/features/admin/AdminDashboard';
-import { ProductsManagement } from '@/features/admin/ProductsManagement';
-import { ProductForm } from '@/features/admin/ProductForm';
-import { OrdersManagement } from '@/features/admin/OrdersManagement';
-import { OrderDetail } from '@/features/admin/OrderDetail';
-import { UsersManagement } from '@/features/admin/UsersManagement';
-import { UserDetail } from '@/features/admin/UserDetail';
-import { AdminSettings } from '@/features/admin/AdminSettings';
+import { AdminRoute } from '@/shared/ui/AdminRoute';
 import { authRoutes } from './routes/auth.routes';
 import { publicRoutes } from './routes/public.routes';
 import { protectedRoutes } from './routes/protected.routes';
 import { ROUTES } from './constants/routes';
 
+// Lazy-loaded admin bundle so shoppers never download admin code
+const AdminLayout = React.lazy(() =>
+  import('@/features/admin/AdminLayout').then((m) => ({
+    default: m.AdminLayout,
+  })),
+);
+const AdminDashboard = React.lazy(() =>
+  import('@/features/admin/AdminDashboard').then((m) => ({
+    default: m.AdminDashboard,
+  })),
+);
+const ProductsManagement = React.lazy(() =>
+  import('@/features/admin/ProductsManagement').then((m) => ({
+    default: m.ProductsManagement,
+  })),
+);
+const UsersManagement = React.lazy(() =>
+  import('@/features/admin/UsersManagement').then((m) => ({
+    default: m.UsersManagement,
+  })),
+);
+
 /**
  * App — composition root.
- *
- * Updated to use AppLayout (new Airbnb-style design) instead of AppChrome.
  */
 export default function App(): JSX.Element {
   return (
@@ -32,27 +44,37 @@ export default function App(): JSX.Element {
           <AIConciergeProvider>
             <ToastProvider>
               <Routes>
-                {/* Admin routes - separate from AppChrome */}
+                {/* Admin routes - lazy loaded with AdminRoute guard */}
                 <Route
                   path="/admin/*"
                   element={
-                    <ProtectedRoute requireAdmin>
-                      <AdminLayout />
-                    </ProtectedRoute>
+                    <AdminRoute>
+                      <React.Suspense
+                        fallback={
+                          <div
+                            style={{
+                              minHeight: '100vh',
+                              display: 'grid',
+                              placeItems: 'center',
+                              color: 'var(--mute, #6a6a6a)',
+                            }}
+                          >
+                            Loading admin…
+                          </div>
+                        }
+                      >
+                        <AdminLayout />
+                      </React.Suspense>
+                    </AdminRoute>
                   }
                 >
                   <Route index element={<AdminDashboard />} />
                   <Route path="products" element={<ProductsManagement />} />
-                  <Route path="products/new" element={<ProductForm />} />
-                  <Route path="products/:id/edit" element={<ProductForm />} />
-                  <Route path="orders" element={<OrdersManagement />} />
-                  <Route path="orders/:id" element={<OrderDetail />} />
                   <Route path="users" element={<UsersManagement />} />
-                  <Route path="users/:id" element={<UserDetail />} />
-                  <Route path="settings" element={<AdminSettings />} />
+                  <Route path="*" element={<Navigate replace to="/admin" />} />
                 </Route>
 
-                {/* Regular routes with AppLayout (new design) */}
+                {/* Regular storefront routes */}
                 <Route element={<AppLayout />}>
                   {publicRoutes}
                   {authRoutes}

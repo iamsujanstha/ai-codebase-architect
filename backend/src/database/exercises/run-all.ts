@@ -1,6 +1,6 @@
 /**
  * Run All PostgreSQL Interview Exercises
- * 
+ *
  * This script runs all exercises sequentially and provides a comprehensive
  * demonstration of PostgreSQL concepts for interview preparation.
  */
@@ -19,10 +19,14 @@ import { runReplicationExercise } from './11-replication';
 
 async function runAllExercises() {
   console.log('\n');
-  console.log('═══════════════════════════════════════════════════════════════');
+  console.log(
+    '═══════════════════════════════════════════════════════════════',
+  );
   console.log('   PostgreSQL Interview Preparation - Hands-On Exercises');
   console.log('   Staff/Principal Engineer Level Database Mastery');
-  console.log('═══════════════════════════════════════════════════════════════');
+  console.log(
+    '═══════════════════════════════════════════════════════════════',
+  );
   console.log('\n');
 
   const exercises = [
@@ -55,8 +59,7 @@ async function runAllExercises() {
       console.log(`${'═'.repeat(70)}\n`);
 
       // Pause between exercises
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     } catch (error) {
       console.error(`\n❌ Error in ${exercise.name}:`, error);
       console.log(`\nContinuing to next exercise...\n`);
@@ -65,9 +68,13 @@ async function runAllExercises() {
 
   // Summary
   console.log('\n');
-  console.log('═══════════════════════════════════════════════════════════════');
+  console.log(
+    '═══════════════════════════════════════════════════════════════',
+  );
   console.log('   Exercise Summary');
-  console.log('═══════════════════════════════════════════════════════════════');
+  console.log(
+    '═══════════════════════════════════════════════════════════════',
+  );
   console.log(`\nCompleted: ${completedCount}/${exercises.length} exercises`);
   console.log('\n✅ Exercises Completed:');
   console.log('   1. Data Modeling & Normalization');
@@ -84,7 +91,9 @@ async function runAllExercises() {
   console.log('      - Handle concurrent transactions');
   console.log('      - Ensure durability with WAL');
   console.log('\n   4. Isolation Levels');
-  console.log('      - Understand READ COMMITTED, REPEATABLE READ, SERIALIZABLE');
+  console.log(
+    '      - Understand READ COMMITTED, REPEATABLE READ, SERIALIZABLE',
+  );
   console.log('      - Prevent non-repeatable reads and phantom reads');
   console.log('      - Choose appropriate isolation level for use case');
   console.log('\n   5. Deadlocks & Prevention');
@@ -97,9 +106,13 @@ async function runAllExercises() {
   console.log('      - Implement idempotency keys for APIs');
 
   console.log('\n\n🎯 Next Steps:');
-  console.log('   - Review the interview questions at the end of each exercise');
+  console.log(
+    '   - Review the interview questions at the end of each exercise',
+  );
   console.log('   - Practice explaining concepts out loud');
-  console.log('   - Run individual exercises: npx ts-node src/database/exercises/04-isolation-levels.ts');
+  console.log(
+    '   - Run individual exercises: npx ts-node src/database/exercises/04-isolation-levels.ts',
+  );
   console.log('   - Read POSTGRESQL_INTERVIEW_EXERCISES.md for exercises 7-15');
   console.log('   - Apply these patterns to your real project');
 
@@ -114,14 +127,16 @@ async function runAllExercises() {
   console.log('   14. Partitioning');
   console.log('   15. Production Best Practices');
 
-  console.log('\n\n🚀 You\'re on your way to Staff/Principal-level database mastery!');
+  console.log(
+    "\n\n🚀 You're on your way to Staff/Principal-level database mastery!",
+  );
   console.log('\n');
 
   process.exit(0);
 }
 
 // Run all exercises
-runAllExercises().catch(error => {
+runAllExercises().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });

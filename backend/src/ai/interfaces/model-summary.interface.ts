@@ -12,4 +12,3 @@ export interface ModelSummary {
   parameterSize?: string | null;
   quantizationLevel?: string | null;
 }
-

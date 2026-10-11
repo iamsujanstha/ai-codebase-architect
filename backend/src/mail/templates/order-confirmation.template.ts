@@ -1,4 +1,8 @@
-import { formatAmount, formatDate, providerLabel } from '../helpers/mail-format.helper';
+import {
+  formatAmount,
+  formatDate,
+  providerLabel,
+} from '../helpers/mail-format.helper';
 
 /**
  * Builds the HTML body for an order confirmation email.
@@ -6,9 +10,14 @@ import { formatAmount, formatDate, providerLabel } from '../helpers/mail-format.
  * SRP: this file owns only the order confirmation template.
  * It receives plain data and returns a string — no side effects, fully testable.
  */
-export function buildOrderConfirmationHtml(order: any, frontendUrl: string): string {
+export function buildOrderConfirmationHtml(
+  order: any,
+  frontendUrl: string,
+): string {
   const currency = order.pricing?.currency ?? 'USD';
-  const paidAt   = order.paidAt ? formatDate(order.paidAt) : formatDate(new Date());
+  const paidAt = order.paidAt
+    ? formatDate(order.paidAt)
+    : formatDate(new Date());
   const provider = providerLabel(order.paymentProvider);
   const orderUrl = `${frontendUrl}/checkout/result?orderNumber=${encodeURIComponent(order.orderNumber)}&provider=${order.paymentProvider}`;
 
@@ -33,10 +42,22 @@ export function buildOrderConfirmationHtml(order: any, frontendUrl: string): str
     .join('');
 
   const pricingRows = [
-    { label: 'Subtotal',       value: order.pricing?.subtotal,       show: true },
-    { label: 'Tax',            value: order.pricing?.taxAmount,      show: (order.pricing?.taxAmount ?? 0) > 0 },
-    { label: 'Service charge', value: order.pricing?.serviceCharge,  show: (order.pricing?.serviceCharge ?? 0) > 0 },
-    { label: 'Delivery',       value: order.pricing?.deliveryCharge, show: (order.pricing?.deliveryCharge ?? 0) > 0 },
+    { label: 'Subtotal', value: order.pricing?.subtotal, show: true },
+    {
+      label: 'Tax',
+      value: order.pricing?.taxAmount,
+      show: (order.pricing?.taxAmount ?? 0) > 0,
+    },
+    {
+      label: 'Service charge',
+      value: order.pricing?.serviceCharge,
+      show: (order.pricing?.serviceCharge ?? 0) > 0,
+    },
+    {
+      label: 'Delivery',
+      value: order.pricing?.deliveryCharge,
+      show: (order.pricing?.deliveryCharge ?? 0) > 0,
+    },
   ]
     .filter((r) => r.show)
     .map(

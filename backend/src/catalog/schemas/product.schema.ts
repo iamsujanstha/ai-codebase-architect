@@ -52,10 +52,10 @@ export class Product {
   @Prop({ required: true, trim: true })
   name!: string;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ default: '', trim: true })
   subtitle!: string;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ default: '', trim: true })
   shortDescription!: string;
 
   @Prop({ required: true, trim: true })
@@ -66,7 +66,6 @@ export class Product {
 
   @Prop({ type: Number, min: 0, default: null })
   compareAtPrice!: number | null;
-
 
   @Prop({ required: true, trim: true, default: 'USD' })
   currency!: string;
@@ -115,6 +114,18 @@ export class Product {
 
   @Prop({ type: [ProductSpec], default: [] })
   specs!: ProductSpec[];
+
+  @Prop({ default: 'published', enum: ['draft', 'published'], index: true })
+  status?: string;
+
+  @Prop({ default: '' })
+  sku?: string;
+
+  @Prop({ default: '' })
+  imageUrl?: string;
+
+  @Prop({ type: Date, default: null, index: true })
+  deletedAt?: Date | null;
 }
 
 export type ProductDocument = HydratedDocument<Product>;

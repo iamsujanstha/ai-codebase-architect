@@ -8,7 +8,8 @@ import { Client } from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const connectionString = process.env.POSTGRES_URL || 
+const connectionString =
+  process.env.POSTGRES_URL ||
   'postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
 
 async function runMigration() {
@@ -25,7 +26,11 @@ async function runMigration() {
     console.log('✅ Connected successfully!');
 
     // Read migration file
-    const migrationPath = path.join(__dirname, 'migrations', '001-initial-schema.sql');
+    const migrationPath = path.join(
+      __dirname,
+      'migrations',
+      '001-initial-schema.sql',
+    );
     const migrationSQL = fs.readFileSync(migrationPath, 'utf-8');
 
     console.log('\n📝 Running migration: 001-initial-schema.sql');
@@ -51,7 +56,7 @@ async function runMigration() {
 
     // Count rows in each table
     console.log('\n📈 Sample data:');
-    const tables = result.rows.map(r => r.tablename);
+    const tables = result.rows.map((r) => r.tablename);
     for (const table of tables) {
       const countResult = await client.query(`SELECT COUNT(*) FROM ${table}`);
       const count = countResult.rows[0].count;
@@ -78,7 +83,6 @@ async function runMigration() {
     console.log('   2. Learn indexes with EXPLAIN ANALYZE');
     console.log('   3. Test transactions and isolation levels');
     console.log('   4. Start dual-write implementation\n');
-
   } catch (error) {
     console.error('❌ Migration failed:', error);
     throw error;

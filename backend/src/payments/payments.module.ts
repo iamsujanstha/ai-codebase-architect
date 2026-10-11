@@ -35,9 +35,6 @@ export class PaymentsModule implements NestModule {
     // Clients should send Idempotency-Key header (UUID) for these routes
     consumer
       .apply(IdempotencyMiddleware)
-      .forRoutes(
-        'payments/stripe/checkout-session',
-        'payments/esewa/initiate',
-      );
+      .forRoutes('payments/stripe/checkout-session', 'payments/esewa/initiate');
   }
 }
