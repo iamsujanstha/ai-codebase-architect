@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import axios from 'axios';
@@ -32,6 +33,11 @@ import {
 } from './interfaces/payment-quote.interface';
 import { Order, OrderDocument } from './schemas/order.schema';
 import { MailService } from '../mail/mail.service';
+import {
+  CircuitBreaker,
+  CircuitBreakerOpenError,
+} from '../common/utils/circuit-breaker.util';
+import { retryWithBackoff } from '../common/utils/retry.util';
 
 
 interface PricedCartLine {
@@ -71,6 +77,11 @@ interface EsewaSuccessPayload {
 // - webhook verification
 // - signed callback verification
 // - consistent internal order state no matter which provider is used
+//
+// PHASE 2 IMPROVEMENTS:
+// - Circuit breaker for Stripe API (prevents cascading failures)
+// - Retry with exponential backoff (handles transient errors)
+// - Fail fast when Stripe is down (better UX)
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -103,6 +114,39 @@ export class PaymentsService {
   private readonly stripeWebhookSecret =
     process.env.STRIPE_WEBHOOK_SECRET ?? '';
   private readonly stripeClient: Stripe | null;
+
+  /**
+   * PHASE 2: Circuit breaker for Stripe API calls
+   * 
+   * Why: Stripe API failures should not cascade to entire system
+   * Threshold: 3 failures (payments are critical, fail fast)
+   * Reset: 60 seconds (give Stripe time to recover)
+   * 
+   * Behavior:
+   * - First 3 Stripe failures: Try normally (with retry)
+   * - After 3 failures: Circuit opens
+   * - While open: Reject immediately (no timeout wait)
+   * - After 60s: Try one request (half-open)
+   * - If success: Circuit closes
+   * - If failure: Circuit opens again
+   */
+  private readonly stripeCircuitBreaker = new CircuitBreaker({
+    name: 'stripe-api',
+    failureThreshold: 3,
+    resetTimeout: 60000,
+  });
+
+  /**
+   * PHASE 2: Circuit breaker for eSewa API calls
+   * 
+   * Threshold: 5 failures (less critical, more tolerant)
+   * Reset: 120 seconds (longer recovery time)
+   */
+  private readonly esewaCircuitBreaker = new CircuitBreaker({
+    name: 'esewa-api',
+    failureThreshold: 5,
+    resetTimeout: 120000,
+  });
 
   constructor(
     @InjectModel(Product.name)
@@ -163,39 +207,89 @@ export class PaymentsService {
     );
 
     try {
-      const stripeSession = await this.stripeClient.checkout.sessions.create(
-        {
-          mode: 'payment',
-          client_reference_id: order.orderNumber,
-          customer_creation: 'always',
-          customer_email: request.customer.email,
-          billing_address_collection: 'auto',
-          phone_number_collection: {
-            enabled: true,
+      /**
+       * PHASE 2: Circuit breaker + retry for Stripe API calls
+       * 
+       * Flow:
+       * 1. Check circuit state (closed/open/half-open)
+       * 2. If open: Throw immediately (fail fast)
+       * 3. If closed/half-open: Execute with retry
+       * 4. Retry up to 3 times with exponential backoff (100ms → 200ms → 400ms)
+       * 5. If all retries fail: Circuit breaker counts as 1 failure
+       * 6. After 3 failures: Circuit opens
+       * 
+       * Benefits:
+       * - Transient errors: Recovered by retry (user doesn't see error)
+       * - Sustained outage: Circuit opens (fail fast, no timeout wait)
+       * - Better UX: "Payment system unavailable, try again in 1 minute"
+       */
+      const stripeSession = await this.stripeCircuitBreaker.execute(async () => {
+        return await retryWithBackoff(
+          async () => {
+            return await this.stripeClient!.checkout.sessions.create(
+              {
+                mode: 'payment',
+                client_reference_id: order.orderNumber,
+                customer_creation: 'always',
+                customer_email: request.customer.email,
+                billing_address_collection: 'auto',
+                phone_number_collection: {
+                  enabled: true,
+                },
+                automatic_tax: {
+                  enabled: this.stripeAutomaticTaxEnabled,
+                },
+                success_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&status=canceled`,
+                line_items: this.buildStripeLineItems(pricedCart, quote),
+                metadata: {
+                  orderNumber: order.orderNumber,
+                  customerEmail: request.customer.email,
+                  paymentProvider: PaymentProvider.STRIPE,
+                },
+                payment_intent_data: {
+                  metadata: {
+                    orderNumber: order.orderNumber,
+                    paymentProvider: PaymentProvider.STRIPE,
+                  },
+                },
+                expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+              },
+              {
+                idempotencyKey: `order-${order.orderNumber}`,
+              },
+            );
           },
-          automatic_tax: {
-            enabled: this.stripeAutomaticTaxEnabled,
-          },
-          success_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&status=canceled`,
-          line_items: this.buildStripeLineItems(pricedCart, quote),
-          metadata: {
-            orderNumber: order.orderNumber,
-            customerEmail: request.customer.email,
-            paymentProvider: PaymentProvider.STRIPE,
-          },
-          payment_intent_data: {
-            metadata: {
-              orderNumber: order.orderNumber,
-              paymentProvider: PaymentProvider.STRIPE,
+          {
+            maxRetries: 3,
+            initialDelay: 100,
+            context: 'stripe-checkout-session',
+            shouldRetry: (error, attempt) => {
+              // Retry on network errors
+              if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+                return true;
+              }
+              // Retry on Stripe rate limit
+              if (error.type === 'StripeRateLimitError') {
+                return true;
+              }
+              // Retry on Stripe API errors (but not card errors)
+              if (error.type === 'StripeAPIError') {
+                return true;
+              }
+              // Don't retry card errors (user needs to fix)
+              if (error.type === 'StripeCardError') {
+                return false;
+              }
+              // Don't retry invalid request (our bug, not transient)
+              if (error.type === 'StripeInvalidRequestError') {
+                return false;
+              }
+              return false;
             },
           },
-          expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-        },
-        {
-          idempotencyKey: `order-${order.orderNumber}`,
-        },
-      );
+        );
+      });
 
       order.providerMetadata.stripeCheckoutSessionId = stripeSession.id;
       order.history.push({
@@ -220,6 +314,19 @@ export class PaymentsService {
         order.orderNumber,
         'Stripe session creation failed before redirect.',
       );
+
+      // Circuit breaker open: Return user-friendly error
+      if (error instanceof CircuitBreakerOpenError) {
+        this.logger.error({
+          event: 'stripe_circuit_open',
+          orderNumber: order.orderNumber,
+          message: 'Stripe circuit breaker is open - service appears down',
+        });
+        throw new ServiceUnavailableException(
+          'Payment system is temporarily unavailable. Please try again in 1 minute.',
+        );
+      }
+
       this.logger.error(
         'Stripe checkout session creation failed.',
         error instanceof Error ? error.stack : String(error),

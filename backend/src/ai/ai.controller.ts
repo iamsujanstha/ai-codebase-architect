@@ -11,6 +11,7 @@ import { Response } from 'express';
 import { GenerateAiRequestDto } from './dto/generate-ai-request.dto';
 import { AiGatewayService } from './ai.service';
 import { RateLimit, RateLimitGuard } from '../common/guards/rate-limit.guard';
+import { PromptInjectionGuard } from './guards/prompt-injection.guard';
 
 // Controllers are the HTTP boundary of the feature.
 // Their job is deliberately narrow:
@@ -24,6 +25,11 @@ import { RateLimit, RateLimitGuard } from '../common/guards/rate-limit.guard';
 // - Rate limiting applied to prevent AI quota abuse
 // - 20 requests per minute per user (fair resource sharing)
 // - Prevents single user from monopolizing expensive AI resources
+//
+// PHASE 2 PRODUCTION IMPROVEMENTS:
+// - Prompt injection defense guard (AI safety)
+// - Blocks malicious prompts before sending to AI
+// - Prevents data leaks, unauthorized actions
 @Controller('ai')
 export class AiController {
   constructor(private readonly aiGatewayService: AiGatewayService) {}
@@ -39,9 +45,10 @@ export class AiController {
   // Generate: 20 requests per minute
   // Critical: AI generation costs money (OpenAI/Claude) or resources (local LLM)
   // Prevents abuse while allowing normal usage
+  // PHASE 2: Added prompt injection guard for AI safety
   @Post('generate')
   @RateLimit(20, 60 * 1000)
-  @UseGuards(RateLimitGuard)
+  @UseGuards(RateLimitGuard, PromptInjectionGuard)
   async generate(@Body() request: GenerateAiRequestDto) {
     return this.aiGatewayService.generateResponse(
       request.prompt,
@@ -52,9 +59,10 @@ export class AiController {
 
   // Streaming: 20 requests per minute (same as non-streaming)
   // Streaming is more expensive (longer connection time)
+  // PHASE 2: Added prompt injection guard for AI safety
   @Post('generate/stream')
   @RateLimit(20, 60 * 1000)
-  @UseGuards(RateLimitGuard)
+  @UseGuards(RateLimitGuard, PromptInjectionGuard)
   async streamGenerate(
     @Body() request: GenerateAiRequestDto,
     @Res() response: Response,
