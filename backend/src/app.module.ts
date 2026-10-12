@@ -9,7 +9,6 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { OrdersModule } from './orders/orders.module';
 import { AdminModule } from './admin/admin.module';
-import { PdfRagModule } from './pdf-rag/pdf-rag.module';
 import { DatabaseModule } from './database/database.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
@@ -24,7 +23,6 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     AuthModule,
     OrdersModule,
     AdminModule,
-    PdfRagModule,
   ],
   controllers: [AppController],
   providers: [AppService],

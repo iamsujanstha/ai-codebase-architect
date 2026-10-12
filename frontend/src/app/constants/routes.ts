@@ -10,7 +10,6 @@ export const ROUTES = {
   PRODUCT_DETAIL:   '/products/:slug',
   CHAT:             '/chat',
   CHAT_THREAD:      '/chat/:threadId',
-  PDF_RAG:          '/pdf-rag',
 
   // ── auth ────────────────────────────────────────────────────────────────
   LOGIN:            '/login',
