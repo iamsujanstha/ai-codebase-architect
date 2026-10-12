@@ -196,6 +196,7 @@ class ProductService:
                 except Exception as e:
                     logger.warning(f"Semantic search query error: {e}")
                     return []
+            return []
 
         return filtered_products[:limit]
 
