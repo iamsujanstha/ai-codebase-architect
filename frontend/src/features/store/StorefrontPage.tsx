@@ -44,8 +44,32 @@ export function StorefrontPage(): JSX.Element {
   const { showToast } = useToastContext();
   const { openConcierge } = useAIConcierge();
 
-  // Categories & Filtering
-  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
+  // Categories & Filtering - initialized with cache or PostgreSQL defaults for zero-flicker reload
+  const [categories, setCategories] = useState<Category[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('atlas_cached_categories');
+      if (cached) {
+        const parsed = JSON.parse(cached) as Array<{ id?: string; slug?: string; name: string; productCount?: number }>;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return [
+            { id: 'all', name: 'All', icon: <Sparkles size={24} /> },
+            ...parsed.map((c) => {
+              const slug = c.slug || c.id || '';
+              return {
+                id: slug,
+                name: c.name,
+                icon: getCategoryIcon(slug),
+                count: c.productCount,
+              };
+            }),
+          ];
+        }
+      }
+    } catch {
+      // Fallback to default categories
+    }
+    return DEFAULT_CATEGORIES;
+  });
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortOption, setSortOption] = useState<SortOption>('featured');
 
@@ -77,6 +101,11 @@ export function StorefrontPage(): JSX.Element {
             })),
           ];
           setCategories(dynamicList);
+          try {
+            sessionStorage.setItem('atlas_cached_categories', JSON.stringify(catData));
+          } catch {
+            // Ignore storage errors
+          }
         }
       } catch (err) {
         console.warn('Using default category fallback:', err);

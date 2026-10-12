@@ -1,58 +1,71 @@
 import { Heart } from 'lucide-react';
 import type { CatalogProduct } from '@/core/types/catalog';
+import { getDynamicProductVisual } from '../utils/dynamicVisuals';
 
 interface ProductCardProps {
   product: CatalogProduct;
+  index?: number;
   onAddToCart: (product: CatalogProduct) => void;
   isWishlisted?: boolean;
   onToggleWishlist?: (productId: string) => void;
 }
 
 /**
- * ProductCard - Product card with gradient background, emoji, badges, and actions.
- * Matches the exact design from atlas-app.html with:
- * - 20/19 aspect ratio image
- * - Heart button for wishlist
- * - "Customer favourite" badge
- * - Hover "Add to cart" button
- * - Rating and price display
+ * ProductCard - Airbnb-style listing card with dynamic items background,
+ * contextual glyphs, elegant badge accents, and smooth reveal animation.
  */
 export function ProductCard({
   product,
+  index = 0,
   onAddToCart,
   isWishlisted = false,
   onToggleWishlist,
 }: ProductCardProps): JSX.Element {
-  const handleAddToCart = () => {
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.stopPropagation();
     onAddToCart(product);
   };
 
-  const handleToggleWishlist = () => {
+  const handleToggleWishlist = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (onToggleWishlist) {
       onToggleWishlist(product.id);
     }
   };
 
-  // Get gradient colors from product visual
-  const gradientFrom = product.visual?.gradientFrom || '#e0e0e0';
-  const gradientTo = product.visual?.gradientTo || '#f5f5f5';
-  const glyph = product.visual?.glyph || '📦';
+  // Generate dynamic, harmonized background palette & contextual glyph
+  const visual = getDynamicProductVisual(product, index);
 
   return (
-    <article className="card">
-      {/* Product image with gradient background */}
+    <article
+      className="card dynamic-product-card"
+      style={{
+        animationDelay: `${Math.min(index * 35, 350)}ms`,
+      }}
+    >
+      {/* Product visual container with dynamic background & ambient specular sheen */}
       <div
-        className="img"
+        className="img dynamic-card-canvas"
         style={{
-          background: `linear-gradient(145deg, ${gradientFrom}, ${gradientTo})`,
-        }}
+          background: visual.gradient,
+          '--dynamic-dark-bg': visual.darkGradient,
+          '--dynamic-accent': visual.accent,
+        } as React.CSSProperties}
       >
-        {/* Emoji icon */}
-        <span aria-hidden="true">{glyph}</span>
+        {/* Ambient specular highlights */}
+        <div className="dynamic-canvas-overlay" />
 
-        {/* Customer favourite badge */}
+        {/* Dynamic contextual emoji / icon */}
+        <span className="dynamic-glyph" aria-hidden="true">
+          {visual.glyph}
+        </span>
+
+        {/* Customer favourite / Featured badge */}
         {product.bestSeller && (
-          <span className="badge">Customer favourite</span>
+          <span className="badge dynamic-badge">Customer favourite</span>
+        )}
+        {!product.bestSeller && product.featured && (
+          <span className="badge dynamic-badge">Featured</span>
         )}
 
         {/* Heart/wishlist button */}
@@ -86,15 +99,16 @@ export function ProductCard({
       {/* Product metadata */}
       <div className="meta">
         <div className="row">
-          <span>{product.name}</span>
-          <span>★ {product.rating.toFixed(1)}</span>
+          <span className="product-title">{product.name}</span>
+          <span className="product-rating">★ {product.rating.toFixed(1)}</span>
         </div>
         <div className="sub">{product.subtitle || product.shortDescription}</div>
         <div className="sub">{product.reviewCount} reviews</div>
         <div style={{ marginTop: '4px' }}>
-          <b>${product.price}</b>
+          <b className="product-price">${product.price}</b>
         </div>
       </div>
     </article>
   );
 }
+

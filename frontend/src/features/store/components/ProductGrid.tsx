@@ -52,10 +52,11 @@ export function ProductGrid({
 
   return (
     <div className="grid">
-      {products.map((product) => (
+      {products.map((product, index) => (
         <ProductCard
           key={product.id}
           product={product}
+          index={index}
           onAddToCart={onAddToCart}
           isWishlisted={wishlist.has(product.id)}
           onToggleWishlist={onToggleWishlist}

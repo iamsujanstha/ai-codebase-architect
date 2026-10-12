@@ -23,7 +23,6 @@ export default defineConfig({
                 timeout: 300000,
                 proxyTimeout: 300000,
             },
-
             '/catalog': {
                 target: 'http://localhost:3000',
                 changeOrigin: true,
