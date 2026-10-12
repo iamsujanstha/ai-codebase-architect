@@ -614,7 +614,7 @@ export class PaymentsService {
         total_amount: any;
         order_number: any;
         status: string;
-        payment_method: string;
+        payment_method: string | null;
         users: { name: any; email: any };
         created_at: { toISOString: () => any };
         updated_at: { toISOString: () => any };
@@ -807,7 +807,7 @@ export class PaymentsService {
     }
 
     const productMap = new Map(
-      products.map((r: { id: any }) => [String(r.id), r] as const),
+      products.map((r) => [String(r.id), r] as const),
     );
 
     return normalizedItems.map((item) => {

@@ -6,6 +6,7 @@ WORKDIR /app
 
 # Copy manifests first to maximize Docker layer caching.
 COPY package*.json ./
+COPY prisma ./prisma
 
 # Install all dependencies with retry for network stability.
 RUN npm install || (sleep 5 && npm install) || (sleep 10 && npm install)
