@@ -37,6 +37,13 @@ class GenerateRequest(BaseModel):
         return value
 
 
+class LlmStructuredPayload(BaseModel):
+    summary: str = ""
+    answer: str = ""
+    key_points: list[str] = Field(default_factory=list)
+    suggested_follow_up_prompts: list[str] = Field(default_factory=list)
+
+
 class GenerateResponse(BaseModel):
     request_id: str
     prompt: str

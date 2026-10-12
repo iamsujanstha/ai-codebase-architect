@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any, AsyncGenerator
 import asyncio
 import json
 import logging
@@ -97,7 +98,8 @@ class ChatService:
                                 "delta": item,
                             }
                 finally:
-                    await stream.aclose()
+                    if isinstance(stream, AsyncGenerator):
+                        await stream.aclose()
                 if completion is None:
                     raise ProviderError("The provider stream ended before completion.")
                 event = {
@@ -142,11 +144,12 @@ class ChatService:
             async for event in events:
                 yield json.dumps(event) + "\n"
         finally:
-            await events.aclose()
+            if isinstance(events, AsyncGenerator):
+                await events.aclose()
 
     async def generate(self, payload, model, system_prompt: str | None = None):
         answer = []
-        terminal = None
+        terminal: dict[str, Any] | None = None
         async for event in self.events(payload, model, system_prompt=system_prompt):
             if event["type"] == "error":
                 raise ProviderError(event["message"])
@@ -157,6 +160,8 @@ class ChatService:
         content = "".join(answer).strip()
         if not content or terminal is None:
             raise ProviderError("The model returned an empty response.")
+        timings = terminal.get("timings", {})
+        processing_time = timings.get("totalDurationMs", 0) if isinstance(timings, dict) else 0
         return GenerateResponse(
             request_id=terminal["requestId"],
             prompt=payload.prompt,
@@ -166,6 +171,6 @@ class ChatService:
             suggested_follow_up_prompts=[],
             provider=self.provider.name,
             model=model,
-            processing_time_ms=terminal["timings"]["totalDurationMs"],
+            processing_time_ms=int(processing_time),
             generated_at=terminal["generatedAt"],
         )

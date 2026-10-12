@@ -1,17 +1,18 @@
 from __future__ import annotations
 
+# pyrefly: ignore [missing-import]
 import httpx
 import logging
 import os
 import json
 import re
 from typing import Optional, List, Dict, Any
-from app.vector_store import get_vector_store, VectorPoint
+from app.embeddings import get_embedding_provider, EmbeddingAdapter
+from app.vector_store import get_vector_store, VectorStoreAdapter, VectorPoint
 
 logger = logging.getLogger(__name__)
 
 COLLECTION_NAME = "catalog_products"
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL") or "nomic-embed-text:latest"
 
 
 class ProductService:
@@ -26,38 +27,37 @@ class ProductService:
     4. Search results are returned as structured authoritative entity citations.
     """
 
-    def __init__(self):
-        self.backend_url = os.getenv("BACKEND_URL", "http://backend:3000")
-        self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-        self.vector_store = get_vector_store()
+    def __init__(
+        self,
+        vector_store: VectorStoreAdapter | None = None,
+        embedding_provider: EmbeddingAdapter | None = None,
+        backend_url: str | None = None,
+    ):
+        self.backend_url = backend_url or os.getenv("BACKEND_URL", "http://backend:3000")
+        self.vector_store = vector_store or get_vector_store()
+        self.embedding_provider = embedding_provider or get_embedding_provider()
         self._indexed = False
 
     async def get_embedding(self, text: str) -> list[float]:
         """
-        Generate a 768-dim dense semantic vector embedding using nomic-embed-text via /api/embed.
+        Generate dense semantic vector embedding using the injected EmbeddingAdapter.
+        Decoupled from specific backends (Ollama, OpenAI, Mock, etc.).
         """
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.post(
-                    f"{self.ollama_base_url}/api/embed",
-                    json={"model": EMBEDDING_MODEL, "input": text},
-                )
-                if res.status_code == 200:
-                    embs = res.json().get("embeddings", [])
-                    if embs and len(embs) > 0:
-                        return embs[0]
-
-                # Fallback to /api/embeddings
-                res_legacy = await client.post(
-                    f"{self.ollama_base_url}/api/embeddings",
-                    json={"model": EMBEDDING_MODEL, "prompt": text},
-                )
-                if res_legacy.status_code == 200:
-                    return res_legacy.json().get("embedding", [])
+            return await self.embedding_provider.get_embedding(text)
         except Exception as e:
             logger.error(f"Failed to generate embedding: {e}")
             return []
-        return []
+
+    async def get_embeddings(self, texts: list[str]) -> list[list[float]]:
+        """
+        Generate batch semantic embeddings using the injected EmbeddingAdapter.
+        """
+        try:
+            return await self.embedding_provider.get_embeddings(texts)
+        except Exception as e:
+            logger.error(f"Failed to generate batch embeddings: {e}")
+            return [[] for _ in texts]
 
     async def get_all_products(self) -> list[dict]:
         """
@@ -231,9 +231,10 @@ class ProductService:
                 f"Query: \"{user_prompt}\"\n"
                 "Intent:"
             )
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            ollama_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 res = await client.post(
-                    f"{self.ollama_base_url}/api/generate",
+                    f"{ollama_url}/api/generate",
                     json={
                         "model": os.getenv("DEFAULT_MODEL", "qwen"),
                         "prompt": prompt,

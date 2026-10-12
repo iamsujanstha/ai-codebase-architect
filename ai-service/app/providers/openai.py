@@ -1,4 +1,5 @@
 """OpenAI Responses API text streaming."""
+from __future__ import annotations
 
 from app.providers.base import Completion, ProviderError
 from app.providers.hosted import HostedProvider, split_system
@@ -19,7 +20,7 @@ class OpenAIProvider(HostedProvider):
             "max_output_tokens": self.max_tokens,
         }
 
-    def decode(self, event, state):
+    def decode(self, event: dict, state: dict) -> list[str | Completion]:
         kind = event.get("type")
         if kind == "response.output_text.delta":
             return [event["delta"]]

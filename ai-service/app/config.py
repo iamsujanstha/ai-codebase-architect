@@ -106,3 +106,22 @@ class Settings:
                 "AI_BASE_URL applies only to AI_PROVIDER=openai_compatible"
             )
         return config
+
+    @property
+    def model_name(self) -> str:
+        return self.model
+
+    @property
+    def ollama_timeout_seconds(self) -> float:
+        return self.timeout_seconds
+
+    @property
+    def provider_name(self) -> str:
+        return self.provider
+
+
+try:
+    settings = Settings.from_env()
+except Exception:
+    settings = Settings()
+

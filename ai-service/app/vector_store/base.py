@@ -6,14 +6,14 @@ Allows seamless switching between pgvector, Qdrant, or any future vector engine.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
-from pydantic import BaseModel
+from typing import Any, Dict, List, Union
+from pydantic import BaseModel, Field
 
 
 class VectorPoint(BaseModel):
-    id: int | str
-    vector: list[float]
-    payload: dict[str, Any] = {}
+    id: Union[int, str]
+    vector: List[float]
+    payload: Dict[str, Any] = Field(default_factory=dict)
 
 
 class VectorStoreAdapter(ABC):

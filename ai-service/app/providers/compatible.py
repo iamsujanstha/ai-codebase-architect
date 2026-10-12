@@ -1,4 +1,5 @@
 """Services implementing OpenAI Chat Completions, configured by a trusted operator."""
+from __future__ import annotations
 
 from app.providers.base import Completion, ProviderError
 from app.providers.hosted import HostedProvider
@@ -16,7 +17,7 @@ class OpenAICompatibleProvider(HostedProvider):
             "max_tokens": self.max_tokens,
         }
 
-    def decode(self, event, state):
+    def decode(self, event: dict, state: dict) -> list[str | Completion]:
         usage = event.get("usage") or {}
         if usage:
             state["usage"] = usage

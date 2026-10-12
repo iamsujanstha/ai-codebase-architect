@@ -16,7 +16,12 @@ from typing import Any, AsyncIterator
 from uuid import uuid4
 
 from app.config import settings
-from app.models.ai_models import AvailableModel, LlmStructuredPayload, ModelsResponse
+from app.models.ai_models import (
+    AvailableModel,
+    ChatMessage,
+    LlmStructuredPayload,
+    ModelsResponse,
+)
 
 
 class OllamaClientError(Exception):
@@ -113,7 +118,11 @@ async def list_available_models() -> ModelsResponse:
             parameter_size=str(details.get("parameter_size")),
             quantization_level=str(details.get("quantization_level")),
         ))
-    return ModelsResponse(default_model=settings.model_name, models=models)
+    return ModelsResponse(
+        provider=settings.provider_name,
+        default_model=settings.model_name,
+        models=models,
+    )
 
 
 async def stream_chat_completion(
