@@ -1,7 +1,8 @@
 import { FormEvent, useState, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart } from 'lucide-react';
+import { Search, ShoppingCart, Sparkles } from 'lucide-react';
 import { useCart } from '@/features/store/CartContext';
+import { useAIConcierge } from '@/features/chat/AIConciergeContext';
 import { ProfileMenu } from './ProfileMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { ROUTES } from '@/app/constants/routes';
@@ -9,6 +10,7 @@ import { ROUTES } from '@/app/constants/routes';
 interface AppHeaderProps {
   onSearch?: (query: string) => void;
   onCartClick?: () => void;
+  onAskAIClick?: () => void;
   categoryStrip?: ReactNode;
 }
 
@@ -17,16 +19,26 @@ interface AppHeaderProps {
  * Features:
  * - Logo with tagline
  * - Search pill (moves to own row on mobile)
+ * - Ask AI header button (matching admin CMS)
  * - Cart button with count
  * - Profile menu
  * - Theme toggle
  * - Optional category strip for storefront
  */
-export function AppHeader({ onSearch, onCartClick, categoryStrip }: AppHeaderProps): JSX.Element {
+export function AppHeader({ onSearch, onCartClick, onAskAIClick, categoryStrip }: AppHeaderProps): JSX.Element {
   const { itemCount } = useCart();
+  const { openConcierge } = useAIConcierge();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleAskAI = () => {
+    if (onAskAIClick) {
+      onAskAIClick();
+    } else {
+      openConcierge();
+    }
+  };
 
   const isHome = location.pathname === ROUTES.HOME;
 
@@ -89,6 +101,19 @@ export function AppHeader({ onSearch, onCartClick, categoryStrip }: AppHeaderPro
 
           {/* Right actions */}
           <div className="right">
+            {/* Ask AI button */}
+            <button
+              className="chip"
+              id="askaib"
+              onClick={handleAskAI}
+              type="button"
+              aria-label="Ask AI"
+              title="Open AI Concierge"
+            >
+              <Sparkles size={16} style={{ color: '#a93bff' }} />
+              <span>Ask AI</span>
+            </button>
+
             {/* Cart button */}
             <button
               className="chip"

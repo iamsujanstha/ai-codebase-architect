@@ -16,7 +16,6 @@ import {
 import { useAuth } from '@/features/auth/AuthContext';
 import { useAIConcierge } from '@/features/chat/AIConciergeContext';
 import { ConciergeDrawer } from '@/features/chat/components/ConciergeDrawer';
-import { ConciergeLauncher } from '@/features/chat/components/ConciergeLauncher';
 import { adminApi, AdminStats } from './api/adminApi';
 import styles from './Admin.module.css';
 
@@ -291,12 +290,6 @@ export const AdminLayout: React.FC = () => {
           <Outlet context={{ refreshStats: () => adminApi.getStats().then(setStats) }} />
         </main>
       </div>
-
-      {/* Floating AI concierge launcher - matching Storefront exactly */}
-      <ConciergeLauncher
-        onClick={openConcierge}
-        hidden={isConciergeOpen}
-      />
 
       {/* AI Concierge Drawer */}
       <ConciergeDrawer isOpen={isConciergeOpen} onClose={closeConcierge} />

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { useCart } from '@/features/store/CartContext';
 import { useAuth } from '@/features/auth/AuthContext';
-import { useAIConcierge } from '@/features/chat/AIConciergeContext';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 import { ROUTES, loginWithRedirect } from '@/app/constants/routes';
 
@@ -20,7 +19,6 @@ import { ROUTES, loginWithRedirect } from '@/app/constants/routes';
 export function CartDrawer(): JSX.Element | null {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { openConcierge } = useAIConcierge();
   const {
     items,
     itemCount: _itemCount,
@@ -50,11 +48,6 @@ export function CartDrawer(): JSX.Element | null {
     closeCart();
     const destination = `${ROUTES.CHECKOUT}?method=${payMethod}`;
     navigate(user ? destination : loginWithRedirect(destination));
-  }
-
-  function handleAskConcierge() {
-    closeCart();
-    openConcierge();
   }
 
   return (
@@ -91,16 +84,7 @@ export function CartDrawer(): JSX.Element | null {
               >
                 Your cart is empty
               </b>
-              Add something from the shop, or ask the AI concierge for ideas.
-              <br />
-              <button
-                type="button"
-                className="btn p"
-                style={{ marginTop: '16px' }}
-                onClick={handleAskConcierge}
-              >
-                Ask the AI concierge
-              </button>
+              Add something from the shop to get started.
             </p>
           ) : (
             items.map((item) => (

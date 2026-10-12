@@ -5,9 +5,8 @@ interface EmptyStateProps {
 
 /**
  * EmptyState - Displayed when no products match the search/filter.
- * Includes CTA to ask the AI concierge for help.
  */
-export function EmptyState({ searchQuery, onAskAI }: EmptyStateProps): JSX.Element {
+export function EmptyState({ searchQuery }: EmptyStateProps): JSX.Element {
   return (
     <p className="sub" style={{ 
       gridColumn: '1 / -1', 
@@ -18,16 +17,7 @@ export function EmptyState({ searchQuery, onAskAI }: EmptyStateProps): JSX.Eleme
         {searchQuery ? `No matches for "${searchQuery}"` : 'No matches yet'}
       </b>
       <br />
-      Try another keyword, or
-      <br />
-      <button
-        className="btn p"
-        style={{ marginTop: '12px' }}
-        onClick={onAskAI}
-        type="button"
-      >
-        Ask the AI concierge
-      </button>
+      Try another keyword or category filter.
     </p>
   );
 }
