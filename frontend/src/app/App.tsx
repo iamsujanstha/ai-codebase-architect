@@ -32,6 +32,11 @@ const UsersManagement = React.lazy(() =>
     default: m.UsersManagement,
   })),
 );
+const OrdersManagement = React.lazy(() =>
+  import('@/features/admin/OrdersManagement').then((m) => ({
+    default: m.OrdersManagement,
+  })),
+);
 
 /**
  * App — composition root.
@@ -70,6 +75,7 @@ export default function App(): JSX.Element {
                 >
                   <Route index element={<AdminDashboard />} />
                   <Route path="products" element={<ProductsManagement />} />
+                  <Route path="orders" element={<OrdersManagement />} />
                   <Route path="users" element={<UsersManagement />} />
                   <Route path="*" element={<Navigate replace to="/admin" />} />
                 </Route>

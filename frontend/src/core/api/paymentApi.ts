@@ -166,3 +166,28 @@ export function fetchStripeSessionStatus(params: {
     },
   );
 }
+
+export interface PurchasedProductItem {
+  productId: string;
+  name: string;
+  quantity: number;
+  price: number;
+  orderNumber: string;
+  purchasedAt: string;
+  status: string;
+}
+
+export interface PurchasedProductsResponse {
+  productIds: string[];
+  purchasedItems: PurchasedProductItem[];
+  totalOrders: number;
+}
+
+export function fetchPurchasedProducts(): Promise<PurchasedProductsResponse> {
+  return requestJson<PurchasedProductsResponse>(
+    '/payments/purchased-products',
+    { method: 'GET' },
+    true,
+  );
+}
+

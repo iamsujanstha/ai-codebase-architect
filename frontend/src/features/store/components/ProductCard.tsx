@@ -8,6 +8,7 @@ interface ProductCardProps {
   onAddToCart: (product: CatalogProduct) => void;
   isWishlisted?: boolean;
   onToggleWishlist?: (productId: string) => void;
+  isPurchased?: boolean;
 }
 
 /**
@@ -20,6 +21,7 @@ export function ProductCard({
   onAddToCart,
   isWishlisted = false,
   onToggleWishlist,
+  isPurchased = false,
 }: ProductCardProps): JSX.Element {
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -60,11 +62,25 @@ export function ProductCard({
           {visual.glyph}
         </span>
 
-        {/* Customer favourite / Featured badge */}
-        {product.bestSeller && (
+        {/* Purchased / Customer favourite / Featured badge */}
+        {isPurchased && (
+          <span
+            className="badge dynamic-badge"
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#ffffff',
+              boxShadow: '0 2px 10px rgba(16, 185, 129, 0.45)',
+              letterSpacing: '0.02em',
+              fontWeight: 600,
+            }}
+          >
+            ✓ Purchased
+          </span>
+        )}
+        {!isPurchased && product.bestSeller && (
           <span className="badge dynamic-badge">Customer favourite</span>
         )}
-        {!product.bestSeller && product.featured && (
+        {!isPurchased && !product.bestSeller && product.featured && (
           <span className="badge dynamic-badge">Featured</span>
         )}
 

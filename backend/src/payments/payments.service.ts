@@ -596,10 +596,33 @@ export class PaymentsService {
     return this.mapOrderSummary(order);
   }
 
-  async getOrdersForUser(userId: string): Promise<OrderSummaryResponse[]> {
-    const numericUserId = parseInt(userId, 10);
+  async getOrdersForUser(
+    userId?: string,
+    userEmail?: string,
+  ): Promise<OrderSummaryResponse[]> {
+    let pgUserId: number | undefined;
+    if (userEmail) {
+      const pgUser = await this.prisma.users.findUnique({
+        where: { email: userEmail.toLowerCase() },
+      });
+      if (pgUser) {
+        pgUserId = pgUser.id;
+      }
+    }
+    if (!pgUserId && userId && /^\d+$/.test(userId)) {
+      pgUserId = parseInt(userId, 10);
+    }
+
+    const whereConditions: any[] = [];
+    if (pgUserId) {
+      whereConditions.push({ user_id: pgUserId });
+    }
+    if (userEmail) {
+      whereConditions.push({ users: { email: userEmail.toLowerCase() } });
+    }
+
     const rows = await this.prisma.orders.findMany({
-      where: !isNaN(numericUserId) ? { user_id: numericUserId } : undefined,
+      where: whereConditions.length > 0 ? { OR: whereConditions } : undefined,
       include: {
         order_items: true,
         users: true,
@@ -673,6 +696,56 @@ export class PaymentsService {
         };
       },
     );
+  }
+
+  async getPurchasedProductsForUser(
+    userId?: string,
+    userEmail?: string,
+  ): Promise<{
+    productIds: string[];
+    purchasedItems: Array<{
+      productId: string;
+      name: string;
+      quantity: number;
+      price: number;
+      orderNumber: string;
+      purchasedAt: string;
+      status: string;
+    }>;
+    totalOrders: number;
+  }> {
+    const orders = await this.getOrdersForUser(userId, userEmail);
+    const productIds = new Set<string>();
+    const purchasedItems: Array<{
+      productId: string;
+      name: string;
+      quantity: number;
+      price: number;
+      orderNumber: string;
+      purchasedAt: string;
+      status: string;
+    }> = [];
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        productIds.add(item.productId);
+        purchasedItems.push({
+          productId: item.productId,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.unitAmount,
+          orderNumber: order.orderNumber,
+          purchasedAt: order.createdAt,
+          status: order.status,
+        });
+      }
+    }
+
+    return {
+      productIds: Array.from(productIds),
+      purchasedItems,
+      totalOrders: orders.length,
+    };
   }
 
   async handleEsewaSuccessRedirect(
@@ -1010,13 +1083,24 @@ export class PaymentsService {
   ): Promise<OrderRecord> {
     const orderNumber = this.generateOrderNumber();
     let numericUserId: number | null = null;
-    if (userId && !isNaN(parseInt(userId, 10))) {
+    if (userId && /^\d+$/.test(userId)) {
       numericUserId = parseInt(userId, 10);
     } else {
-      const user = await this.prisma.users.findUnique({
+      let user = await this.prisma.users.findUnique({
         where: { email: customer.email.toLowerCase() },
       });
-      if (user) numericUserId = user.id;
+      if (!user) {
+        user = await this.prisma.users.create({
+          data: {
+            email: customer.email.toLowerCase(),
+            name: customer.fullName || customer.email.split('@')[0],
+            password: '',
+            role: 'customer',
+            status: 'active',
+          },
+        });
+      }
+      numericUserId = user.id;
     }
 
     if (!numericUserId) {

@@ -84,10 +84,48 @@ export interface SalesDay {
   sales: number;
 }
 
+export interface AdminOrderItem {
+  id: number;
+  order_id: number;
+  product_id: number;
+  name: string;
+  price: number | string;
+  quantity: number;
+  subtotal?: number | string;
+}
+
+export interface AdminOrderUser {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export interface AdminOrder {
+  id: number;
+  user_id: number;
+  order_number: string;
+  total_amount: number | string;
+  status: string;
+  payment_method: string | null;
+  payment_intent_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  order_items: AdminOrderItem[];
+  users?: AdminOrderUser | null;
+}
+
+export interface AdminOrdersResponse {
+  orders: AdminOrder[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
 export interface AdminStats {
   totalProducts: number;
   publishedProducts: number;
   totalUsers: number;
+  totalOrders?: number;
   revenue30Days: number;
   sales7Days: SalesDay[];
   recentUsers: Array<{

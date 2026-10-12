@@ -9,7 +9,9 @@ import { SortButton, type SortOption } from './components/SortButton';
 import { ProductGrid } from './components/ProductGrid';
 import { CatalogErrorBanner } from './components/CatalogErrorBanner';
 import { useAIConcierge } from '@/features/chat/AIConciergeContext';
-import { Sparkles, Laptop, Armchair, BookOpen, Wrench, Package } from 'lucide-react';
+import { useAuth } from '@/features/auth/AuthContext';
+import { fetchPurchasedProducts } from '@/core/api/paymentApi';
+import { Sparkles, Laptop, Armchair, BookOpen, Wrench, Package, PackageCheck } from 'lucide-react';
 
 const PAGE_SIZE = 8;
 
@@ -43,6 +45,9 @@ export function StorefrontPage(): JSX.Element {
   const { wishlist, toggleWishlist } = useWishlist();
   const { showToast } = useToastContext();
   const { openConcierge } = useAIConcierge();
+  const { user } = useAuth();
+
+  const [purchasedIds, setPurchasedIds] = useState<Set<string>>(new Set());
 
   // Categories & Filtering - initialized with cache or PostgreSQL defaults for zero-flicker reload
   const [categories, setCategories] = useState<Category[]>(() => {
@@ -117,6 +122,27 @@ export function StorefrontPage(): JSX.Element {
     };
   }, []);
 
+  // Fetch user purchased product IDs
+  useEffect(() => {
+    if (!user) {
+      setPurchasedIds(new Set());
+      return;
+    }
+    let isMounted = true;
+    fetchPurchasedProducts()
+      .then((res) => {
+        if (isMounted && res?.productIds) {
+          setPurchasedIds(new Set(res.productIds.map(String)));
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load purchased products:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
   // Fetch initial batch whenever category or search param changes
   const loadInitialProducts = useCallback(async () => {
     setIsLoading(true);
@@ -127,6 +153,22 @@ export function StorefrontPage(): JSX.Element {
     const searchFromUrl = urlParams.get('q') || undefined;
 
     try {
+      if (selectedCategory === 'purchased') {
+        const response = await fetchCatalogProducts({
+          search: searchFromUrl,
+          limit: 100,
+          skip: 0,
+        });
+        const filtered = response.items.filter((item) =>
+          purchasedIds.has(String(item.id)),
+        );
+        setProducts(filtered);
+        setTotalCount(filtered.length);
+        setHasMore(false);
+        setIsLoading(false);
+        return;
+      }
+
       const response = await fetchCatalogProducts({
         category: selectedCategory !== 'all' ? selectedCategory : undefined,
         search: searchFromUrl,
@@ -236,6 +278,21 @@ export function StorefrontPage(): JSX.Element {
   const selectedCatObj = categories.find((c) => c.id === selectedCategory);
   const displayTitle = selectedCategory === 'all' ? 'All products' : selectedCatObj?.name || 'Products';
 
+  // Combine categories with dynamic Purchased category if user has bought items
+  const activeCategories: Category[] = [
+    ...categories,
+    ...(purchasedIds.size > 0
+      ? [
+          {
+            id: 'purchased',
+            name: 'Purchased',
+            icon: <PackageCheck size={24} />,
+            count: purchasedIds.size,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <main className="wrap">
       <section>
@@ -245,7 +302,7 @@ export function StorefrontPage(): JSX.Element {
         {/* Category strip and sort button */}
         <div className="cats">
           <CategoryStrip
-            categories={categories}
+            categories={activeCategories}
             selectedCategory={selectedCategory}
             onSelectCategory={(catId) => {
               setSelectedCategory(catId);
@@ -273,6 +330,7 @@ export function StorefrontPage(): JSX.Element {
           isLoading={isLoading}
           isLoadingMore={isLoadingMore}
           wishlist={wishlist}
+          purchasedProductIds={purchasedIds}
           onAddToCart={handleAddToCart}
           onToggleWishlist={toggleWishlist}
           onAskAI={openConcierge}

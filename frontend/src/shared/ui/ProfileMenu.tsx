@@ -80,19 +80,28 @@ export function ProfileMenu(): JSX.Element {
       {isOpen && (
         <div className="menu" role="menu">
           <Link 
-            to="/chat" 
+            to={ROUTES.ORDERS} 
             role="menuitem"
             onClick={() => setIsOpen(false)}
           >
-            ✨ AI Studio
+            📦 My Orders
           </Link>
           <Link 
-            to="/chat" 
+            to={ROUTES.CHAT} 
             role="menuitem"
             onClick={() => setIsOpen(false)}
           >
-            📄 Chat with documents
+            💬 AI Concierge
           </Link>
+          {user.role === 'admin' && (
+            <Link 
+              to={ROUTES.ADMIN} 
+              role="menuitem"
+              onClick={() => setIsOpen(false)}
+            >
+              🛡️ Admin CMS
+            </Link>
+          )}
           <hr />
           <button 
             role="menuitem"

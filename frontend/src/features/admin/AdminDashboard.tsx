@@ -131,17 +131,17 @@ export const AdminDashboard: React.FC = () => {
       <h1 className={styles.title}>Good to see you, {adminGreeting}</h1>
       <p className={styles.sub}>A quick look at your store.</p>
 
-      {/* 4 Stat Cards */}
+      {/* Stat Cards */}
       <div className={styles.stats}>
-        <div className={styles.stat}>
+        <div className={styles.stat} onClick={() => navigate('/admin/products')} style={{ cursor: 'pointer' }}>
           <b>{stats.totalProducts}</b>
           <span>Total products</span>
         </div>
-        <div className={styles.stat}>
-          <b>{stats.publishedProducts}</b>
-          <span>Published</span>
+        <div className={styles.stat} onClick={() => navigate('/admin/orders')} style={{ cursor: 'pointer' }}>
+          <b>{stats.totalOrders ?? 0}</b>
+          <span>Total orders</span>
         </div>
-        <div className={styles.stat}>
+        <div className={styles.stat} onClick={() => navigate('/admin/users')} style={{ cursor: 'pointer' }}>
           <b>{stats.totalUsers}</b>
           <span>Users</span>
         </div>

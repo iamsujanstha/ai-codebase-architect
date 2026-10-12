@@ -107,7 +107,7 @@ function UserMenu(): JSX.Element {
 export function AppChrome(): JSX.Element {
   const location = useLocation();
   const { itemCount, toggleCart } = useCart();
-  // user is consumed by UserMenu — kept here for future route-level guards
+  const { user } = useAuth();
 
   return (
     <div className="platform-shell">
@@ -121,6 +121,7 @@ export function AppChrome(): JSX.Element {
 
         <nav className="site-nav">
           <NavLink to="/" end>Home</NavLink>
+          {user && <NavLink to={ROUTES.ORDERS}>My Orders</NavLink>}
           <NavLink to="/chat">Chat</NavLink>
         </nav>
 

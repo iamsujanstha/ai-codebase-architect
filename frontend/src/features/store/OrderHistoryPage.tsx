@@ -1,390 +1,1135 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  ShoppingBag,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  ExternalLink,
+  Package,
+  RotateCcw,
+  DollarSign,
+  Layers,
+} from 'lucide-react';
 import { fetchMyOrders } from '@/core/api/paymentApi';
-import { useAuth } from '@/features/auth/AuthContext';
+import { useCart } from '@/features/store/CartContext';
+import { useToastContext } from '@/shared/contexts/ToastContext';
 import type { OrderSummaryResponse, OrderSummaryItem } from '@/core/types/payment';
-import type { OrderStatus, PaymentProvider } from '@/core/types/payment-literals';
+import type { PaymentProvider } from '@/core/types/payment-literals';
+import type { CatalogProduct } from '@/core/types/catalog';
 import { formatCurrency } from '@/shared/utils/formatCurrency';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ─── Status Config ───────────────────────────────────────────────────────────
 
-const STATUS_META: Record<
-  OrderStatus,
-  { label: string; icon: string; cls: string }
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; icon: React.ReactNode; bg: string; text: string; border: string }
 > = {
-  paid:            { label: 'Paid',     icon: '✓', cls: 'oh-status--paid' },
-  pending_payment: { label: 'Pending',  icon: '⏳', cls: 'oh-status--pending' },
-  failed:          { label: 'Failed',   icon: '✕', cls: 'oh-status--failed' },
-  canceled:        { label: 'Canceled', icon: '✕', cls: 'oh-status--failed' },
-  expired:         { label: 'Expired',  icon: '⏱', cls: 'oh-status--failed' },
+  paid: {
+    label: 'Paid & Verified',
+    icon: <CheckCircle2 size={13} />,
+    bg: 'rgba(16, 185, 129, 0.12)',
+    text: '#10b981',
+    border: 'rgba(16, 185, 129, 0.25)',
+  },
+  completed: {
+    label: 'Completed',
+    icon: <CheckCircle2 size={13} />,
+    bg: 'rgba(16, 185, 129, 0.12)',
+    text: '#10b981',
+    border: 'rgba(16, 185, 129, 0.25)',
+  },
+  pending_payment: {
+    label: 'Pending Payment',
+    icon: <Clock size={13} />,
+    bg: 'rgba(245, 158, 11, 0.12)',
+    text: '#f59e0b',
+    border: 'rgba(245, 158, 11, 0.25)',
+  },
+  pending: {
+    label: 'Pending',
+    icon: <Clock size={13} />,
+    bg: 'rgba(245, 158, 11, 0.12)',
+    text: '#f59e0b',
+    border: 'rgba(245, 158, 11, 0.25)',
+  },
+  canceled: {
+    label: 'Canceled',
+    icon: <XCircle size={13} />,
+    bg: 'rgba(239, 68, 68, 0.12)',
+    text: '#ef4444',
+    border: 'rgba(239, 68, 68, 0.25)',
+  },
+  failed: {
+    label: 'Payment Failed',
+    icon: <XCircle size={13} />,
+    bg: 'rgba(239, 68, 68, 0.12)',
+    text: '#ef4444',
+    border: 'rgba(239, 68, 68, 0.25)',
+  },
 };
 
-function fmt(date: string) {
-  return new Date(date).toLocaleDateString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric',
-  });
-}
-
-function fmtFull(date: string) {
-  return new Date(date).toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
-// ─── sub-components ─────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: OrderStatus }) {
-  const meta = STATUS_META[status] ?? { label: status, icon: '•', cls: '' };
-  return (
-    <span className={`oh-badge ${meta.cls}`}>
-      <span className="oh-badge__icon">{meta.icon}</span>
-      {meta.label}
-    </span>
-  );
-}
-
-function ProviderLogo({ provider }: { provider: PaymentProvider }) {
-  if (provider === 'stripe') {
-    return (
-      <span className="oh-provider oh-provider--stripe">
-        <svg width="38" height="16" viewBox="0 0 60 25" fill="none" aria-label="Stripe">
-          <path d="M27.5 7.2c0-1.3 1-1.8 2.7-1.8 2.4 0 5.5.7 7.9 2V2.1C35.7.8 33.3.2 30.2.2c-5.5 0-9.2 2.9-9.2 7.7 0 7.5 10.3 6.3 10.3 9.5 0 1.5-1.3 2-3.1 2-2.7 0-6.1-.9-8.8-2.5v5.4c3 1.3 6 1.8 8.8 1.8 5.7 0 9.6-2.8 9.6-7.7-.1-8.1-10.3-6.6-10.3-9.2z" fill="currentColor"/>
-          <path d="M0 8.5l.4-2.3H5V2.4L10.7 1v5.2h5.8v4.6h-5.8v7.1c0 2 .9 2.8 2.5 2.8 1.1 0 2.2-.3 3.2-.8v4.4c-1.2.6-2.7 1-4.6 1C7.2 25.3 4.5 23 4.5 18v-7.5H0V8.5z" fill="currentColor"/>
-        </svg>
-      </span>
-    );
+function formatDate(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return dateStr;
   }
+}
+
+// ─── Provider Logo ───────────────────────────────────────────────────────────
+
+function ProviderBadge({ provider }: { provider: PaymentProvider | string }) {
+  const isStripe = provider?.toLowerCase() === 'stripe';
   return (
-    <span className="oh-provider oh-provider--esewa">
-      eSewa
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '3px 8px',
+        borderRadius: '6px',
+        fontSize: '11px',
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: '0.04em',
+        background: isStripe ? 'rgba(99, 91, 255, 0.12)' : 'rgba(96, 187, 70, 0.12)',
+        color: isStripe ? '#635bff' : '#60bb46',
+        border: `1px solid ${isStripe ? 'rgba(99, 91, 255, 0.25)' : 'rgba(96, 187, 70, 0.25)'}`,
+      }}
+    >
+      {isStripe ? 'Stripe Checkout' : 'eSewa ePay'}
     </span>
   );
 }
 
-function OrderItemRow({ item }: { item: OrderSummaryItem }) {
-  return (
-    <div className="oh-item-row">
-      <div className="oh-item-row__info">
-        <span className="oh-item-row__name">{item.name}</span>
-        <span className="oh-item-row__qty">× {item.quantity}</span>
-      </div>
-      <div className="oh-item-row__prices">
-        <span className="oh-item-row__unit">
-          {formatCurrency(item.unitAmount, item.currency)} each
-        </span>
-        <strong className="oh-item-row__total">
-          {formatCurrency(item.lineTotal, item.currency)}
-        </strong>
-      </div>
-    </div>
-  );
-}
-
-function PricingRow({
-  label,
-  value,
-  currency,
-  bold,
-}: {
-  label: string;
-  value: number;
-  currency: string;
-  bold?: boolean;
-}) {
-  return (
-    <div className={`oh-pricing-row${bold ? ' oh-pricing-row--total' : ''}`}>
-      <span>{label}</span>
-      <span>{formatCurrency(value, currency)}</span>
-    </div>
-  );
-}
-
-function OrderCard({
-  order,
-  expanded,
-  onToggle,
-}: {
-  order: OrderSummaryResponse;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const { pricing, items } = order;
-  const previewItems = items.slice(0, 2);
-  const extraCount = items.length - previewItems.length;
-
-  return (
-    <article className={`oh-card${expanded ? ' oh-card--expanded' : ''}`}>
-      {/* ── card header ── */}
-      <button
-        className="oh-card__header"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        type="button"
-      >
-        <div className="oh-card__header-left">
-          <div className="oh-card__order-id">
-            <span className="oh-card__order-label">Order</span>
-            <span className="oh-card__order-num">#{order.orderNumber}</span>
-          </div>
-          <div className="oh-card__meta">
-            <span className="oh-card__date">{fmt(order.createdAt)}</span>
-            <span className="oh-card__sep">·</span>
-            <ProviderLogo provider={order.paymentProvider} />
-          </div>
-        </div>
-
-        <div className="oh-card__header-right">
-          <div className="oh-card__total-block">
-            <span className="oh-card__total-label">Total</span>
-            <strong className="oh-card__total-value">
-              {formatCurrency(pricing.total, pricing.currency)}
-            </strong>
-          </div>
-          <StatusBadge status={order.status} />
-          <span className="oh-card__chevron" aria-hidden>
-            {expanded ? '▲' : '▼'}
-          </span>
-        </div>
-      </button>
-
-      {/* ── collapsed preview ── */}
-      {!expanded && (
-        <div className="oh-card__preview">
-          {previewItems.map((item) => (
-            <span key={item.productId} className="oh-card__preview-item">
-              {item.name} × {item.quantity}
-            </span>
-          ))}
-          {extraCount > 0 && (
-            <span className="oh-card__preview-more">+{extraCount} more</span>
-          )}
-        </div>
-      )}
-
-      {/* ── expanded detail ── */}
-      {expanded && (
-        <div className="oh-card__detail">
-          {/* items */}
-          <section className="oh-detail-section">
-            <h3 className="oh-detail-section__title">Items</h3>
-            <div className="oh-item-list">
-              {items.map((item) => (
-                <OrderItemRow key={item.productId} item={item} />
-              ))}
-            </div>
-          </section>
-
-          {/* pricing breakdown */}
-          <section className="oh-detail-section">
-            <h3 className="oh-detail-section__title">Pricing</h3>
-            <div className="oh-pricing-breakdown">
-              <PricingRow label="Subtotal"       value={pricing.subtotal}       currency={pricing.currency} />
-              {pricing.taxAmount > 0 && (
-                <PricingRow label="Tax"           value={pricing.taxAmount}      currency={pricing.currency} />
-              )}
-              {pricing.serviceCharge > 0 && (
-                <PricingRow label="Service charge" value={pricing.serviceCharge} currency={pricing.currency} />
-              )}
-              {pricing.deliveryCharge > 0 && (
-                <PricingRow label="Delivery"      value={pricing.deliveryCharge} currency={pricing.currency} />
-              )}
-              <PricingRow label="Total" value={pricing.total} currency={pricing.currency} bold />
-            </div>
-          </section>
-
-          {/* customer */}
-          <section className="oh-detail-section">
-            <h3 className="oh-detail-section__title">Delivered to</h3>
-            <div className="oh-customer-block">
-              <p className="oh-customer-name">{order.customer.fullName}</p>
-              <p className="oh-customer-email">{order.customer.email}</p>
-              {order.customer.phone && (
-                <p className="oh-customer-phone">{order.customer.phone}</p>
-              )}
-            </div>
-          </section>
-
-          {/* timestamps */}
-          <section className="oh-detail-section oh-detail-section--timestamps">
-            <div className="oh-ts-row">
-              <span>Placed</span>
-              <strong>{fmtFull(order.createdAt)}</strong>
-            </div>
-            {order.paidAt && (
-              <div className="oh-ts-row">
-                <span>Paid</span>
-                <strong>{fmtFull(order.paidAt)}</strong>
-              </div>
-            )}
-            {order.failureReason && (
-              <div className="oh-ts-row oh-ts-row--error">
-                <span>Reason</span>
-                <strong>{order.failureReason}</strong>
-              </div>
-            )}
-          </section>
-
-          {/* actions */}
-          <div className="oh-card__actions">
-            <Link
-              className="secondary-link-button"
-              to={`/checkout/result?orderNumber=${encodeURIComponent(order.orderNumber)}&provider=${order.paymentProvider}`}
-            >
-              Full receipt →
-            </Link>
-            {order.status !== 'paid' && (
-              <Link className="primary-button" to="/checkout">
-                Retry payment
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
-    </article>
-  );
-}
-
-// ─── skeleton loader ─────────────────────────────────────────────────────────
-
-function SkeletonCard() {
-  return (
-    <div className="oh-card oh-card--skeleton" aria-hidden>
-      <div className="oh-skeleton oh-skeleton--header" />
-      <div className="oh-skeleton oh-skeleton--line" />
-      <div className="oh-skeleton oh-skeleton--line oh-skeleton--short" />
-    </div>
-  );
-}
-
-// ─── empty state ─────────────────────────────────────────────────────────────
-
-function EmptyState() {
-  return (
-    <div className="oh-empty">
-      <div className="oh-empty__icon" aria-hidden>🛍️</div>
-      <h2 className="oh-empty__title">No orders yet</h2>
-      <p className="oh-empty__body">
-        When you complete a purchase it will appear here with full details and
-        payment status.
-      </p>
-      <Link className="primary-button" to="/">
-        Start shopping
-      </Link>
-    </div>
-  );
-}
-
-// ─── stats bar ───────────────────────────────────────────────────────────────
-
-function StatsBar({ orders }: { orders: OrderSummaryResponse[] }) {
-  const paid    = orders.filter((o) => o.status === 'paid').length;
-  const pending = orders.filter((o) => o.status === 'pending_payment').length;
-  const totalSpend = orders
-    .filter((o) => o.status === 'paid')
-    .reduce((sum, o) => sum + o.pricing.total, 0);
-
-  // Only show spend if all paid orders share the same currency (keep it simple)
-  const currencies = [...new Set(orders.filter((o) => o.status === 'paid').map((o) => o.pricing.currency))];
-  const spendLabel =
-    currencies.length === 1
-      ? formatCurrency(totalSpend, currencies[0])
-      : `${paid} paid`;
-
-  return (
-    <div className="oh-stats">
-      <div className="oh-stat">
-        <span className="oh-stat__value">{orders.length}</span>
-        <span className="oh-stat__label">Total orders</span>
-      </div>
-      <div className="oh-stat">
-        <span className="oh-stat__value oh-stat__value--green">{paid}</span>
-        <span className="oh-stat__label">Completed</span>
-      </div>
-      {pending > 0 && (
-        <div className="oh-stat">
-          <span className="oh-stat__value oh-stat__value--amber">{pending}</span>
-          <span className="oh-stat__label">Pending</span>
-        </div>
-      )}
-      {paid > 0 && (
-        <div className="oh-stat">
-          <span className="oh-stat__value">{spendLabel}</span>
-          <span className="oh-stat__label">Total spent</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── main page ───────────────────────────────────────────────────────────────
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export function OrderHistoryPage(): JSX.Element {
-  const { user } = useAuth();
-  const [orders, setOrders]       = useState<OrderSummaryResponse[]>([]);
+  const { addItem } = useCart();
+  const { showToast } = useToastContext();
+
+  const [orders, setOrders] = useState<OrderSummaryResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError]         = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Filters & Search
+  const [activeTab, setActiveTab] = useState<'all' | 'paid' | 'pending' | 'other'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+
+  const loadOrders = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await fetchMyOrders();
+      setOrders(data);
+      // Automatically expand first order for immediate inspection
+      if (data.length > 0) {
+        setExpandedOrders(new Set([data[0].orderNumber]));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load orders.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let alive = true;
-    fetchMyOrders()
-      .then((data) => { if (alive) setOrders(data); })
-      .catch((err) => { if (alive) setError(err instanceof Error ? err.message : 'Failed to load orders.'); })
-      .finally(() => { if (alive) setIsLoading(false); });
-    return () => { alive = false; };
+    void loadOrders();
   }, []);
 
-  function toggle(id: string) {
-    setExpandedId((prev) => (prev === id ? null : id));
-  }
+  const toggleExpand = (orderNumber: string) => {
+    setExpandedOrders((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderNumber)) {
+        next.delete(orderNumber);
+      } else {
+        next.add(orderNumber);
+      }
+      return next;
+    });
+  };
+
+  const handleCopyOrderNumber = (orderNumber: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(orderNumber);
+    setCopiedOrderId(orderNumber);
+    showToast(`Copied order #${orderNumber}`);
+    setTimeout(() => setCopiedOrderId(null), 2000);
+  };
+
+  const handleBuyAgain = (item: OrderSummaryItem) => {
+    addItem({
+      id: item.productId,
+      name: item.name,
+      price: item.unitAmount,
+      slug: item.slug || `product-${item.productId}`,
+      subtitle: item.name,
+      shortDescription: item.name,
+      description: item.name,
+      currency: item.currency || 'USD',
+      rating: 4.8,
+      reviewCount: 1,
+      inventoryCount: 50,
+      compareAtPrice: null,
+      badge: 'Purchased',
+      tags: [],
+      visual: {
+        gradientFrom: '#10b981',
+        gradientTo: '#059669',
+        accent: '#10b981',
+        glyph: '🛍️',
+      },
+      specs: [],
+      bestSeller: false,
+      featured: false,
+      unitAmountNpr: Math.round(item.unitAmount * 135),
+    } as unknown as CatalogProduct);
+    showToast(`Added ${item.name} to cart`);
+  };
+
+  // Filtered Orders
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      // Tab filter
+      if (activeTab === 'paid') {
+        if (order.status !== 'paid' && (order.status as string) !== 'completed') return false;
+      } else if (activeTab === 'pending') {
+        if (order.status !== 'pending_payment' && (order.status as string) !== 'pending') return false;
+      } else if (activeTab === 'other') {
+        if (order.status === 'paid' || (order.status as string) === 'completed' || order.status === 'pending_payment' || (order.status as string) === 'pending') {
+          return false;
+        }
+      }
+
+      // Search filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const matchesNum = order.orderNumber.toLowerCase().includes(query);
+        const matchesItem = order.items.some((it) => it.name.toLowerCase().includes(query));
+        return matchesNum || matchesItem;
+      }
+
+      return true;
+    });
+  }, [orders, activeTab, searchQuery]);
+
+  // Summary Metrics
+  const paidCount = orders.filter((o) => o.status === 'paid' || (o.status as string) === 'completed').length;
+  const pendingCount = orders.filter((o) => o.status === 'pending_payment' || (o.status as string) === 'pending').length;
+  const totalSpend = orders
+    .filter((o) => o.status === 'paid' || (o.status as string) === 'completed')
+    .reduce((sum, o) => sum + o.pricing.total, 0);
+  const totalItemsCount = orders.reduce((sum, o) => sum + o.items.reduce((s, it) => s + it.quantity, 0), 0);
 
   return (
-    <div className="oh-page">
-      {/* ── page header ── */}
-      <header className="oh-page-header">
-        <div className="oh-page-header__text">
-          <p className="section-kicker">My Account</p>
-          <h1 className="oh-page-header__title">Order History</h1>
-          {user && (
-            <p className="oh-page-header__sub">
-              Signed in as <strong>{user.email}</strong>
-            </p>
-          )}
+    <div
+      style={{
+        maxWidth: '1100px',
+        margin: '0 auto',
+        padding: '32px 24px 80px',
+      }}
+    >
+      {/* ─── Hero Header ─── */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '20px',
+          marginBottom: '28px',
+        }}
+      >
+        <div>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '999px',
+              fontSize: '12px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              background: 'linear-gradient(135deg, rgba(255, 56, 92, 0.12), rgba(0, 229, 153, 0.12))',
+              color: 'var(--brand, #ff385c)',
+              marginBottom: '10px',
+            }}
+          >
+            <ShoppingBag size={13} />
+            Customer Portal
+          </div>
+          <h1
+            style={{
+              fontSize: '28px',
+              fontWeight: 800,
+              letterSpacing: '-0.02em',
+              margin: '0 0 6px',
+              color: 'var(--ink, #111)',
+            }}
+          >
+            My Orders &amp; Purchases
+          </h1>
+          <p style={{ margin: 0, fontSize: '14px', color: 'var(--mute, #6a6a6a)' }}>
+            Review past purchases, download itemized receipts, and verify payment settlements.
+          </p>
         </div>
-        <Link className="secondary-link-button" to="/">
-          Continue shopping
-        </Link>
-      </header>
 
-      {/* ── stats ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            type="button"
+            onClick={loadOrders}
+            className="chip"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+            }}
+          >
+            <RotateCcw size={14} /> Refresh
+          </button>
+          <Link
+            to="/"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'var(--brand, #ff385c)',
+              color: '#ffffff',
+              padding: '8px 16px',
+              borderRadius: '999px',
+              fontWeight: 600,
+              fontSize: '13px',
+              textDecoration: 'none',
+              boxShadow: '0 4px 14px rgba(255, 56, 92, 0.3)',
+            }}
+          >
+            Continue Shopping <ArrowRight size={14} />
+          </Link>
+        </div>
+      </div>
+
+      {/* ─── Stats Grid (4 Metric Cards) ─── */}
       {!isLoading && !error && orders.length > 0 && (
-        <StatsBar orders={orders} />
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '16px',
+            marginBottom: '32px',
+          }}
+        >
+          {/* Total Orders Card */}
+          <div
+            style={{
+              padding: '18px 20px',
+              borderRadius: '16px',
+              background: 'var(--soft, #f7f7f7)',
+              border: '1px solid var(--line, rgba(0,0,0,0.06))',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+            }}
+          >
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: 'rgba(59, 130, 246, 0.12)',
+                color: '#3b82f6',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <ShoppingBag size={20} />
+            </div>
+            <div>
+              <span style={{ fontSize: '12px', color: 'var(--mute, #6a6a6a)', fontWeight: 500 }}>
+                Total Orders
+              </span>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--ink, #111)' }}>
+                {orders.length}
+              </div>
+            </div>
+          </div>
+
+          {/* Completed Orders Card */}
+          <div
+            style={{
+              padding: '18px 20px',
+              borderRadius: '16px',
+              background: 'var(--soft, #f7f7f7)',
+              border: '1px solid var(--line, rgba(0,0,0,0.06))',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+            }}
+          >
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: 'rgba(16, 185, 129, 0.12)',
+                color: '#10b981',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <CheckCircle2 size={20} />
+            </div>
+            <div>
+              <span style={{ fontSize: '12px', color: 'var(--mute, #6a6a6a)', fontWeight: 500 }}>
+                Completed Purchases
+              </span>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--ink, #111)' }}>
+                {paidCount}
+              </div>
+            </div>
+          </div>
+
+          {/* Total Spend Card */}
+          <div
+            style={{
+              padding: '18px 20px',
+              borderRadius: '16px',
+              background: 'var(--soft, #f7f7f7)',
+              border: '1px solid var(--line, rgba(0,0,0,0.06))',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+            }}
+          >
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: 'rgba(255, 56, 92, 0.12)',
+                color: 'var(--brand, #ff385c)',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <DollarSign size={20} />
+            </div>
+            <div>
+              <span style={{ fontSize: '12px', color: 'var(--mute, #6a6a6a)', fontWeight: 500 }}>
+                Total Invested
+              </span>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--ink, #111)' }}>
+                ${totalSpend.toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          {/* Items Purchased Card */}
+          <div
+            style={{
+              padding: '18px 20px',
+              borderRadius: '16px',
+              background: 'var(--soft, #f7f7f7)',
+              border: '1px solid var(--line, rgba(0,0,0,0.06))',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+            }}
+          >
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: 'rgba(168, 85, 247, 0.12)',
+                color: '#a855f7',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <Layers size={20} />
+            </div>
+            <div>
+              <span style={{ fontSize: '12px', color: 'var(--mute, #6a6a6a)', fontWeight: 500 }}>
+                Units Purchased
+              </span>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--ink, #111)' }}>
+                {totalItemsCount}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* ── content ── */}
-      <div className="oh-content">
-        {isLoading ? (
-          <>
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
-          </>
-        ) : error ? (
-          <div className="thread-banner error" style={{ marginTop: 0 }}>{error}</div>
-        ) : orders.length === 0 ? (
-          <EmptyState />
-        ) : (
-          orders.map((order) => (
-            <OrderCard
-              key={order.orderNumber}
-              order={order}
-              expanded={expandedId === order.orderNumber}
-              onToggle={() => toggle(order.orderNumber)}
-            />
-          ))
-        )}
+      {/* ─── Search & Filters Bar ─── */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          marginBottom: '20px',
+        }}
+      >
+        {/* Status segmented buttons */}
+        <div
+          style={{
+            display: 'inline-flex',
+            padding: '4px',
+            borderRadius: '12px',
+            background: 'var(--soft, #f7f7f7)',
+            border: '1px solid var(--line, rgba(0,0,0,0.08))',
+            gap: '4px',
+          }}
+        >
+          <button
+            type="button"
+            className="chip"
+            style={{
+              border: 'none',
+              background: activeTab === 'all' ? 'var(--bg, #fff)' : 'transparent',
+              color: activeTab === 'all' ? 'var(--ink, #111)' : 'var(--mute, #666)',
+              fontWeight: activeTab === 'all' ? 700 : 500,
+              boxShadow: activeTab === 'all' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+              cursor: 'pointer',
+              padding: '6px 14px',
+              borderRadius: '8px',
+              fontSize: '13px',
+            }}
+            onClick={() => setActiveTab('all')}
+          >
+            All Orders ({orders.length})
+          </button>
+
+          <button
+            type="button"
+            className="chip"
+            style={{
+              border: 'none',
+              background: activeTab === 'paid' ? 'var(--bg, #fff)' : 'transparent',
+              color: activeTab === 'paid' ? '#10b981' : 'var(--mute, #666)',
+              fontWeight: activeTab === 'paid' ? 700 : 500,
+              boxShadow: activeTab === 'paid' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+              cursor: 'pointer',
+              padding: '6px 14px',
+              borderRadius: '8px',
+              fontSize: '13px',
+            }}
+            onClick={() => setActiveTab('paid')}
+          >
+            Completed ({paidCount})
+          </button>
+
+          {pendingCount > 0 && (
+            <button
+              type="button"
+              className="chip"
+              style={{
+                border: 'none',
+                background: activeTab === 'pending' ? 'var(--bg, #fff)' : 'transparent',
+                color: activeTab === 'pending' ? '#f59e0b' : 'var(--mute, #666)',
+                fontWeight: activeTab === 'pending' ? 700 : 500,
+                boxShadow: activeTab === 'pending' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
+                cursor: 'pointer',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '13px',
+              }}
+              onClick={() => setActiveTab('pending')}
+            >
+              Pending ({pendingCount})
+            </button>
+          )}
+        </div>
+
+        {/* Search input */}
+        <div style={{ position: 'relative', width: '280px' }}>
+          <input
+            type="search"
+            placeholder="Search order # or item name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px 8px 34px',
+              borderRadius: '10px',
+              border: '1px solid var(--line, rgba(0,0,0,0.12))',
+              background: 'var(--soft, #f7f7f7)',
+              fontSize: '13px',
+            }}
+          />
+          <Search
+            size={14}
+            style={{
+              position: 'absolute',
+              left: '12px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--mute, #888)',
+            }}
+          />
+        </div>
       </div>
+
+      {/* ─── Orders List ─── */}
+      {isLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {[1, 2, 3].map((n) => (
+            <div
+              key={n}
+              style={{
+                height: '140px',
+                borderRadius: '16px',
+                background: 'var(--soft, #f7f7f7)',
+                animation: 'pulse 1.5s infinite',
+                border: '1px solid var(--line, rgba(0,0,0,0.06))',
+              }}
+            />
+          ))}
+        </div>
+      ) : error ? (
+        <div
+          style={{
+            padding: '24px',
+            borderRadius: '16px',
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            color: '#ef4444',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontWeight: 600, margin: '0 0 8px' }}>Failed to load orders</p>
+          <small>{error}</small>
+          <div style={{ marginTop: '12px' }}>
+            <button
+              type="button"
+              onClick={loadOrders}
+              className="chip"
+              style={{ cursor: 'pointer', fontWeight: 600 }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : filteredOrders.length === 0 ? (
+        <div
+          style={{
+            padding: '60px 20px',
+            borderRadius: '20px',
+            background: 'var(--soft, #f7f7f7)',
+            border: '1px solid var(--line, rgba(0,0,0,0.06))',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '16px',
+              background: 'var(--bg, #fff)',
+              display: 'grid',
+              placeItems: 'center',
+              margin: '0 auto 16px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+              color: 'var(--mute, #6a6a6a)',
+            }}
+          >
+            <ShoppingBag size={26} />
+          </div>
+          <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 6px', color: 'var(--ink, #111)' }}>
+            {searchQuery ? 'No matching orders found' : 'No order history yet'}
+          </h2>
+          <p style={{ fontSize: '14px', color: 'var(--mute, #6a6a6a)', maxWidth: '420px', margin: '0 auto 20px' }}>
+            {searchQuery
+              ? 'Try clearing your search query or switching tabs.'
+              : 'Items you purchase with Stripe or eSewa will appear here automatically with verified receipts.'}
+          </p>
+          <Link
+            to="/"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'var(--brand, #ff385c)',
+              color: '#ffffff',
+              padding: '10px 20px',
+              borderRadius: '999px',
+              fontWeight: 600,
+              fontSize: '14px',
+              textDecoration: 'none',
+              boxShadow: '0 4px 14px rgba(255, 56, 92, 0.3)',
+            }}
+          >
+            Explore Catalog <ArrowRight size={14} />
+          </Link>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {filteredOrders.map((order) => {
+            const isExpanded = expandedOrders.has(order.orderNumber);
+            const statusConfig = STATUS_CONFIG[order.status.toLowerCase()] ?? {
+              label: order.status,
+              icon: <Clock size={13} />,
+              bg: 'rgba(107, 114, 128, 0.12)',
+              text: '#6b7280',
+              border: 'rgba(107, 114, 128, 0.25)',
+            };
+
+            const isCopied = copiedOrderId === order.orderNumber;
+            const itemsCount = order.items.reduce((sum, it) => sum + it.quantity, 0);
+
+            return (
+              <article
+                key={order.orderNumber}
+                style={{
+                  borderRadius: '18px',
+                  background: 'var(--bg, #ffffff)',
+                  border: '1px solid var(--line, rgba(0,0,0,0.08))',
+                  overflow: 'hidden',
+                  boxShadow: '0 3px 12px rgba(0,0,0,0.03)',
+                  transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+                }}
+              >
+                {/* ── Top Bar / Header ── */}
+                <div
+                  onClick={() => toggleExpand(order.orderNumber)}
+                  style={{
+                    padding: '20px 24px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '16px',
+                    borderBottom: isExpanded ? '1px solid var(--line, rgba(0,0,0,0.06))' : 'none',
+                    background: isExpanded ? 'var(--soft, rgba(0,0,0,0.02))' : 'transparent',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '12px',
+                        background: 'var(--soft, #f7f7f7)',
+                        display: 'grid',
+                        placeItems: 'center',
+                        color: 'var(--brand, #ff385c)',
+                        border: '1px solid var(--line, rgba(0,0,0,0.06))',
+                      }}
+                    >
+                      <Package size={20} />
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontFamily: 'monospace',
+                            fontWeight: 800,
+                            fontSize: '15px',
+                            color: 'var(--ink, #111)',
+                          }}
+                        >
+                          #{order.orderNumber}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyOrderNumber(order.orderNumber, e)}
+                          title="Copy order number"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: isCopied ? '#10b981' : 'var(--mute, #888)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '2px',
+                          }}
+                        >
+                          {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                        </button>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          color: 'var(--mute, #6a6a6a)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginTop: '3px',
+                        }}
+                      >
+                        <span>{formatDate(order.createdAt)}</span>
+                        <span>•</span>
+                        <ProviderBadge provider={order.paymentProvider} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    {/* Status Pill */}
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '4px 10px',
+                        borderRadius: '999px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        background: statusConfig.bg,
+                        color: statusConfig.text,
+                        border: `1px solid ${statusConfig.border}`,
+                      }}
+                    >
+                      {statusConfig.icon}
+                      {statusConfig.label}
+                    </span>
+
+                    {/* Total */}
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--mute, #888)', display: 'block' }}>
+                        Total Amount
+                      </span>
+                      <strong style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ink, #111)' }}>
+                        {formatCurrency(order.pricing.total, order.pricing.currency)}
+                      </strong>
+                    </div>
+
+                    {/* Chevron */}
+                    <div
+                      style={{
+                        color: 'var(--mute, #888)',
+                        display: 'grid',
+                        placeItems: 'center',
+                      }}
+                    >
+                      {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Summary Line Items Preview (Visible when collapsed) ── */}
+                {!isExpanded && (
+                  <div
+                    style={{
+                      padding: '12px 24px',
+                      background: 'var(--soft, #f7f7f7)',
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {order.items.slice(0, 3).map((item) => (
+                        <span
+                          key={item.productId}
+                          style={{
+                            padding: '3px 10px',
+                            borderRadius: '6px',
+                            background: 'var(--bg, #fff)',
+                            border: '1px solid var(--line, rgba(0,0,0,0.06))',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {item.name} <b style={{ color: 'var(--brand, #ff385c)' }}>×{item.quantity}</b>
+                        </span>
+                      ))}
+                      {order.items.length > 3 && (
+                        <span style={{ fontSize: '12px', color: 'var(--mute, #888)' }}>
+                          +{order.items.length - 3} more items
+                        </span>
+                      )}
+                    </div>
+
+                    <Link
+                      to={`/checkout/result?orderNumber=${encodeURIComponent(order.orderNumber)}&provider=${order.paymentProvider.toLowerCase()}`}
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'var(--brand, #ff385c)',
+                        textDecoration: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      View Receipt <ExternalLink size={12} />
+                    </Link>
+                  </div>
+                )}
+
+                {/* ── Detailed Expanded View ── */}
+                {isExpanded && (
+                  <div style={{ padding: '24px' }}>
+                    {/* Line Items List */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <h3
+                        style={{
+                          fontSize: '13px',
+                          textTransform: 'uppercase',
+                          fontWeight: 700,
+                          letterSpacing: '0.04em',
+                          color: 'var(--mute, #888)',
+                          marginBottom: '12px',
+                        }}
+                      >
+                        Purchased Items ({itemsCount})
+                      </h3>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {order.items.map((item) => (
+                          <div
+                            key={item.productId}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '12px 16px',
+                              borderRadius: '12px',
+                              background: 'var(--soft, #f7f7f7)',
+                              border: '1px solid var(--line, rgba(0,0,0,0.04))',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '8px',
+                                  background: 'var(--bg, #fff)',
+                                  display: 'grid',
+                                  placeItems: 'center',
+                                  fontSize: '14px',
+                                  boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                                }}
+                              >
+                                🛍️
+                              </div>
+                              <div>
+                                <span style={{ fontWeight: 600, fontSize: '14px', display: 'block' }}>
+                                  {item.name}
+                                </span>
+                                <span style={{ fontSize: '12px', color: 'var(--mute, #888)' }}>
+                                  Product ID: {item.productId} • Qty: {item.quantity}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                              <div style={{ textAlign: 'right' }}>
+                                <strong style={{ fontSize: '14px', fontWeight: 700 }}>
+                                  {formatCurrency(item.lineTotal, item.currency)}
+                                </strong>
+                                <div style={{ fontSize: '11px', color: 'var(--mute, #888)' }}>
+                                  {formatCurrency(item.unitAmount, item.currency)} each
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleBuyAgain(item)}
+                                className="chip"
+                                style={{
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  padding: '6px 12px',
+                                }}
+                              >
+                                Buy Again
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Financial Summary & Delivery Info Grid */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                        gap: '20px',
+                        paddingTop: '20px',
+                        borderTop: '1px solid var(--line, rgba(0,0,0,0.08))',
+                      }}
+                    >
+                      {/* Customer & Delivery */}
+                      <div
+                        style={{
+                          padding: '16px',
+                          borderRadius: '12px',
+                          background: 'var(--soft, #f7f7f7)',
+                          border: '1px solid var(--line, rgba(0,0,0,0.04))',
+                        }}
+                      >
+                        <h4
+                          style={{
+                            fontSize: '12px',
+                            textTransform: 'uppercase',
+                            fontWeight: 700,
+                            color: 'var(--mute, #888)',
+                            margin: '0 0 8px',
+                          }}
+                        >
+                          Customer Recipient
+                        </h4>
+                        <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: '14px' }}>
+                          {order.customer.fullName || 'Valued Customer'}
+                        </p>
+                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: 'var(--mute, #6a6a6a)' }}>
+                          Email: {order.customer.email}
+                        </p>
+                        {order.customer.phone && (
+                          <p style={{ margin: 0, fontSize: '13px', color: 'var(--mute, #6a6a6a)' }}>
+                            Phone: {order.customer.phone}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Pricing Breakdown */}
+                      <div
+                        style={{
+                          padding: '16px',
+                          borderRadius: '12px',
+                          background: 'var(--soft, #f7f7f7)',
+                          border: '1px solid var(--line, rgba(0,0,0,0.04))',
+                        }}
+                      >
+                        <h4
+                          style={{
+                            fontSize: '12px',
+                            textTransform: 'uppercase',
+                            fontWeight: 700,
+                            color: 'var(--mute, #888)',
+                            margin: '0 0 10px',
+                          }}
+                        >
+                          Pricing Breakdown
+                        </h4>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--mute, #6a6a6a)' }}>Subtotal</span>
+                            <span>{formatCurrency(order.pricing.subtotal, order.pricing.currency)}</span>
+                          </div>
+
+                          {order.pricing.deliveryCharge > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ color: 'var(--mute, #6a6a6a)' }}>Delivery &amp; Shipping</span>
+                              <span>{formatCurrency(order.pricing.deliveryCharge, order.pricing.currency)}</span>
+                            </div>
+                          )}
+
+                          {order.pricing.taxAmount > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ color: 'var(--mute, #6a6a6a)' }}>Tax Amount</span>
+                              <span>{formatCurrency(order.pricing.taxAmount, order.pricing.currency)}</span>
+                            </div>
+                          )}
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              paddingTop: '8px',
+                              marginTop: '4px',
+                              borderTop: '1px dashed var(--line, rgba(0,0,0,0.1))',
+                              fontWeight: 700,
+                              fontSize: '15px',
+                            }}
+                          >
+                            <span>Total Paid</span>
+                            <span style={{ color: 'var(--brand, #ff385c)' }}>
+                              {formatCurrency(order.pricing.total, order.pricing.currency)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Actions Footer */}
+                    <div
+                      style={{
+                        marginTop: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        gap: '12px',
+                      }}
+                    >
+                      <Link
+                        to={`/checkout/result?orderNumber=${encodeURIComponent(order.orderNumber)}&provider=${order.paymentProvider.toLowerCase()}`}
+                        style={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: 'var(--ink, #111)',
+                          background: 'var(--soft, #f7f7f7)',
+                          border: '1px solid var(--line, rgba(0,0,0,0.12))',
+                          borderRadius: '8px',
+                          padding: '8px 14px',
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <ExternalLink size={13} /> View Full Receipt
+                      </Link>
+
+                      {order.status !== 'paid' && (order.status as string) !== 'completed' && (
+                        <Link
+                          to="/checkout"
+                          style={{
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: '#ffffff',
+                            background: 'var(--brand, #ff385c)',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            textDecoration: 'none',
+                          }}
+                        >
+                          Retry Payment
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

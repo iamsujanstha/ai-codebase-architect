@@ -27,6 +27,7 @@ export class AdminService {
       },
     });
     const totalUsers = await this.prisma.users.count();
+    const totalOrders = await this.prisma.orders.count();
     const revenue30Days = await this.calculateRevenueLast30Days();
     const recentUsersDocs = await this.prisma.users.findMany({
       take: 4,
@@ -49,6 +50,7 @@ export class AdminService {
       totalProducts,
       publishedProducts,
       totalUsers,
+      totalOrders,
       revenue30Days,
       sales7Days,
       recentUsers: recentUsersDocs.map((u) => ({
@@ -537,7 +539,12 @@ export class AdminService {
     const [orders, total] = await Promise.all([
       this.prisma.orders.findMany({
         where,
-        include: { order_items: true },
+        include: {
+          order_items: true,
+          users: {
+            select: { id: true, name: true, email: true },
+          },
+        },
         orderBy: { created_at: 'desc' },
         skip,
         take: limit,
@@ -561,7 +568,12 @@ export class AdminService {
     const numId = parseInt(orderId, 10);
     const order = await this.prisma.orders.findUnique({
       where: { id: numId },
-      include: { order_items: true },
+      include: {
+        order_items: true,
+        users: {
+          select: { id: true, name: true, email: true },
+        },
+      },
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;

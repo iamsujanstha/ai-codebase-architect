@@ -94,7 +94,17 @@ export class PaymentsController {
   @Get('my-orders')
   async getMyOrders(@Req() req: any) {
     const userId = req.user?._id?.toString() ?? req.user?.id?.toString();
-    return this.paymentsService.getOrdersForUser(userId);
+    const email = req.user?.email;
+    return this.paymentsService.getOrdersForUser(userId, email);
+  }
+
+  // Returns all purchased items/product IDs for the authenticated user.
+  @UseGuards(AuthGuard('jwt'))
+  @Get('purchased-products')
+  async getPurchasedProducts(@Req() req: any) {
+    const userId = req.user?._id?.toString() ?? req.user?.id?.toString();
+    const email = req.user?.email;
+    return this.paymentsService.getPurchasedProductsForUser(userId, email);
   }
 
   @Get('orders/:orderNumber')

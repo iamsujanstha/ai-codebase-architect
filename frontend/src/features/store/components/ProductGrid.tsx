@@ -9,6 +9,7 @@ interface ProductGridProps {
   isLoadingMore?: boolean;
   searchQuery?: string;
   wishlist?: Set<string>;
+  purchasedProductIds?: Set<string>;
   onAddToCart: (product: CatalogProduct) => void;
   onToggleWishlist?: (productId: string) => void;
   onAskAI?: () => void;
@@ -28,6 +29,7 @@ export function ProductGrid({
   isLoadingMore = false,
   searchQuery,
   wishlist = new Set(),
+  purchasedProductIds = new Set(),
   onAddToCart,
   onToggleWishlist,
   onAskAI,
@@ -60,6 +62,7 @@ export function ProductGrid({
           onAddToCart={onAddToCart}
           isWishlisted={wishlist.has(product.id)}
           onToggleWishlist={onToggleWishlist}
+          isPurchased={purchasedProductIds.has(product.id)}
         />
       ))}
       {isLoadingMore &&

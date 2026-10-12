@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
+  ShoppingBag,
   Users,
   Menu,
   X,
@@ -63,6 +64,9 @@ export const AdminLayout: React.FC = () => {
     }
     if (location.pathname.startsWith('/admin/products')) {
       return 'Products';
+    }
+    if (location.pathname.startsWith('/admin/orders')) {
+      return 'Orders';
     }
     if (location.pathname.startsWith('/admin/users')) {
       return 'Users';
@@ -136,6 +140,20 @@ export const AdminLayout: React.FC = () => {
             <span>Products</span>
             {stats && stats.totalProducts !== undefined && (
               <span className={styles.ct}>{stats.totalProducts}</span>
+            )}
+          </NavLink>
+
+          <NavLink
+            to="/admin/orders"
+            className={({ isActive }) =>
+              `${styles.nv} ${isActive ? styles.active : ''}`
+            }
+            onClick={() => setSidebarOpen(false)}
+          >
+            <ShoppingBag />
+            <span>Orders</span>
+            {stats && stats.totalOrders !== undefined && (
+              <span className={styles.ct}>{stats.totalOrders}</span>
             )}
           </NavLink>
 
