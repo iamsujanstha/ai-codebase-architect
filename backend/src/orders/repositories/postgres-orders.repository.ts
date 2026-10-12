@@ -12,7 +12,10 @@ import {
 export class PostgresOrdersRepository implements IOrdersRepository {
   constructor(private readonly pg: PostgresService) {}
 
-  async create(params: CreateOrderParams, externalClient?: PoolClient): Promise<OrderRow> {
+  async create(
+    params: CreateOrderParams,
+    externalClient?: PoolClient,
+  ): Promise<OrderRow> {
     const client = externalClient ?? (await this.pg.getClient());
     const isExternalTx = !!externalClient;
 
@@ -125,7 +128,10 @@ export class PostgresOrdersRepository implements IOrdersRepository {
     return res.rows;
   }
 
-  async findById(id: number | string, userId?: number): Promise<OrderRow | null> {
+  async findById(
+    id: number | string,
+    userId?: number,
+  ): Promise<OrderRow | null> {
     const isNumeric = typeof id === 'number' || !isNaN(Number(id));
     const conditions: string[] = [];
     const params: any[] = [];

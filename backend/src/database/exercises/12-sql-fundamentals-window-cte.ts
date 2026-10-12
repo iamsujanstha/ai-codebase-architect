@@ -10,7 +10,9 @@
 import { pool } from './db';
 
 export async function runSqlFundamentalsExercise() {
-  console.log('\n=== Exercise 12: SQL Fundamentals — Window Functions & CTEs ===\n');
+  console.log(
+    '\n=== Exercise 12: SQL Fundamentals — Window Functions & CTEs ===\n',
+  );
 
   try {
     // -------------------------------------------------------------
@@ -64,12 +66,16 @@ export async function runSqlFundamentalsExercise() {
         ('Furniture',   '2026-10-04', 5900.00, 9);
     `);
 
-    console.log('Setup: Populated realistic hierarchy and time-series sales records.\n');
+    console.log(
+      'Setup: Populated realistic hierarchy and time-series sales records.\n',
+    );
 
     // -------------------------------------------------------------
     // Task 1: Window Functions (ROW_NUMBER, DENSE_RANK, Running Sum)
     // -------------------------------------------------------------
-    console.log('Task 1: Advanced Window Functions (Partitioning, Cumulative Totals & Ranks)\n');
+    console.log(
+      'Task 1: Advanced Window Functions (Partitioning, Cumulative Totals & Ranks)\n',
+    );
     console.log('Problem: In an analytics dashboard, calculate:');
     console.log('  1. Running revenue total across days per category');
     console.log('  2. Rank of sales days within each category\n');
@@ -103,12 +109,16 @@ export async function runSqlFundamentalsExercise() {
         Rank: r.sales_rank,
       })),
     );
-    console.log('✅ Window functions computed running aggregates without collapsing rows!\n');
+    console.log(
+      '✅ Window functions computed running aggregates without collapsing rows!\n',
+    );
 
     // -------------------------------------------------------------
     // Task 2: LAG / LEAD for Day-over-Day Growth Delta
     // -------------------------------------------------------------
-    console.log('Task 2: LAG / LEAD Functions for Day-over-Day Revenue Deltas\n');
+    console.log(
+      'Task 2: LAG / LEAD Functions for Day-over-Day Revenue Deltas\n',
+    );
 
     const lagRes = await pool.query(`
       SELECT 
@@ -133,17 +143,24 @@ export async function runSqlFundamentalsExercise() {
         Category: r.category,
         Date: r.sale_date.toISOString().split('T')[0],
         Today: `$${Number(r.revenue).toFixed(2)}`,
-        Yesterday: r.prev_day_revenue ? `$${Number(r.prev_day_revenue).toFixed(2)}` : 'N/A',
-        'Growth %': r.dod_growth_pct !== null ? `${r.dod_growth_pct}%` : 'Baseline',
+        Yesterday: r.prev_day_revenue
+          ? `$${Number(r.prev_day_revenue).toFixed(2)}`
+          : 'N/A',
+        'Growth %':
+          r.dod_growth_pct !== null ? `${r.dod_growth_pct}%` : 'Baseline',
       })),
     );
-    console.log('✅ LAG accessed previous row in partition without expensive self-joins!\n');
+    console.log(
+      '✅ LAG accessed previous row in partition without expensive self-joins!\n',
+    );
 
     // -------------------------------------------------------------
     // Task 3: Recursive CTE (Tree Traversal & Level Calculation)
     // -------------------------------------------------------------
     console.log('Task 3: Recursive CTE — Hierarchical Tree Traversal\n');
-    console.log('Problem: Find all direct and indirect reports of Alice (CTO) with depth level and path:\n');
+    console.log(
+      'Problem: Find all direct and indirect reports of Alice (CTO) with depth level and path:\n',
+    );
 
     const recursiveRes = await pool.query(`
       WITH RECURSIVE OrgChart AS (
@@ -184,7 +201,9 @@ export async function runSqlFundamentalsExercise() {
         'Reporting Chain': r.path,
       })),
     );
-    console.log('✅ Recursive CTE resolved arbitrary-depth tree in a single database query!\n');
+    console.log(
+      '✅ Recursive CTE resolved arbitrary-depth tree in a single database query!\n',
+    );
 
     // -------------------------------------------------------------
     // Staff/Principal Interview Questions & Answers
@@ -209,7 +228,6 @@ A: "Recursive CTEs execute iteratively in memory. If the graph contains cycles, 
    loop infinitely unless cycle detection (e.g., using an array of visited IDs) is implemented
    or max_recursive_iterations / statement_timeout is configured."
 `);
-
   } catch (error: any) {
     console.error('❌ Error in Exercise 12:', error?.message);
     throw error;

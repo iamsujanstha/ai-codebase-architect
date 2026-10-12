@@ -44,7 +44,10 @@ async function runAllExercises() {
     { name: 'Query Optimization & EXPLAIN', fn: runQueryOptimizationExercise },
     { name: 'Table Partitioning & Pruning', fn: runPartitioningExercise },
     { name: 'Replication & WAL Dynamics', fn: runReplicationExercise },
-    { name: 'SQL Fundamentals (Window Functions & Recursive CTEs)', fn: runSqlFundamentalsExercise },
+    {
+      name: 'SQL Fundamentals (Window Functions & Recursive CTEs)',
+      fn: runSqlFundamentalsExercise,
+    },
     { name: 'ORM vs Raw SQL & Keyset Pagination', fn: runOrmVsRawSqlExercise },
     { name: 'Transactional Outbox Pattern', fn: runOutboxPatternExercise },
   ];

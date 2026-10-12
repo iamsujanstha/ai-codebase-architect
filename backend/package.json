@@ -39,7 +39,7 @@
     "db:lab:deadlocks": "ts-node -r tsconfig-paths/register src/database/exercises/05-deadlocks.ts",
     "db:lab:acid": "ts-node -r tsconfig-paths/register src/database/exercises/03-transactions-acid.ts",
     "db:lab:indexes": "ts-node -r tsconfig-paths/register src/database/exercises/02-indexes.ts",
-    "postinstall": "prisma skills sync || exit 0"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

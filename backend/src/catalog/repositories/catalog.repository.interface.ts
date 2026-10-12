@@ -46,7 +46,11 @@ export interface ICatalogRepository {
   ): Promise<{ products: ProductRow[]; total: number }>;
   findBySlugOrId(identifier: string | number): Promise<ProductRow | null>;
   findById(id: number): Promise<ProductRow | null>;
-  findRelated(category: string, excludeId: number, limit: number): Promise<ProductRow[]>;
+  findRelated(
+    category: string,
+    excludeId: number,
+    limit: number,
+  ): Promise<ProductRow[]>;
   create(params: CreateProductParams): Promise<ProductRow>;
   searchSemantic(
     vector: number[],

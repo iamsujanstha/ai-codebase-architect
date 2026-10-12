@@ -47,7 +47,4 @@ export interface StreamErrorEvent {
 }
 
 export type GatewayStreamEvent =
-  | StreamStartEvent
-  | StreamDeltaEvent
-  | StreamDoneEvent
-  | StreamErrorEvent;
+  StreamStartEvent | StreamDeltaEvent | StreamDoneEvent | StreamErrorEvent;

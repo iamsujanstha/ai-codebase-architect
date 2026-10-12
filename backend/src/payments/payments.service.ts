@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   BadRequestException,
   ConflictException,
@@ -12,6 +15,7 @@ import axios from 'axios';
 import { createHmac, randomBytes } from 'crypto';
 import Stripe from 'stripe';
 import { PrismaService } from '../database/prisma.service';
+import { Prisma } from '@prisma/client';
 import { PostgresService } from '../database/postgres.service';
 import { CheckoutCustomerDto } from './dto/checkout-customer.dto';
 import { CreatePaymentSessionDto } from './dto/create-payment-session.dto';
@@ -29,7 +33,6 @@ import {
 import {
   PaymentQuoteResponse,
   ProviderQuote,
-  QuotedLineItem,
 } from './interfaces/payment-quote.interface';
 import { MailService } from '../mail/mail.service';
 import {
@@ -37,6 +40,15 @@ import {
   CircuitBreakerOpenError,
 } from '../common/utils/circuit-breaker.util';
 import { retryWithBackoff } from '../common/utils/retry.util';
+
+export interface ProviderMetadata {
+  stripeCheckoutSessionId?: string | null;
+  stripePaymentIntentId?: string | null;
+  esewaTransactionUuid?: string | null;
+  esewaTransactionCode?: string | null;
+  esewaReferenceId?: string | null;
+  [key: string]: string | number | boolean | null | undefined;
+}
 
 export interface OrderRecord {
   orderNumber: string;
@@ -68,7 +80,7 @@ export interface OrderRecord {
     deliveryCharge: number;
     total: number;
   };
-  providerMetadata: Record<string, any>;
+  providerMetadata: ProviderMetadata;
   history: Array<{
     status: OrderStatus;
     note: string;
@@ -81,7 +93,7 @@ export interface OrderRecord {
   createdAt?: string | Date;
   updatedAt?: string | Date;
   save: () => Promise<void>;
-  toObject?: () => any;
+  toObject?: () => Record<string, unknown>;
 }
 
 interface PricedCartLine {
@@ -308,28 +320,26 @@ export class PaymentsService {
               maxRetries: 3,
               initialDelay: 100,
               context: 'stripe-checkout-session',
-              shouldRetry: (error, attempt) => {
+              shouldRetry: (error: unknown) => {
+                const err = error as { code?: string; type?: string };
                 // Retry on network errors
-                if (
-                  error.code === 'ECONNREFUSED' ||
-                  error.code === 'ETIMEDOUT'
-                ) {
+                if (err?.code === 'ECONNREFUSED' || err?.code === 'ETIMEDOUT') {
                   return true;
                 }
                 // Retry on Stripe rate limit
-                if (error.type === 'StripeRateLimitError') {
+                if (err?.type === 'StripeRateLimitError') {
                   return true;
                 }
                 // Retry on Stripe API errors (but not card errors)
-                if (error.type === 'StripeAPIError') {
+                if (err?.type === 'StripeAPIError') {
                   return true;
                 }
                 // Don't retry card errors (user needs to fix)
-                if (error.type === 'StripeCardError') {
+                if (err?.type === 'StripeCardError') {
                   return false;
                 }
                 // Don't retry invalid request (our bug, not transient)
-                if (error.type === 'StripeInvalidRequestError') {
+                if (err?.type === 'StripeInvalidRequestError') {
                   return false;
                 }
                 return false;
@@ -588,13 +598,8 @@ export class PaymentsService {
 
   async getOrdersForUser(userId: string): Promise<OrderSummaryResponse[]> {
     const numericUserId = parseInt(userId, 10);
-    const where: any = {};
-    if (!isNaN(numericUserId)) {
-      where.user_id = numericUserId;
-    }
-
     const rows = await this.prisma.orders.findMany({
-      where,
+      where: !isNaN(numericUserId) ? { user_id: numericUserId } : undefined,
       include: {
         order_items: true,
         users: true,
@@ -603,48 +608,71 @@ export class PaymentsService {
       take: 100,
     });
 
-    return rows.map((order) => {
-      const items = (order.order_items || []).map((oi) => ({
-        productId: String(oi.product_id),
-        slug: oi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        name: oi.name,
-        quantity: oi.quantity,
-        unitAmount: Number(oi.price),
-        lineTotal: Number(oi.subtotal),
-        currency: 'USD',
-      }));
-      const total = Number(order.total_amount);
+    return rows.map(
+      (order: {
+        order_items: any;
+        total_amount: any;
+        order_number: any;
+        status: string;
+        payment_method: string;
+        users: { name: any; email: any };
+        created_at: { toISOString: () => any };
+        updated_at: { toISOString: () => any };
+      }) => {
+        const items = (order.order_items || []).map(
+          (oi: {
+            product_id: any;
+            name: string;
+            quantity: any;
+            price: any;
+            subtotal: any;
+          }) => ({
+            productId: String(oi.product_id),
+            slug: oi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            name: oi.name,
+            quantity: oi.quantity,
+            unitAmount: Number(oi.price),
+            lineTotal: Number(oi.subtotal),
+            currency: 'USD',
+          }),
+        );
+        const total = Number(order.total_amount);
 
-      return {
-        orderNumber: order.order_number,
-        status:
-          order.status === 'paid'
-            ? OrderStatus.PAID
-            : order.status === 'failed'
-              ? OrderStatus.FAILED
-              : OrderStatus.PENDING_PAYMENT,
-        paymentProvider:
-          order.payment_method?.toUpperCase() === 'ESEWA'
-            ? PaymentProvider.ESEWA
-            : PaymentProvider.STRIPE,
-        customer: {
-          fullName: order.users?.name || order.users?.email || 'Customer',
-          email: order.users?.email || '',
-          phone: undefined,
-        },
-        items,
-        pricing: {
-          currency: 'USD',
-          subtotal: total,
-          taxAmount: 0,
-          serviceCharge: 0,
-          deliveryCharge: 0,
-          total,
-        },
-        createdAt: order.created_at ? order.created_at.toISOString() : new Date().toISOString(),
-        updatedAt: order.updated_at ? order.updated_at.toISOString() : new Date().toISOString(),
-      };
-    });
+        return {
+          orderNumber: order.order_number,
+          status:
+            order.status === 'paid'
+              ? OrderStatus.PAID
+              : order.status === 'failed'
+                ? OrderStatus.FAILED
+                : OrderStatus.PENDING_PAYMENT,
+          paymentProvider:
+            order.payment_method?.toUpperCase() === 'ESEWA'
+              ? PaymentProvider.ESEWA
+              : PaymentProvider.STRIPE,
+          customer: {
+            fullName: order.users?.name || order.users?.email || 'Customer',
+            email: order.users?.email || '',
+            phone: undefined,
+          },
+          items,
+          pricing: {
+            currency: 'USD',
+            subtotal: total,
+            taxAmount: 0,
+            serviceCharge: 0,
+            deliveryCharge: 0,
+            total,
+          },
+          createdAt: order.created_at
+            ? order.created_at.toISOString()
+            : new Date().toISOString(),
+          updatedAt: order.updated_at
+            ? order.updated_at.toISOString()
+            : new Date().toISOString(),
+        };
+      },
+    );
   }
 
   async handleEsewaSuccessRedirect(
@@ -689,8 +717,9 @@ export class PaymentsService {
 
     const statusResponse = await this.queryEsewaStatus({
       transactionUuid:
-        successPayload.transaction_uuid ||
-        order.providerMetadata.esewaTransactionUuid,
+        (successPayload.transaction_uuid ||
+          order.providerMetadata.esewaTransactionUuid) ??
+        null,
       totalAmount: String(successPayload.total_amount ?? order.pricing.total),
     });
 
@@ -778,11 +807,11 @@ export class PaymentsService {
     }
 
     const productMap = new Map(
-      products.map((r) => [String(r.id), r] as const),
+      products.map((r: { id: any }) => [String(r.id), r] as const),
     );
 
     return normalizedItems.map((item) => {
-      const product: any = productMap.get(item.productId);
+      const product = productMap.get(item.productId);
       if (!product) {
         throw new BadRequestException(
           'A requested cart item could not be found in the catalog.',
@@ -1131,7 +1160,7 @@ export class PaymentsService {
     options: {
       providerReference?: string | null;
       paymentReference?: string | null;
-      providerMetadata?: Record<string, any>;
+      providerMetadata?: ProviderMetadata;
       note: string;
     },
   ): Promise<void> {
@@ -1184,9 +1213,10 @@ export class PaymentsService {
         this.logger.log(
           `✅ Order ${orderNumber} updated to paid in Neon PostgreSQL`,
         );
-      } catch (pgErr: any) {
+      } catch (pgErr: unknown) {
+        const message = pgErr instanceof Error ? pgErr.message : String(pgErr);
         this.logger.warn(
-          `Could not update order status in Neon PostgreSQL: ${pgErr.message}`,
+          `Could not update order status in Neon PostgreSQL: ${message}`,
         );
       }
     }
@@ -1331,11 +1361,12 @@ export class PaymentsService {
       .map((field) => field.trim())
       .filter(Boolean);
 
+    const rawPayload = payload as Record<string, string | number | undefined>;
     const message = signedFields
-      .map(
-        (fieldName) =>
-          `${fieldName}=${(payload as Record<string, unknown>)[fieldName] ?? ''}`,
-      )
+      .map((fieldName) => {
+        const val = rawPayload[fieldName];
+        return `${fieldName}=${val !== undefined && val !== null ? String(val) : ''}`;
+      })
       .join(',');
 
     const expectedSignature = createHmac('sha256', this.esewaSecretKey)
@@ -1370,15 +1401,23 @@ export class PaymentsService {
       );
     }
 
-    const items = (order.order_items || []).map((oi) => ({
-      productId: String(oi.product_id),
-      slug: oi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      name: oi.name,
-      quantity: oi.quantity,
-      unitAmount: Number(oi.price),
-      lineTotal: Number(oi.subtotal),
-      currency: 'USD',
-    }));
+    const items = (order.order_items || []).map(
+      (oi: {
+        product_id: any;
+        name: string;
+        quantity: any;
+        price: any;
+        subtotal: any;
+      }) => ({
+        productId: String(oi.product_id),
+        slug: oi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        name: oi.name,
+        quantity: oi.quantity,
+        unitAmount: Number(oi.price),
+        lineTotal: Number(oi.subtotal),
+        currency: 'USD',
+      }),
+    );
 
     const total = Number(order.total_amount);
 
@@ -1445,14 +1484,6 @@ export class PaymentsService {
         ? createdAtRaw.toISOString()
         : typeof createdAtRaw === 'string'
           ? createdAtRaw
-          : new Date().toISOString();
-
-    const updatedAtRaw = order.updatedAt;
-    const updatedAt =
-      updatedAtRaw instanceof Date
-        ? updatedAtRaw.toISOString()
-        : typeof updatedAtRaw === 'string'
-          ? updatedAtRaw
           : new Date().toISOString();
 
     return {
@@ -1571,8 +1602,11 @@ export class PaymentsService {
           expires_at: expiresAt,
         },
       });
-    } catch (error: any) {
-      if (error?.code === 'P2002') {
+    } catch (error: unknown) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         this.logger.log({
           event: 'webhook_concurrent_processing_detected',
           key,

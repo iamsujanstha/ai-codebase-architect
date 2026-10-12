@@ -8,12 +8,7 @@ import { DatabaseModule } from '../database/database.module';
 import { IdempotencyMiddleware } from '../common/middleware/idempotency.middleware';
 
 @Module({
-  imports: [
-    PassportModule,
-    AuthModule,
-    DatabaseModule,
-    MailModule,
-  ],
+  imports: [PassportModule, AuthModule, DatabaseModule, MailModule],
   controllers: [PaymentsController],
   providers: [PaymentsService],
   exports: [PaymentsService],

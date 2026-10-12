@@ -81,10 +81,16 @@ export class CatalogService {
     const product = await this.catalogRepo.findBySlugOrId(slug);
 
     if (!product) {
-      throw new NotFoundException(`Product with identifier "${slug}" was not found.`);
+      throw new NotFoundException(
+        `Product with identifier "${slug}" was not found.`,
+      );
     }
 
-    const relatedRows = await this.catalogRepo.findRelated(product.category, product.id, 3);
+    const relatedRows = await this.catalogRepo.findRelated(
+      product.category,
+      product.id,
+      3,
+    );
 
     return {
       product: this.mapPostgresProduct(product),
@@ -98,10 +104,12 @@ export class CatalogService {
 
     const created = await this.catalogRepo.create({
       name: createProductDto.name,
-      category: createProductDto.categoryName || createProductDto.category || 'General',
+      category:
+        createProductDto.categoryName || createProductDto.category || 'General',
       price,
       stock,
-      description: createProductDto.description || createProductDto.shortDescription || '',
+      description:
+        createProductDto.description || createProductDto.shortDescription || '',
       featured: Boolean(createProductDto.featured),
     });
 
@@ -113,11 +121,28 @@ export class CatalogService {
     const categories = await this.listCategories();
     if (categories.length === 0) return [];
 
-    const adjectives = ['Ultra', 'Smart', 'Elite', 'Pro', 'NextGen', 'Cloud', 'Hyper'];
-    const nouns = ['Monitor', 'Keyboard', 'CPU', 'Controller', 'Node', 'Gateway', 'Interface'];
+    const adjectives = [
+      'Ultra',
+      'Smart',
+      'Elite',
+      'Pro',
+      'NextGen',
+      'Cloud',
+      'Hyper',
+    ];
+    const nouns = [
+      'Monitor',
+      'Keyboard',
+      'CPU',
+      'Controller',
+      'Node',
+      'Gateway',
+      'Interface',
+    ];
 
     for (let i = 0; i < count; i++) {
-      const category = categories[Math.floor(Math.random() * categories.length)];
+      const category =
+        categories[Math.floor(Math.random() * categories.length)];
       const name = `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]} ${Math.floor(Math.random() * 900) + 100}`;
 
       const productData = {
@@ -222,11 +247,7 @@ export class CatalogService {
     };
   }
 
-  async searchSemantic(
-    vector: number[],
-    limit?: number,
-    minScore?: number,
-  ) {
+  async searchSemantic(vector: number[], limit?: number, minScore?: number) {
     const rows = await this.catalogRepo.searchSemantic(vector, limit, minScore);
     return rows.map((r) => ({
       ...this.mapPostgresProduct(r),

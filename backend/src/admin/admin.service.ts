@@ -166,7 +166,8 @@ export class AdminService {
       const field = isDesc ? params.sort.substring(1) : params.sort;
       const dir = isDesc ? 'desc' : 'asc';
       if (field === 'title') orderBy = { name: dir };
-      else if (field === 'cat' || field === 'category') orderBy = { category: dir };
+      else if (field === 'cat' || field === 'category')
+        orderBy = { category: dir };
       else if (field === 'price') orderBy = { price: dir };
       else if (field === 'stock') orderBy = { stock: dir };
       else if (field === 'status') orderBy = { status: dir };
@@ -522,7 +523,12 @@ export class AdminService {
     });
   }
 
-  async getAllOrders(page: number = 1, limit: number = 20, status?: string, userId?: string) {
+  async getAllOrders(
+    page: number = 1,
+    limit: number = 20,
+    status?: string,
+    userId?: string,
+  ) {
     const skip = (page - 1) * limit;
     const where: any = {};
     if (status) where.status = status;
@@ -542,7 +548,12 @@ export class AdminService {
     return { orders, total, page, totalPages: Math.ceil(total / limit) };
   }
 
-  async getUserOrders(userId: string, page: number = 1, limit: number = 20, status?: string) {
+  async getUserOrders(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+    status?: string,
+  ) {
     return this.getAllOrders(page, limit, status, userId);
   }
 
@@ -556,7 +567,10 @@ export class AdminService {
     return order;
   }
 
-  async updateOrderStatus(orderId: string, updateOrderStatusDto: UpdateOrderStatusDto) {
+  async updateOrderStatus(
+    orderId: string,
+    updateOrderStatusDto: UpdateOrderStatusDto,
+  ) {
     const numId = parseInt(orderId, 10);
     return this.prisma.orders.update({
       where: { id: numId },

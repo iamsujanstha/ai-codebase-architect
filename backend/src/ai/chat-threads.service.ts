@@ -39,11 +39,7 @@ export class ChatThreadsService {
   /**
    * Create or fully replace a thread identified by its client-generated UUID.
    */
-  async saveThread(
-    userId: string,
-    clientThreadId: string,
-    dto: SaveThreadDto,
-  ) {
+  async saveThread(userId: string, clientThreadId: string, dto: SaveThreadDto) {
     const numericUserId = parseInt(userId, 10) || 1;
 
     let thread = await this.prisma.chat_threads.findFirst({

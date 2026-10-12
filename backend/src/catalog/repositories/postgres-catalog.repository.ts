@@ -84,7 +84,8 @@ export class PostgresCatalogRepository implements ICatalogRepository {
       );
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Count total matching rows
     const countSql = `SELECT COUNT(*)::int AS total FROM products ${whereClause};`;
@@ -112,8 +113,11 @@ export class PostgresCatalogRepository implements ICatalogRepository {
     };
   }
 
-  async findBySlugOrId(identifier: string | number): Promise<ProductRow | null> {
-    const isNumeric = typeof identifier === 'number' || !isNaN(Number(identifier));
+  async findBySlugOrId(
+    identifier: string | number,
+  ): Promise<ProductRow | null> {
+    const isNumeric =
+      typeof identifier === 'number' || !isNaN(Number(identifier));
     if (isNumeric) {
       return this.findById(Number(identifier));
     }
@@ -145,14 +149,22 @@ export class PostgresCatalogRepository implements ICatalogRepository {
     return res.rows[0] ?? null;
   }
 
-  async findRelated(category: string, excludeId: number, limit: number): Promise<ProductRow[]> {
+  async findRelated(
+    category: string,
+    excludeId: number,
+    limit: number,
+  ): Promise<ProductRow[]> {
     const sql = `
       SELECT *
       FROM products
       WHERE category = $1 AND id != $2 AND deleted_at IS NULL
       LIMIT $3;
     `;
-    const res = await this.pg.query<ProductRow>(sql, [category, excludeId, limit]);
+    const res = await this.pg.query<ProductRow>(sql, [
+      category,
+      excludeId,
+      limit,
+    ]);
     return res.rows;
   }
 
@@ -213,4 +225,3 @@ export class PostgresCatalogRepository implements ICatalogRepository {
     return items.length;
   }
 }
-

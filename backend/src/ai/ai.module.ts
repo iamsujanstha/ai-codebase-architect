@@ -8,11 +8,7 @@ import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
 
 @Module({
-  imports: [
-    PassportModule,
-    AuthModule,
-    DatabaseModule,
-  ],
+  imports: [PassportModule, AuthModule, DatabaseModule],
   controllers: [AiController, ChatThreadsController],
   providers: [AiGatewayService, ChatThreadsService],
 })

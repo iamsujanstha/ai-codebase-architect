@@ -89,7 +89,8 @@ export class UsersService {
     if (updateData.role !== undefined) data.role = updateData.role;
     if (updateData.googleId !== undefined) data.google_id = updateData.googleId;
     if (updateData.avatar !== undefined) data.avatar = updateData.avatar;
-    if (updateData.resetToken !== undefined) data.reset_token = updateData.resetToken;
+    if (updateData.resetToken !== undefined)
+      data.reset_token = updateData.resetToken;
     if (updateData.resetTokenExpires !== undefined)
       data.reset_token_expires = updateData.resetTokenExpires;
     if (updateData.isActive !== undefined) data.is_active = updateData.isActive;

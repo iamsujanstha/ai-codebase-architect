@@ -44,7 +44,11 @@ export class CatalogController {
     @Body('limit') limit?: number,
     @Body('minScore') minScore?: number,
   ) {
-    const products = await this.catalogService.searchSemantic(vector, limit, minScore);
+    const products = await this.catalogService.searchSemantic(
+      vector,
+      limit,
+      minScore,
+    );
     return { products };
   }
 

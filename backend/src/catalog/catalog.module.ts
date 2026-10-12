@@ -18,6 +18,10 @@ import { PostgresCatalogRepository } from './repositories/postgres-catalog.repos
       useClass: PostgresCatalogRepository,
     },
   ],
-  exports: [CatalogService, CATALOG_REPOSITORY_TOKEN, PostgresCatalogRepository],
+  exports: [
+    CatalogService,
+    CATALOG_REPOSITORY_TOKEN,
+    PostgresCatalogRepository,
+  ],
 })
 export class CatalogModule {}

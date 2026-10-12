@@ -93,8 +93,12 @@ export class OrdersService {
         fullName: o.user_name || o.user_email || '',
         email: o.user_email ?? '',
       },
-      createdAt: o.created_at ? new Date(o.created_at).toISOString() : new Date().toISOString(),
-      updatedAt: o.updated_at ? new Date(o.updated_at).toISOString() : new Date().toISOString(),
+      createdAt: o.created_at
+        ? new Date(o.created_at).toISOString()
+        : new Date().toISOString(),
+      updatedAt: o.updated_at
+        ? new Date(o.updated_at).toISOString()
+        : new Date().toISOString(),
     };
   }
 
@@ -146,7 +150,11 @@ export class OrdersService {
     status: string,
     paymentReference?: string,
   ): Promise<OrderResponse | null> {
-    const updated = await this.ordersRepo.updateStatus(orderId, status, paymentReference);
+    const updated = await this.ordersRepo.updateStatus(
+      orderId,
+      status,
+      paymentReference,
+    );
     if (!updated) {
       return null;
     }

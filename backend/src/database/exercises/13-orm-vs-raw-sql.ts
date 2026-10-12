@@ -11,7 +11,9 @@
 import { pool } from './db';
 
 export async function runOrmVsRawSqlExercise() {
-  console.log('\n=== Exercise 13: ORM vs Raw SQL & Performance Engineering ===\n');
+  console.log(
+    '\n=== Exercise 13: ORM vs Raw SQL & Performance Engineering ===\n',
+  );
 
   try {
     // -------------------------------------------------------------
@@ -63,21 +65,31 @@ export async function runOrmVsRawSqlExercise() {
     // Task 1: The N+1 Query Problem in Naive ORM Code
     // -------------------------------------------------------------
     console.log('Task 1: The Classic N+1 Query Problem vs SQL JOIN\n');
-    console.log('Scenario: Display 20 orders along with the customer who placed each one.');
+    console.log(
+      'Scenario: Display 20 orders along with the customer who placed each one.',
+    );
     console.log('Naive ORM Approach:');
     console.log('  Query 1: SELECT * FROM orders LIMIT 20');
-    console.log('  Queries 2..21: For each order: SELECT * FROM customers WHERE id = ?\n');
+    console.log(
+      '  Queries 2..21: For each order: SELECT * FROM customers WHERE id = ?\n',
+    );
 
     const startNPlusOne = Date.now();
-    const ordersRes = await pool.query('SELECT * FROM benchmark_orders LIMIT 20');
+    const ordersRes = await pool.query(
+      'SELECT * FROM benchmark_orders LIMIT 20',
+    );
     let queriesFired = 1;
 
     for (const order of ordersRes.rows) {
-      await pool.query('SELECT * FROM benchmark_customers WHERE id = $1', [order.customer_id]);
+      await pool.query('SELECT * FROM benchmark_customers WHERE id = $1', [
+        order.customer_id,
+      ]);
       queriesFired++;
     }
     const durationNPlusOne = Date.now() - startNPlusOne;
-    console.log(`❌ N+1 Approach: Fired ${queriesFired} roundtrips to the DB in ${durationNPlusOne}ms.`);
+    console.log(
+      `❌ N+1 Approach: Fired ${queriesFired} roundtrips to the DB in ${durationNPlusOne}ms.`,
+    );
 
     // Architect Approach: 1 Single SQL JOIN
     const startJoin = Date.now();
@@ -94,14 +106,20 @@ export async function runOrmVsRawSqlExercise() {
       LIMIT 20;
     `);
     const durationJoin = Date.now() - startJoin;
-    console.log(`✅ Single SQL JOIN: Fired 1 roundtrip, retrieved ${joinRes.rows.length} rows in ${durationJoin}ms.`);
-    console.log(`   Speedup Factor: ~${Math.max(1, Math.round(durationNPlusOne / Math.max(1, durationJoin)))}x faster over network!\n`);
+    console.log(
+      `✅ Single SQL JOIN: Fired 1 roundtrip, retrieved ${joinRes.rows.length} rows in ${durationJoin}ms.`,
+    );
+    console.log(
+      `   Speedup Factor: ~${Math.max(1, Math.round(durationNPlusOne / Math.max(1, durationJoin)))}x faster over network!\n`,
+    );
 
     // -------------------------------------------------------------
     // Task 2: OFFSET vs Keyset (Cursor) Pagination at Scale
     // -------------------------------------------------------------
     console.log('Task 2: Deep OFFSET vs Keyset (Cursor) Pagination\n');
-    console.log('Problem: What happens when an API requests page 100 with OFFSET 1500 vs cursor?');
+    console.log(
+      'Problem: What happens when an API requests page 100 with OFFSET 1500 vs cursor?',
+    );
 
     // EXPLAIN ANALYZE on OFFSET
     const explainOffset = await pool.query(`
@@ -124,8 +142,12 @@ export async function runOrmVsRawSqlExercise() {
     console.log('  ' + explainOffset.rows[0]['QUERY PLAN']);
     console.log('Keyset (Cursor) Execution Plan summary:');
     console.log('  ' + explainKeyset.rows[0]['QUERY PLAN']);
-    console.log('\nInsight: OFFSET forces the database to read and discard 1,500 rows!');
-    console.log('Keyset pagination seeks DIRECTLY to the index entry via B-tree seek in O(log N).\n');
+    console.log(
+      '\nInsight: OFFSET forces the database to read and discard 1,500 rows!',
+    );
+    console.log(
+      'Keyset pagination seeks DIRECTLY to the index entry via B-tree seek in O(log N).\n',
+    );
 
     // -------------------------------------------------------------
     // Task 3: Inspecting Execution Plans (Index Scan vs Seq Scan)
@@ -139,12 +161,17 @@ export async function runOrmVsRawSqlExercise() {
       WHERE o.total_amount > 400;
     `);
 
-    const planObj = explainAnalyze.rows[0]['QUERY PLAN']?.[0] || explainAnalyze.rows[0]?.[0];
+    const planObj =
+      explainAnalyze.rows[0]['QUERY PLAN']?.[0] || explainAnalyze.rows[0]?.[0];
     const planNode = planObj?.Plan;
-    console.log(`Execution Node Type: ${planNode?.['Node Type'] || 'Hash Join'}`);
+    console.log(
+      `Execution Node Type: ${planNode?.['Node Type'] || 'Hash Join'}`,
+    );
     console.log(`Total Startup Cost:  ${planNode?.['Startup Cost'] || '2.50'}`);
     console.log(`Total Runtime Cost:  ${planNode?.['Total Cost'] || '45.20'}`);
-    console.log(`Actual Total Time:   ${planNode?.['Actual Total Time'] || '0.35'} ms\n`);
+    console.log(
+      `Actual Total Time:   ${planNode?.['Actual Total Time'] || '0.35'} ms\n`,
+    );
 
     // -------------------------------------------------------------
     // Staff/Principal Interview Questions & Answers
@@ -173,7 +200,6 @@ A: "ORMs maintain an internal connection pool (or reuse an external one). If a s
    an available client, leading to pool exhaustion. Raw SQL connection pools allow strict
    checkout timeouts, query cancellations (statement_timeout), and connection lifecycle monitoring."
 `);
-
   } catch (error: any) {
     console.error('❌ Error in Exercise 13:', error?.message);
     throw error;

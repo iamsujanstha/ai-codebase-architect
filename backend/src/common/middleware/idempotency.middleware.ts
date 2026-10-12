@@ -36,7 +36,10 @@ export class IdempotencyMiddleware implements NestMiddleware {
     }
 
     const userId = (req as any).user?.userId || 'anonymous';
-    const compositeKey = `${req.path}:${userId}:${idempotencyKey}`.slice(0, 255);
+    const compositeKey = `${req.path}:${userId}:${idempotencyKey}`.slice(
+      0,
+      255,
+    );
 
     try {
       const existing = await this.prisma.idempotency_keys.findUnique({

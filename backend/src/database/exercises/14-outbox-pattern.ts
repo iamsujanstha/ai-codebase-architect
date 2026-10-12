@@ -47,17 +47,27 @@ export async function runOutboxPatternExercise() {
       WHERE status = 'PENDING';
     `);
 
-    console.log('Setup: Created domain_orders and transactional outbox_events tables.\n');
+    console.log(
+      'Setup: Created domain_orders and transactional outbox_events tables.\n',
+    );
 
     // -------------------------------------------------------------
     // Task 1: The Dual-Write Failure Scenario (Naive Approach)
     // -------------------------------------------------------------
-    console.log('Task 1: The Dual-Write Problem (Why dual-writes always fail)\n');
+    console.log(
+      'Task 1: The Dual-Write Problem (Why dual-writes always fail)\n',
+    );
     console.log('Scenario without Outbox:');
     console.log('  1. Application executes: BEGIN; INSERT order; COMMIT;');
-    console.log('  2. Application attempts: await messageQueue.publish(event);');
-    console.log('  3. Process crashes / Network partition before publish succeeds!');
-    console.log('  Result: Money collected in DB, but downstream inventory/fulfillment NEVER notified.\n');
+    console.log(
+      '  2. Application attempts: await messageQueue.publish(event);',
+    );
+    console.log(
+      '  3. Process crashes / Network partition before publish succeeds!',
+    );
+    console.log(
+      '  Result: Money collected in DB, but downstream inventory/fulfillment NEVER notified.\n',
+    );
 
     // -------------------------------------------------------------
     // Task 2: Atomic Transactional Outbox Write
@@ -100,7 +110,9 @@ export async function runOutboxPatternExercise() {
       );
 
       await client.query('COMMIT');
-      console.log(`✅ Order ${orderNumber} and outbox event created atomically in 1 transaction!\n`);
+      console.log(
+        `✅ Order ${orderNumber} and outbox event created atomically in 1 transaction!\n`,
+      );
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -111,8 +123,12 @@ export async function runOutboxPatternExercise() {
     // -------------------------------------------------------------
     // Task 3: Outbox Polling Worker with SELECT FOR UPDATE SKIP LOCKED
     // -------------------------------------------------------------
-    console.log('Task 3: Worker Polling with SELECT ... FOR UPDATE SKIP LOCKED\n');
-    console.log('Scenario: Background worker pulls pending events without race conditions or locks:\n');
+    console.log(
+      'Task 3: Worker Polling with SELECT ... FOR UPDATE SKIP LOCKED\n',
+    );
+    console.log(
+      'Scenario: Background worker pulls pending events without race conditions or locks:\n',
+    );
 
     const workerClient = await pool.connect();
     try {
@@ -128,9 +144,13 @@ export async function runOutboxPatternExercise() {
         LIMIT 5;
       `);
 
-      console.log(`Worker found ${pendingEvents.rows.length} pending outbox event(s):`);
+      console.log(
+        `Worker found ${pendingEvents.rows.length} pending outbox event(s):`,
+      );
       for (const event of pendingEvents.rows) {
-        console.log(`  - Event #${event.id} [${event.event_type}] for ${event.aggregate_id}`);
+        console.log(
+          `  - Event #${event.id} [${event.event_type}] for ${event.aggregate_id}`,
+        );
 
         // Simulate publishing to Kafka / RabbitMQ / SQS
         console.log(`    🚀 Published to message broker successfully!`);
@@ -179,7 +199,6 @@ A: "If the worker publishes to Kafka and crashes right before updating outbox_ev
    another worker will re-read the event and publish it again. Therefore, all downstream
    consumers MUST be designed to be IDEMPOTENT using deduplication keys."
 `);
-
   } catch (error: any) {
     console.error('❌ Error in Exercise 14:', error?.message);
     throw error;
