@@ -37,4 +37,22 @@ export class CatalogController {
   async seedProducts(@Body('count') count?: number) {
     return this.catalogService.seedProducts(count);
   }
+
+  @Post('semantic-search')
+  async semanticSearch(
+    @Body('vector') vector: number[],
+    @Body('limit') limit?: number,
+    @Body('minScore') minScore?: number,
+  ) {
+    const products = await this.catalogService.searchSemantic(vector, limit, minScore);
+    return { products };
+  }
+
+  @Post('embeddings/sync')
+  async syncEmbeddings(
+    @Body('items') items: Array<{ productId: number; vector: number[] }>,
+  ) {
+    const synced = await this.catalogService.syncEmbeddings(items || []);
+    return { synced };
+  }
 }

@@ -221,4 +221,20 @@ export class CatalogService {
       ],
     };
   }
+
+  async searchSemantic(
+    vector: number[],
+    limit?: number,
+    minScore?: number,
+  ) {
+    const rows = await this.catalogRepo.searchSemantic(vector, limit, minScore);
+    return rows.map((r) => ({
+      ...this.mapPostgresProduct(r),
+      score: r.score,
+    }));
+  }
+
+  async syncEmbeddings(items: Array<{ productId: number; vector: number[] }>) {
+    return this.catalogRepo.syncEmbeddings(items);
+  }
 }

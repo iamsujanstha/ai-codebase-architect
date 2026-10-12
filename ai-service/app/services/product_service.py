@@ -6,7 +6,7 @@ import os
 import json
 import re
 from typing import Optional, List, Dict, Any
-from qdrant_client import AsyncQdrantClient, models
+from app.vector_store import get_vector_store, VectorPoint
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class ProductService:
     
     1. PostgreSQL is the authoritative single source of truth for all product entities,
        exact pricing, inventory, and specifications.
-    2. Qdrant provides dense semantic vector retrieval for natural language discovery.
+    2. Vector Store Adapter (pgvector by default, Qdrant swappable) provides dense semantic vector retrieval.
     3. The LLM invokes validated search tools with structured filters (category, price bounds, query).
        Raw SQL is NEVER exposed to the LLM.
     4. Search results are returned as structured authoritative entity citations.
@@ -29,16 +29,8 @@ class ProductService:
     def __init__(self):
         self.backend_url = os.getenv("BACKEND_URL", "http://backend:3000")
         self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-        qdrant_host = os.getenv("QDRANT_HOST", "vector-db")
-        qdrant_port = os.getenv("QDRANT_PORT", "6333")
-        self.qdrant_url = os.getenv("QDRANT_URL", f"http://{qdrant_host}:{qdrant_port}")
-        self._qdrant_client: Optional[AsyncQdrantClient] = None
+        self.vector_store = get_vector_store()
         self._indexed = False
-
-    def get_qdrant_client(self) -> AsyncQdrantClient:
-        if self._qdrant_client is None:
-            self._qdrant_client = AsyncQdrantClient(url=self.qdrant_url, check_compatibility=False)
-        return self._qdrant_client
 
     async def get_embedding(self, text: str) -> list[float]:
         """
@@ -83,26 +75,20 @@ class ProductService:
 
     async def ensure_catalog_indexed(self, force: bool = False) -> None:
         """
-        Ensure Qdrant has a synchronized vector index of the PostgreSQL catalog.
+        Ensure vector index is synchronized with the PostgreSQL catalog.
+        Delegated to the configured VectorStoreAdapter (pgvector by default, Qdrant swappable).
         """
         if self._indexed and not force:
             return
 
         try:
-            client = self.get_qdrant_client()
-            collection_exists = await client.collection_exists(COLLECTION_NAME)
-            
             # Dimension check vector
             sample_vec = await self.get_embedding("sample catalog item")
             if not sample_vec:
                 logger.warning("Embedding service not ready; skipping vector indexing for now.")
                 return
 
-            if not collection_exists:
-                await client.create_collection(
-                    COLLECTION_NAME,
-                    vectors_config=models.VectorParams(size=len(sample_vec), distance=models.Distance.COSINE),
-                )
+            await self.vector_store.initialize(COLLECTION_NAME, len(sample_vec))
 
             products = await self.get_all_products()
             if not products:
@@ -121,7 +107,7 @@ class ProductService:
                     continue
 
                 points.append(
-                    models.PointStruct(
+                    VectorPoint(
                         id=p_id,
                         vector=vec,
                         payload={
@@ -134,11 +120,11 @@ class ProductService:
                 )
 
             if points:
-                await client.upsert(COLLECTION_NAME, points=points)
-                logger.info(f"Synchronized {len(points)} products to Qdrant semantic index.")
+                await self.vector_store.upsert(COLLECTION_NAME, points=points)
+                logger.info(f"Synchronized {len(points)} products to vector store index.")
                 self._indexed = True
         except Exception as e:
-            logger.error(f"Error indexing catalog to Qdrant: {e}")
+            logger.error(f"Error indexing catalog to vector store: {e}")
 
     async def search_catalog(
         self,
@@ -175,23 +161,21 @@ class ProductService:
         if max_price is not None:
             filtered_products = [p for p in filtered_products if float(p.get("price", 0)) <= max_price]
 
-        # 2. If natural language query is provided, apply semantic vector ranking via Qdrant
+        # 2. If natural language query is provided, apply semantic vector ranking via VectorStoreAdapter
         if query and query.strip():
             await self.ensure_catalog_indexed()
             q_vec = await self.get_embedding(query.strip())
             if q_vec:
                 try:
-                    client = self.get_qdrant_client()
-                    search_res = await client.query_points(
+                    search_res = await self.vector_store.search(
                         collection_name=COLLECTION_NAME,
-                        query=q_vec,
+                        query_vector=q_vec,
                         limit=limit * 2,
                         score_threshold=0.55,
                     )
                     score_map = {
-                        str(pt.payload.get("product_id")): pt.score
-                        for pt in search_res.points
-                        if pt.payload
+                        str(pt.get("id")): pt.get("score", 0.0)
+                        for pt in search_res
                     }
                     
                     # Sort filtered authoritative items by semantic similarity score
@@ -324,17 +308,16 @@ class ProductService:
                 response.raise_for_status()
                 created = response.json()
                 
-                # Re-index to keep Qdrant in sync with PostgreSQL
+                # Re-index to keep vector store in sync with PostgreSQL
                 if created and "id" in created:
                     p = created
                     text = f"{p.get('name', '')} {p.get('categoryName', '')} {p.get('subtitle', '')}. {p.get('shortDescription', '')}. {p.get('description', '')}"
                     vec = await self.get_embedding(text)
                     if vec:
-                        client_q = self.get_qdrant_client()
-                        await client_q.upsert(
+                        await self.vector_store.upsert(
                             COLLECTION_NAME,
                             points=[
-                                models.PointStruct(
+                                VectorPoint(
                                     id=int(p["id"]),
                                     vector=vec,
                                     payload={

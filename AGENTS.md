@@ -41,3 +41,27 @@ This project is indexed by GitNexus as **ai-codebase-architect** (5180 symbols, 
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+---
+
+# Architecture Rules & Documentation Protocol
+
+## 1. Architectural Decision & Interview Q/A Documentation Protocol
+- **Document Architectural Decisions in Docs (Never Leave in Chat)**: Whenever an architectural discussion, technology comparison (e.g., pgvector vs. Qdrant, REST vs. SSE, Mongo vs. Postgres), or trade-off analysis is made in chat, the agent **MUST** capture and refine it into `docs/architecture/adr/` as an accepted ADR or update existing architecture documents.
+- **Mandatory Interview Questions & Follow-Up Q/A Section**: Every ADR or core architecture doc **MUST** include a dedicated **Senior / Staff System Design Interview Talking Points & Follow-Up Q/A** section. It must capture:
+  - The core interview question ("Why X instead of Y?").
+  - The architectural trade-off justification (cost, latency, complexity, team size).
+  - Probing follow-up questions (failure modes, edge cases, dual-write issues, scaling bottlenecks).
+  - Concrete step-by-step migration / mitigation playbooks.
+- **Mandatory Mermaid Visuals**: Every decision document must include at least one Mermaid architecture diagram, sequence diagram, or decision-tree flowchart.
+- **Keep `AGENTS.md` Synchronized**: Whenever a new decision or ADR is created, add its core rule and markdown link to this section in `AGENTS.md` so future agent sessions adhere to it.
+
+---
+
+## 2. Active Architectural Decisions
+
+### Vector Search Strategy (ADR-011)
+- **Start with `pgvector` First**: Store product catalog and AI semantic vectors inside the existing **Neon PostgreSQL** database (`vector` extension) during initial and mid-scale growth (< 500k vectors).
+- **Interface-First Architecture**: Always code against an `IVectorStore` adapter abstraction. NEVER hardcode vendor-specific vector DB calls into business controllers or domain services.
+- **Do Not Prematurely Optimize**: Do not spin up or re-introduce dedicated vector databases (e.g. Qdrant cluster/container) until concrete migration thresholds are breached (> 500k vectors, > 50ms search latency, or database RAM pressure).
+- **Interview & Architecture Reference**: See [ADR-011: Vector Search Strategy — pgvector First, Scale to Qdrant](file:///Users/ebpearls/Documents/ai-codebase-architect/docs/architecture/adr/011-vector-search-strategy-pgvector-vs-qdrant.md).

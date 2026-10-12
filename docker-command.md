@@ -11,18 +11,18 @@ All services, active port mappings, health check routes, and clickable direct li
 | Service | Container Port | Host Port (Env Override) | Quick Access Link | Health / Swagger / Docs | Protocol / Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Frontend** | `80` | `8080` (`${FRONTEND_PORT}`) | [http://localhost:8080](http://localhost:8080) | [Health](http://localhost:8080/) | HTTP (React SPA + Nginx Reverse Proxy) |
-| **Backend API** | `3000` | `8000` (`${BACKEND_PORT}`) | [http://localhost:8000](http://localhost:8000) | [Health](http://localhost:8000/health) | HTTP (NestJS Gateway API) |
-| **AI Service** | `8000` | `8001` (`${AI_SERVICE_PORT}`) | [http://localhost:8001/docs](http://localhost:8001/docs) *(Swagger UI)* | [Swagger UI](http://localhost:8001/docs) • [ReDoc](http://localhost:8001/redoc) • [Health](http://localhost:8001/health) | HTTP (FastAPI — Root `/` returns 404 by default, use `/docs` or `/health`) |
-| **Vector DB (Qdrant)** | `6333` | `6333` (`${QDRANT_PORT}`) | [http://localhost:6333/dashboard](http://localhost:6333/dashboard) | [API Root](http://localhost:6333/) • [Collections](http://localhost:6333/collections) | HTTP (Qdrant Web UI & REST API) |
+| **Backend API** | `3000` | `8000` (`${BACKEND_PORT}`) | [http://localhost:8000](http://localhost:8000) | [Health](http://localhost:8000/health) | HTTP (NestJS Gateway API + Neon PostgreSQL with pgvector) |
+| **AI Service** | `8000` | `8001` (`${AI_SERVICE_PORT}`) | [http://localhost:8001/docs](http://localhost:8001/docs) *(Swagger UI)* | [Swagger UI](http://localhost:8001/docs) • [ReDoc](http://localhost:8001/redoc) • [Health](http://localhost:8001/health) | HTTP (FastAPI — Vector Store Adapter: `pgvector` active, `qdrant` swappable) |
 | **Host Ollama** *(External)* | `11434` | `11434` | [http://localhost:11434](http://localhost:11434) | [Tags](http://localhost:11434/api/tags) | HTTP (Requires Ollama app running on host: `open -a Ollama`) |
 
 > [!IMPORTANT]
 > **Why certain ports don't open as expected in the browser:**
 > 1. **AI Service (`localhost:8001`)**: The server **is running**, but FastAPI has no route at root `/` (resulting in `{"detail":"Not Found"}`). Open **[http://localhost:8001/docs](http://localhost:8001/docs)** for the interactive Swagger UI or **[http://localhost:8001/health](http://localhost:8001/health)** for health status.
 > 2. **Host Ollama (`localhost:11434`)**: Ollama runs on your host machine outside Docker. If port 11434 fails to open, start it with `open -a Ollama` or `ollama serve`.
+> 3. **Vector Store**: Now co-located inside **Neon PostgreSQL** via `pgvector` (HNSW index on `product_embeddings`), avoiding separate vector DB containers.
 
 > [!NOTE]
-> All services run under the shared internal bridge network `app-network` (`atlas-commerce-lab_app-network`). Inside containers, services communicate using service names as hostnames: `http://frontend:80`, `http://backend:3000`, `http://ai-service:8000`, and `vector-db:6333`.
+> All services run under the shared internal bridge network `app-network` (`atlas-commerce-lab_app-network`). Inside containers, services communicate using service names as hostnames: `http://frontend:80`, `http://backend:3000`, and `http://ai-service:8000`.
 
 ---
 
@@ -55,9 +55,9 @@ Stop containers preserving data in volumes:
 docker compose down
 ```
 
-Stop and eliminate all orphaned containers and delete named volumes (`qdrant_data`):
+Stop and eliminate all stopped or orphaned containers:
 ```bash
-docker compose down -v --remove-orphans
+docker compose down --remove-orphans
 ```
 
 ### Restart a Stale or Unhealthy Service
@@ -75,8 +75,8 @@ View timestamped live logs with a fixed history window:
 # Stream last 100 lines with timestamps for a specific service
 docker compose logs -f --tail=100 -t backend
 
-# Stream logs for AI and Database services together
-docker compose logs -f --tail=50 ai-service vector-db
+# Stream logs for Frontend, Backend, and AI Service together
+docker compose logs -f --tail=50 backend ai-service frontend
 ```
 
 ### Check Detailed Container Health Checks
@@ -125,17 +125,16 @@ docker run --rm -it --network atlas-commerce-lab_app-network nicolaka/netshoot c
 ## 💾 3. Database & Storage Debugging
 
 
-### Inspect Qdrant Vector Collections
-Query Qdrant collections and cluster telemetry from the host terminal:
+### Inspect Vector Search (Neon PostgreSQL with pgvector)
+Test vector cosine similarity query on Neon PostgreSQL via the backend:
 ```bash
-# List all collections
-curl -s http://localhost:6333/collections | jq .
-
-# Inspect specific collection (e.g., knowledge or products)
-curl -s http://localhost:6333/collections/knowledge | jq .
-
-# Check Qdrant cluster telemetry & version
-curl -s http://localhost:6333/telemetry | jq .
+docker compose exec backend node -e "
+const { Pool } = require('pg');
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+pool.query('SELECT count(*) as count FROM product_embeddings;')
+  .then(r => { console.log('Indexed product vectors in Neon:', r.rows[0].count); pool.end(); })
+  .catch(e => { console.error(e.message); pool.end(); });
+"
 ```
 
 ### Inspect Named Volumes & Disk Usage
@@ -180,7 +179,6 @@ Confirm which ports are actively bound to host interfaces:
 docker compose port frontend 80
 docker compose port backend 3000
 docker compose port ai-service 8000
-docker compose port vector-db 6333
 ```
 
 ---
@@ -239,5 +237,4 @@ docker system prune -a --volumes
 | **Follow backend logs** | `docker compose logs -f backend` |
 | **Follow AI logs** | `docker compose logs -f ai-service` |
 | **Check container health** | `docker compose ps` |
-| **Reset all DB volumes** | `docker compose down -v && docker compose up -d` |
-| **Open Qdrant Dashboard** | Open [http://localhost:6333/dashboard](http://localhost:6333/dashboard) in browser |
+| **Inspect pgvector count** | `docker compose exec backend node -e "..."` |

@@ -104,8 +104,6 @@ services:
     depends_on:
       ai-service:
         condition: service_healthy
-      vector-db:
-        condition: service_healthy
 
     healthcheck:
       test:
@@ -155,22 +153,17 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 
-      # Local Inference & Retrieval
+      # Local Inference & Vector Store
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-600}
+      VECTOR_STORE_PROVIDER: ${VECTOR_STORE_PROVIDER:-pgvector}
       RETRIEVAL_BACKEND: ${RETRIEVAL_BACKEND:-none}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       RETRIEVAL_CORPUS: ${RETRIEVAL_CORPUS:-reference}
-      QDRANT_HOST: vector-db
-      QDRANT_PORT: 6333
       MEMORY_COLLECTION: ${MEMORY_COLLECTION:-knowledge}
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-    depends_on:
-      vector-db:
-        condition: service_healthy
 
     healthcheck:
       test:
@@ -188,35 +181,9 @@ services:
     networks:
       - app-network
 
-  # =========================================================
-  # 4. VECTOR DATABASE (Qdrant)
-  # =========================================================
-  # High-performance vector database storing embeddings for
-  # semantic product discovery and conversational memory.
-  # =========================================================
-  vector-db:
-    image: qdrant/qdrant:latest
-    restart: unless-stopped
-    ports:
-      - "${QDRANT_PORT:-6333}:6333"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/6333' || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    logging: *default-logging
-    networks:
-      - app-network
-
 # =========================================================
-# NETWORKS & VOLUMES
+# NETWORKS
 # =========================================================
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  qdrant_data:

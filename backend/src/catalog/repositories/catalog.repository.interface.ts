@@ -48,6 +48,14 @@ export interface ICatalogRepository {
   findById(id: number): Promise<ProductRow | null>;
   findRelated(category: string, excludeId: number, limit: number): Promise<ProductRow[]>;
   create(params: CreateProductParams): Promise<ProductRow>;
+  searchSemantic(
+    vector: number[],
+    limit?: number,
+    minScore?: number,
+  ): Promise<Array<ProductRow & { score: number }>>;
+  syncEmbeddings(
+    items: Array<{ productId: number; vector: number[] }>,
+  ): Promise<number>;
 }
 
 export const CATALOG_REPOSITORY_TOKEN = Symbol('ICatalogRepository');

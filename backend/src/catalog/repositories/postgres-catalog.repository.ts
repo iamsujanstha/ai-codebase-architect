@@ -172,4 +172,45 @@ export class PostgresCatalogRepository implements ICatalogRepository {
     ]);
     return res.rows[0];
   }
+
+  async searchSemantic(
+    vector: number[],
+    limit: number = 4,
+    minScore: number = 0.5,
+  ): Promise<Array<ProductRow & { score: number }>> {
+    const vectorStr = `[${vector.join(',')}]`;
+    const sql = `
+      SELECT p.*, (1 - (pe.embedding <=> $1::vector)) AS score
+      FROM products p
+      JOIN product_embeddings pe ON p.id = pe.product_id
+      WHERE p.deleted_at IS NULL AND p.status != 'draft'
+        AND (1 - (pe.embedding <=> $1::vector)) >= $2
+      ORDER BY pe.embedding <=> $1::vector ASC
+      LIMIT $3;
+    `;
+    const res = await this.pg.query<ProductRow & { score: number }>(sql, [
+      vectorStr,
+      minScore,
+      limit,
+    ]);
+    return res.rows;
+  }
+
+  async syncEmbeddings(
+    items: Array<{ productId: number; vector: number[] }>,
+  ): Promise<number> {
+    if (!items || items.length === 0) return 0;
+    for (const item of items) {
+      const vectorStr = `[${item.vector.join(',')}]`;
+      const sql = `
+        INSERT INTO product_embeddings (product_id, embedding, created_at)
+        VALUES ($1, $2::vector, NOW())
+        ON CONFLICT (product_id)
+        DO UPDATE SET embedding = EXCLUDED.embedding, created_at = NOW();
+      `;
+      await this.pg.query(sql, [item.productId, vectorStr]);
+    }
+    return items.length;
+  }
 }
+
