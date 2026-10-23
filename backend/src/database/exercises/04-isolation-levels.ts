@@ -2,6 +2,126 @@
  * Exercise 4: Isolation Levels
  *
  * Goal: Understand READ COMMITTED, REPEATABLE READ, and SERIALIZABLE
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * WHY THIS MATTERS (Production Importance)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Isolation levels determine what data a transaction can see when other
+ * transactions are running concurrently. Choosing the wrong level leads to
+ * either data corruption (too loose) or deadlocks and performance collapse (too strict).
+ *
+ * Real-world failures:
+ *
+ * 1. NON-REPEATABLE READ (Phantom Balance):
+ *    A banking app ran a report: "sum all account balances." During the scan,
+ *    a transfer moved $10,000 from Account A (already scanned) to Account B
+ *    (not yet scanned). The report counted $10,000 twice — overstating total
+ *    deposits by $10K. Under REPEATABLE READ, the report would see a frozen
+ *    snapshot from the start of the transaction.
+ *
+ * 2. PHANTOM READ (Double Booking):
+ *    A booking system checked "are there any reservations for Room 5 on Oct 15?"
+ *    Got zero results. Between the check and the INSERT, another transaction
+ *    inserted a reservation. Both transactions committed → double-booked.
+ *    SERIALIZABLE isolation would detect this conflict and abort one transaction.
+ *
+ * 3. SERIALIZATION FAILURE STORMS:
+ *    A team set all transactions to SERIALIZABLE without retry logic. Under load,
+ *    PostgreSQL detected serialization conflicts and aborted 40% of transactions.
+ *    The app showed 500 errors to users. Fix: SERIALIZABLE requires application-level
+ *    retry logic with exponential backoff.
+ *
+ * In Atlas Commerce Lab:
+ *   - READ COMMITTED (default) for most API endpoints — fast, no retries needed.
+ *   - REPEATABLE READ for financial reports and analytics — consistent snapshots.
+ *   - The payment flow could use SERIALIZABLE for the stock-check + order-create
+ *     sequence, but we use SELECT FOR UPDATE (pessimistic locking) instead because
+ *     it's simpler and avoids the retry complexity of serialization failures.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * FROM SCRATCH (How Isolation Works via MVCC Snapshots)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * PostgreSQL does NOT use read locks. Instead, it uses MVCC (Multi-Version
+ * Concurrency Control) — every row has multiple physical versions (tuples),
+ * each tagged with the transaction that created it (xmin) and the transaction
+ * that deleted/updated it (xmax).
+ *
+ * READ COMMITTED (Default):
+ *   - Each STATEMENT gets a fresh snapshot.
+ *   - SELECT sees all data committed before the statement started.
+ *   - Two identical SELECTs in the same transaction can return different results
+ *     if another transaction committed between them.
+ *   - Pros: No serialization failures. Simple. Good for OLTP.
+ *   - Cons: Non-repeatable reads. Phantom reads.
+ *
+ * REPEATABLE READ:
+ *   - The entire TRANSACTION gets one snapshot (taken at the first statement).
+ *   - All SELECTs in the transaction see the same frozen view of data,
+ *     regardless of what other transactions commit during execution.
+ *   - Pros: Consistent reads. No non-repeatable reads.
+ *   - Cons: Serialization failures possible (ERROR: could not serialize access).
+ *     Application MUST retry on this error.
+ *
+ * SERIALIZABLE:
+ *   - Strictest level. PostgreSQL detects if the concurrent execution could NOT
+ *     have produced the same result as some serial (one-at-a-time) execution order.
+ *   - Uses Serializable Snapshot Isolation (SSI) — tracks read/write dependencies
+ *     between transactions and aborts one if a cycle is detected.
+ *   - Pros: Mathematically correct. No anomalies of any kind.
+ *   - Cons: Highest abort rate under contention. Requires retry logic.
+ *
+ * Note: PostgreSQL does NOT implement READ UNCOMMITTED. Setting it silently
+ * upgrades to READ COMMITTED, because dirty reads are never allowed.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * INTERVIEW Q&A (Senior / Staff Level)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Q1: "What isolation level do you use and why?"
+ * A:  READ COMMITTED for 95% of operations — it's fast, has no serialization
+ *     failures, and is sufficient for typical CRUD. For financial reports that
+ *     must see a consistent snapshot, we use REPEATABLE READ. For critical
+ *     invariants (e.g., "only one active subscription per user"), we use
+ *     SELECT FOR UPDATE rather than SERIALIZABLE because it's simpler to reason
+ *     about and doesn't require retry logic in the application.
+ *     Follow-up: "When WOULD you use SERIALIZABLE?"
+ *     → When the invariant involves multiple reads and writes across different rows
+ *       where pessimistic locking would be too coarse (e.g., "ensure no two
+ *       employees are scheduled for the same shift").
+ *
+ * Q2: "Explain the difference between non-repeatable read and phantom read."
+ * A:  Non-repeatable read: You read row X, another transaction updates row X,
+ *     you read row X again and get a different value. Same row, different data.
+ *     Phantom read: You query "all orders WHERE status = 'pending'" and get 5 rows.
+ *     Another transaction inserts a new pending order. You run the same query
+ *     again and get 6 rows. A new row appeared — a "phantom."
+ *     Both are prevented by REPEATABLE READ in PostgreSQL (because it uses snapshot
+ *     isolation, not just repeatable row locks like MySQL).
+ *
+ * Q3: "How does PostgreSQL implement REPEATABLE READ without read locks?"
+ * A:  MVCC. At the start of the transaction, PostgreSQL takes a snapshot of all
+ *     currently committed transaction IDs. Every subsequent read checks if the
+ *     row's xmin (creating transaction) is in the snapshot and if xmax (deleting
+ *     transaction) is NOT in the snapshot. If a row was committed after the
+ *     snapshot was taken, it's invisible — even though it exists on disk.
+ *
+ * Q4: "What happens if two REPEATABLE READ transactions try to update the same row?"
+ * A:  The first transaction succeeds. The second transaction detects that the row
+ *     was modified by a committed transaction that started after its snapshot.
+ *     PostgreSQL raises ERROR: could not serialize access due to concurrent update.
+ *     The application MUST catch this error and retry the entire transaction.
+ *     This is fundamentally different from READ COMMITTED, where the second
+ *     transaction simply waits for the first to commit and then re-evaluates.
+ *
+ * Q5: "What's the performance cost of SERIALIZABLE vs READ COMMITTED?"
+ * A:  SERIALIZABLE uses SSI (Serializable Snapshot Isolation) which tracks
+ *     read/write dependencies in memory. Overhead is typically 5-15% on CPU
+ *     and memory for tracking. The bigger cost is serialization failures under
+ *     contention — transactions get aborted and must be retried, which wastes
+ *     work. For high-contention hotspots (inventory counters), pessimistic
+ *     locking (SELECT FOR UPDATE) is more predictable than SERIALIZABLE retries.
  */
 
 import { PoolClient } from 'pg';

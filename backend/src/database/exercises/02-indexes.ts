@@ -2,6 +2,117 @@
  * Exercise 2: Indexes Deep Dive
  *
  * Goal: Understand B-tree, GIN, partial, composite, and covering indexes
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * WHY THIS MATTERS (Production Importance)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Indexes are the single most impactful performance lever in any relational
+ * database. Without an index, PostgreSQL performs a Sequential Scan — reading
+ * every single row from disk. With an index, it jumps directly to matching rows.
+ *
+ * Real-world impact:
+ *
+ * 1. MISSING INDEX ON FOREIGN KEY:
+ *    A ride-sharing app had `rides(driver_id)` without an index. The admin
+ *    dashboard query `SELECT * FROM rides WHERE driver_id = ?` scanned 50M rows
+ *    on every page load (800ms). Adding `CREATE INDEX idx_rides_driver ON rides(driver_id)`
+ *    dropped it to 2ms — a 400x improvement with zero code changes.
+ *
+ * 2. WRONG INDEX ORDER (Composite Index Trap):
+ *    A developer created `CREATE INDEX ON orders(status, created_at)` but the
+ *    most common query filtered by `created_at` first and status second.
+ *    The index was useless because B-tree indexes are left-to-right: the leftmost
+ *    column must appear in the WHERE clause for the index to be used.
+ *
+ * 3. INDEX BLOAT (Write Penalty):
+ *    A logging service added 8 indexes on a high-write table. Write throughput
+ *    dropped 60% because every INSERT updated 8 separate B-tree structures.
+ *    Rule of thumb: each index adds ~10-15% write overhead.
+ *
+ * In Atlas Commerce Lab:
+ *   - `idx_products_name_trgm` uses GIN trigram index for fuzzy product search.
+ *   - `idx_products_category_stock` is a partial composite index (WHERE stock > 0)
+ *     to skip out-of-stock products from catalog queries entirely.
+ *   - `product_embeddings` uses an HNSW index for vector cosine similarity search.
+ *   - `idx_orders_user_created` is a composite index optimized for the "My Orders"
+ *     page: `WHERE user_id = ? ORDER BY created_at DESC`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * FROM SCRATCH (How B-tree Indexes Work Internally)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * A B-tree index is a balanced tree structure stored on disk as 8KB pages:
+ *
+ *   Level 0 (Root):     [ ... | key=500 | ... | key=1000 | ... ]
+ *                        /                |                  \
+ *   Level 1 (Internal): [100,200,300]   [600,700,800]     [1100,1200]
+ *                        /    |    \      /    |    \        /    |
+ *   Level 2 (Leaf):    [→row] [→row]  [→row] [→row]     [→row] [→row]
+ *
+ * How a lookup works (e.g., WHERE id = 750):
+ *   1. Start at root page. Binary search: 500 < 750 < 1000 → follow middle pointer.
+ *   2. Arrive at internal page [600,700,800]. Binary search: 700 < 750 < 800 → follow pointer.
+ *   3. Arrive at leaf page. Find key 750 → read the heap tuple pointer (ctid) → fetch row.
+ *   Total I/O: 3 page reads (for millions of rows). Sequential scan: thousands of page reads.
+ *
+ * Index types and when to use each:
+ *   - B-tree (default):  Equality (=) and range (<, >, BETWEEN, ORDER BY). 95% of indexes.
+ *   - GIN:               Full-text search (tsvector), JSONB containment (@>), array membership.
+ *   - GiST:              Geometric/spatial data, range types, nearest-neighbor.
+ *   - BRIN:              Append-only tables (logs, events) where data is physically ordered.
+ *                         Tiny index size (~1000x smaller than B-tree) but only useful for
+ *                         correlated data (e.g., timestamp column on an append-only table).
+ *   - HNSW (pgvector):   Approximate nearest-neighbor vector similarity search.
+ *
+ * Partial indexes — index only the rows you query:
+ *   CREATE INDEX idx_active_users ON users(email) WHERE is_active = true;
+ *   → Index is 10x smaller if 90% of users are inactive. Faster scans, less RAM.
+ *
+ * Covering indexes — avoid touching the table entirely:
+ *   CREATE INDEX idx_orders_cover ON orders(user_id) INCLUDE (total_amount, status);
+ *   → Query `SELECT total_amount, status FROM orders WHERE user_id = ?` is served
+ *     entirely from the index (Index-Only Scan). Zero heap page reads.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * INTERVIEW Q&A (Senior / Staff Level)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Q1: "A query is slow. Walk me through how you'd diagnose and fix it."
+ * A:  1. Run `EXPLAIN (ANALYZE, BUFFERS)` to see the actual execution plan.
+ *     2. Look for Sequential Scans on large tables — indicates a missing index.
+ *     3. Check "Rows Removed by Filter" — high value means the index is not selective.
+ *     4. Check "Shared Hit" vs "Shared Read" — reads from disk mean poor cache locality.
+ *     5. If a Seq Scan is chosen despite an index existing, check if the query filters
+ *        on the wrong column order (composite index) or if the table statistics are stale
+ *        (run ANALYZE to refresh planner statistics).
+ *
+ * Q2: "What's the difference between a composite index and two separate indexes?"
+ * A:  A composite index `(a, b)` is a single sorted structure: sorted by `a` first,
+ *     then by `b` within each `a` group. It supports: WHERE a = ?, WHERE a = ? AND b = ?,
+ *     and WHERE a = ? ORDER BY b. It does NOT efficiently support WHERE b = ? alone.
+ *     Two separate indexes can be combined via a Bitmap Index Scan, but this is slower
+ *     than a single composite index for multi-column queries.
+ *
+ * Q3: "When would you NOT add an index?"
+ * A:  (1) Small tables (<1000 rows) — Seq Scan is faster than index overhead.
+ *     (2) High-write, low-read tables (audit logs) — each index adds write penalty.
+ *     (3) Low-selectivity columns (boolean `is_active` with 95% true) — the index
+ *     won't reduce scan work enough to justify its cost. Exception: partial index
+ *     `WHERE is_active = false` on the rare condition IS effective.
+ *
+ * Q4: "What is index bloat and how do you fix it?"
+ * A:  When rows are updated or deleted, the old index entries become dead but are
+ *     not immediately reclaimed. Over time, the index grows much larger than needed,
+ *     wasting RAM and slowing scans. Fix: REINDEX CONCURRENTLY (non-blocking rebuild)
+ *     or tune autovacuum to run more aggressively on high-churn tables.
+ *
+ * Q5: "Explain covering indexes and Index-Only Scans."
+ * A:  A covering index includes all columns needed by a query via the INCLUDE clause.
+ *     When the query can be answered entirely from the index without touching the
+ *     heap table, PostgreSQL performs an Index-Only Scan — dramatically faster because
+ *     it avoids random I/O to the table pages. The visibility map must confirm rows
+ *     are visible (post-VACUUM) for this optimization to trigger.
  */
 
 import { pool } from './db';

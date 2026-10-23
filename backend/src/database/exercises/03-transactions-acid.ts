@@ -2,6 +2,122 @@
  * Exercise 3: Transactions & ACID
  *
  * Goal: Understand Atomicity, Consistency, Isolation, Durability
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * WHY THIS MATTERS (Production Importance)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Transactions are the difference between "the database says the money moved"
+ * and "the money actually moved." Without ACID guarantees, concurrent operations
+ * can corrupt financial records, lose inventory, or double-charge customers.
+ *
+ * Real-world failures:
+ *
+ * 1. ATOMICITY FAILURE (Partial Transfer):
+ *    A fintech app debited Account A ($500 → $0) but crashed before crediting
+ *    Account B. Without a transaction wrapping both operations, $500 vanished.
+ *    With BEGIN/COMMIT, either both succeed or both roll back — money never disappears.
+ *
+ * 2. CONSISTENCY FAILURE (Negative Inventory):
+ *    A flash sale processed 200 orders for a product with stock = 50.
+ *    Without CHECK constraints inside transactions, stock went to -150.
+ *    Customers received "order confirmed" emails for products that didn't exist.
+ *    Fix: `CHECK (stock >= 0)` constraint + transaction isolation.
+ *
+ * 3. DURABILITY FAILURE (Lost Confirmed Orders):
+ *    A startup used an in-memory database for orders. Server crashed. All orders
+ *    from the last 4 hours were gone — customers were charged but no record existed.
+ *    PostgreSQL's WAL guarantees that once COMMIT returns, the data survives even
+ *    a power failure because the WAL is fsynced to disk before acknowledgment.
+ *
+ * In Atlas Commerce Lab:
+ *   - Payment processing uses transactions: debit stock → create order → create
+ *     payment audit log → all within a single BEGIN/COMMIT block.
+ *   - The idempotency middleware wraps payment creation in transactions to prevent
+ *     double-charging when webhooks fire twice.
+ *   - Savepoints are used in bulk operations so a single product failure doesn't
+ *     roll back the entire import batch.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * FROM SCRATCH (How Transactions Work Internally)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Step 1 — BEGIN: PostgreSQL assigns a Transaction ID (XID). All subsequent
+ *   operations are tagged with this XID so the engine knows which changes belong
+ *   to which transaction.
+ *
+ * Step 2 — Write Operations: When you INSERT/UPDATE/DELETE:
+ *   a) The change is written to the WAL (Write-Ahead Log) in shared memory.
+ *   b) The table page in shared_buffers (RAM) is modified with the new tuple.
+ *   c) The old tuple is NOT deleted — it's marked with xmax = current XID.
+ *      Other transactions can still see the old version (MVCC).
+ *
+ * Step 3 — COMMIT:
+ *   a) The WAL records are fsynced to disk (this is the durability guarantee).
+ *   b) The transaction's status is set to "committed" in pg_xact (the commit log).
+ *   c) The modified data pages are NOT immediately written to disk — they stay in
+ *      shared_buffers and are lazily flushed by the background writer / checkpointer.
+ *   Key insight: COMMIT is fast because it only fsyncs sequential WAL bytes, not
+ *   random table pages scattered across disk.
+ *
+ * Step 4 — ROLLBACK:
+ *   a) The WAL records for this transaction are discarded/marked aborted.
+ *   b) No cleanup needed on table pages — the new tuples have xmin = aborted XID,
+ *      so they're automatically invisible to all other transactions.
+ *   c) VACUUM will eventually reclaim the dead tuples.
+ *
+ * Savepoints (Nested Transactions):
+ *   SAVEPOINT sp1; — Marks a restore point within the transaction.
+ *   ROLLBACK TO sp1; — Undoes everything after sp1, but keeps the outer transaction alive.
+ *   Use case: Processing 100 orders in a batch. If order #47 fails, rollback to the
+ *   savepoint and continue with order #48, instead of aborting all 100.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * INTERVIEW Q&A (Senior / Staff Level)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Q1: "Explain ACID with a real example from your system."
+ * A:  In our payment flow: BEGIN → decrement product stock → insert order row →
+ *     insert payment audit log → COMMIT.
+ *     - Atomicity: If audit log insert fails, stock decrement rolls back automatically.
+ *     - Consistency: CHECK(stock >= 0) prevents overselling even under concurrency.
+ *     - Isolation: Two users buying the last item — only one succeeds, the other
+ *       sees the updated stock and gets a "sold out" error.
+ *     - Durability: Once COMMIT returns 200 to the client, the WAL is on disk.
+ *       Even if the server crashes 1ms later, the order survives on restart.
+ *
+ * Q2: "How does PostgreSQL achieve durability without writing every change to disk?"
+ * A:  WAL (Write-Ahead Logging). Changes are written sequentially to the WAL file
+ *     and fsynced on COMMIT. Table data pages stay in RAM (shared_buffers) and are
+ *     lazily flushed by the checkpointer. On crash recovery, PostgreSQL replays the
+ *     WAL to reconstruct any committed transactions whose data pages weren't flushed.
+ *     This is why sequential WAL writes are fast (append-only) while random table
+ *     page writes would be slow (scattered disk I/O).
+ *
+ * Q3: "What's the difference between ROLLBACK and ROLLBACK TO SAVEPOINT?"
+ * A:  ROLLBACK aborts the entire transaction — all changes are discarded.
+ *     ROLLBACK TO SAVEPOINT undoes only the work done after the savepoint, keeping
+ *     the outer transaction alive. Use case: batch processing where you want to
+ *     skip a failed item without losing all previous successful items.
+ *     Follow-up: "Are savepoints expensive?"
+ *     → Each savepoint is tracked in memory with a SubTransaction ID. Having hundreds
+ *       of active savepoints can cause performance issues (pg_subtrans contention).
+ *       Best practice: use savepoints sparingly, not inside tight loops.
+ *
+ * Q4: "Can a SELECT statement ever block in PostgreSQL?"
+ * A:  Under normal READ COMMITTED isolation, SELECTs never block — they read the
+ *     last committed snapshot (MVCC). However, SELECT FOR UPDATE acquires row-level
+ *     exclusive locks and WILL block if another transaction holds the lock.
+ *     Also, DDL statements (ALTER TABLE) acquire AccessExclusive locks that block
+ *     everything, including SELECTs.
+ *
+ * Q5: "How do you handle long-running transactions in production?"
+ * A:  Long transactions are dangerous because they: (1) hold locks that block other
+ *     operations, (2) prevent VACUUM from reclaiming dead tuples (causing bloat),
+ *     (3) risk XID wraparound on extremely long-lived transactions.
+ *     Solutions: Set `idle_in_transaction_session_timeout`, break large operations
+ *     into smaller batches, use `statement_timeout` to kill stuck queries, and
+ *     monitor `pg_stat_activity` for transactions older than a threshold.
  */
 
 import { pool } from './db';

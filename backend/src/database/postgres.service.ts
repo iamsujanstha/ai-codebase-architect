@@ -13,13 +13,12 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
   private pool: Pool | null = null;
   private isConnected = false;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
   async onModuleInit() {
     const connectionString =
       this.configService.get<string>('POSTGRES_URL') ||
-      process.env.POSTGRES_URL ||
-      'postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+      process.env.POSTGRES_URL
 
     try {
       this.pool = new Pool({
