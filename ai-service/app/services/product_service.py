@@ -161,41 +161,61 @@ class ProductService:
         if max_price is not None:
             filtered_products = [p for p in filtered_products if float(p.get("price", 0)) <= max_price]
 
-        # 2. If natural language query is provided, apply semantic vector ranking via VectorStoreAdapter
+        # 2. If natural language query is provided, apply hybrid semantic vector + lexical ranking
         if query and query.strip():
+            q_clean = query.strip().lower()
+            query_tokens = [t for t in re.split(r'\W+', q_clean) if len(t) > 2]
+
             await self.ensure_catalog_indexed()
             q_vec = await self.get_embedding(query.strip())
+            score_map: dict[str, float] = {}
             if q_vec:
                 try:
                     search_res = await self.vector_store.search(
                         collection_name=COLLECTION_NAME,
                         query_vector=q_vec,
                         limit=limit * 2,
-                        score_threshold=0.55,
+                        score_threshold=0.48,
                     )
                     score_map = {
-                        str(pt.get("id")): pt.get("score", 0.0)
+                        str(pt.get("id")): float(pt.get("score", 0.0))
                         for pt in search_res
                     }
-                    
-                    # Sort filtered authoritative items by semantic similarity score
-                    scored_items = []
-                    for p in filtered_products:
-                        pid = str(p.get("id"))
-                        if pid in score_map:
-                            scored_items.append((score_map[pid], p))
-                    
-                    scored_items.sort(key=lambda x: x[0], reverse=True)
-                    ranked_products = [p for _, p in scored_items]
-                    
-                    # If semantic items passed threshold, return them
-                    if ranked_products:
-                        return ranked_products[:limit]
-                    # If query was given but no items reached similarity threshold, return empty
-                    return []
                 except Exception as e:
                     logger.warning(f"Semantic search query error: {e}")
-                    return []
+
+            # Hybrid scoring: combine dense vector score with authoritative lexical token matches
+            scored_items = []
+            for p in filtered_products:
+                pid = str(p.get("id"))
+                score = score_map.get(pid, 0.0)
+                name_lower = (p.get("name") or "").lower()
+                desc_lower = (p.get("shortDescription") or p.get("description") or "").lower()
+
+                # Exact keyword matching boost
+                is_name_match = False
+                is_desc_match = False
+                for token in query_tokens:
+                    if re.search(r'\b' + re.escape(token) + r'\b', name_lower):
+                        score += 0.35
+                        is_name_match = True
+                    elif re.search(r'\b' + re.escape(token) + r'\b', desc_lower):
+                        score += 0.15
+                        is_desc_match = True
+
+                if score >= 0.48 or is_name_match or is_desc_match:
+                    scored_items.append((is_name_match, score, p))
+
+            # If user explicitly requested products that match catalog product names directly, return only those!
+            name_lexical_items = [p for is_name, _, p in scored_items if is_name]
+            if name_lexical_items:
+                return name_lexical_items[:limit]
+
+            scored_items.sort(key=lambda x: x[1], reverse=True)
+            ranked_products = [p for _, _, p in scored_items]
+
+            if ranked_products:
+                return ranked_products[:limit]
             return []
 
         return filtered_products[:limit]
@@ -233,11 +253,12 @@ class ProductService:
                 "Intent:"
             )
             ollama_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434").rstrip("/")
+            model_name = os.getenv("AI_MODEL") or os.getenv("DEFAULT_MODEL") or "atlas-concierge:latest"
             async with httpx.AsyncClient(timeout=5.0) as client:
                 res = await client.post(
                     f"{ollama_url}/api/generate",
                     json={
-                        "model": os.getenv("DEFAULT_MODEL", "qwen"),
+                        "model": model_name,
                         "prompt": prompt,
                         "stream": False,
                         "options": {
@@ -247,7 +268,7 @@ class ProductService:
                     },
                 )
                 if res.status_code == 200:
-                    intent_text = res.json().get("response", "").strip().strip('"').strip()
+                    intent_text = res.json().get("response", "").strip().strip('"\'“”`').strip()
                     if intent_text and len(intent_text) > 2:
                         filters["query"] = intent_text
                         logger.info(f"LLM semantic intent extracted: '{user_prompt}' -> '{intent_text}'")
@@ -289,7 +310,7 @@ class ProductService:
         q_clean = text
         q_clean = re.sub(r'(?:under|below|less than|max(?:imum)?|over|above|min(?:imum)?)\s*[$]?\s*\d+(?:\.\d+)?', '', q_clean)
         q_clean = re.sub(r'between\s*[$]?\s*\d+(?:\.\d+)?\s*(?:and|to)\s*[$]?\s*\d+(?:\.\d+)?', '', q_clean)
-        q_clean = re.sub(r'\b(show|me|list|out|tell|about|what|are|the|some|any|all|available|can|you|find)\b', '', q_clean)
+        q_clean = re.sub(r'\b(show|me|list|out|tell|about|what|are|the|some|any|all|available|can|you|find|only|just|to|display|get|give|look|for)\b', '', q_clean)
         q_clean = re.sub(r'\s+', ' ', q_clean).strip()
         if q_clean:
             filters["query"] = q_clean

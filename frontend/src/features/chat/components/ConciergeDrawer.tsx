@@ -334,16 +334,18 @@ export function ConciergeDrawer({
     'you', 'give', 'how', 'much', 'does', 'cost', 'product', 'products',
     'item', 'items', 'recommend', 'recommendation', 'recommendations',
     'device', 'devices', 'gadget', 'gadgets', 'shop', 'store', 'good',
-    'best', 'popular', 'all',
+    'best', 'popular', 'all', 'only', 'to', 'just', 'so', 'a', 'an', 'in',
+    'on', 'at', 'by', 'do', 'get', 'it', 'or', 'as', 'this', 'that', 'these',
+    'those', 'from', 'display',
   ]);
 
   const SYNONYM_MAP: Record<string, string[]> = {
     apple: ['apple', 'macbook', 'ipad', 'airpods'],
     mac: ['macbook', 'apple'],
     macbook: ['macbook', 'laptop', 'apple'],
-    ipad: ['ipad', 'tablet', 'apple'],
+    ipad: ['ipad', 'tablet'],
     airpods: ['airpods', 'apple', 'earbuds', 'headphones'],
-    iphone: ['apple', 'airpods', 'ipad', 'macbook'],
+    iphone: ['iphone'],
     samsung: ['samsung', 'galaxy', 'tab'],
     galaxy: ['samsung', 'galaxy', 'tab'],
     dell: ['dell', 'xps'],
@@ -358,7 +360,7 @@ export function ConciergeDrawer({
     headphone: ['airpods', 'sony', '1000xm5'],
     headphones: ['airpods', 'sony', '1000xm5'],
     earbuds: ['airpods'],
-    audio: ['airpods', 'sony', '1000xm5', 'microphone'],
+    audio: ['airpods', 'sony', 'microphone'],
     keyboard: ['keyboard', 'keychron', 'mechanical'],
     keyboards: ['keyboard', 'keychron', 'mechanical'],
     mouse: ['mouse', 'logitech', 'mx master'],
@@ -414,9 +416,11 @@ export function ConciergeDrawer({
           const haystack = `${nameLower} ${p.subtitle || ''} ${p.categorySlug || ''} ${(p.tags || []).join(' ')}`.toLowerCase();
           let score = 0;
           for (const term of searchTerms) {
-            if (nameLower.includes(term)) {
+            if (term.length < 2) continue;
+            const termRegex = new RegExp(`\\b${term}\\b`, 'i');
+            if (termRegex.test(nameLower)) {
               score += 4;
-            } else if (haystack.includes(term)) {
+            } else if (termRegex.test(haystack)) {
               score += 1;
             }
           }
@@ -496,12 +500,15 @@ export function ConciergeDrawer({
               ),
             );
           } else if (event.type === 'done') {
+            const isRefusal = /only authorized to assist|cannot assist|out of domain|refusal/i.test(accumulated);
             const finalProducts =
               streamedCitations.length > 0
                 ? streamedCitations
-                : (findProductsMentionedInText(accumulated).length > 0
-                    ? findProductsMentionedInText(accumulated)
-                    : (products.length > 0 ? products : findMatchingProducts(accumulated)));
+                : isRefusal
+                  ? []
+                  : (findProductsMentionedInText(accumulated).length > 0
+                      ? findProductsMentionedInText(accumulated)
+                      : (products.length > 0 ? products : findMatchingProducts(accumulated)));
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMsgId
