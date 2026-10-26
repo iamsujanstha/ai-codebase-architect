@@ -107,7 +107,6 @@ model orders {
   @@index([created_at(sort: Desc)], map: "idx_orders_created_at")
   @@index([order_number], map: "idx_orders_order_number")
   @@index([status], map: "idx_orders_status")
-  @@index([status], map: "idx_orders_status_demo")
   @@index([user_id, created_at(sort: Desc)], map: "idx_orders_user_created")
   @@index([user_id], map: "idx_orders_user_id")
   @@index([user_id, status, created_at(sort: Desc)], map: "idx_orders_user_status_date")
@@ -204,11 +203,45 @@ model users {
 }
 
 model webhook_events {
-  id           Int       @id @default(autoincrement())
-  event_id     String    @unique @db.VarChar(255)
-  event_type   String?   @db.VarChar(100)
-  payload      Json?
-  processed_at DateTime? @db.Timestamptz(6)
-  status       String?   @default("processing") @db.VarChar(20)
-  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  id              Int       @id @default(autoincrement())
+  event_id        String    @unique @db.VarChar(255)
+  event_type      String?   @db.VarChar(100)
+  payload         Json?
+  processed_at    DateTime? @db.Timestamptz(6)
+  status          String?   @default("processing") @db.VarChar(20)
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  // --- Retry & dead-letter fields (CRITICAL: without these, failed webhooks silently die) ---
+  retry_count     Int       @default(0)
+  next_retry_at   DateTime? @db.Timestamptz(6)
+  error_message   String?
+  dead_lettered_at DateTime? @db.Timestamptz(6)
+
+  @@index([status, next_retry_at], map: "idx_webhook_events_retry")
+  @@index([dead_lettered_at], map: "idx_webhook_events_dead_letter")
+}
+
+/// Outbox pattern: events written atomically with their parent DB change.
+/// A background worker reads this table and dispatches downstream side-effects
+/// (email, inventory sync, analytics). This guarantees at-least-once delivery
+/// even when external services (mail, Postgres replica) are temporarily unavailable.
+/// See: docs/architecture/adr/013-outbox-pattern-for-payment-events.md
+model outbox_events {
+  id             Int       @id @default(autoincrement())
+  aggregate_id   String    @db.VarChar(255)   // e.g. orderNumber
+  aggregate_type String    @db.VarChar(100)   // e.g. "Order"
+  event_type     String    @db.VarChar(100)   // e.g. "order.paid", "order.failed"
+  payload        Json                         // full denormalized event payload
+  status         String    @default("pending") @db.VarChar(20) // pending | processing | processed | dead_lettered
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  processed_at   DateTime? @db.Timestamptz(6)
+  attempts       Int       @default(0)
+  max_attempts   Int       @default(5)
+  next_attempt_at DateTime? @db.Timestamptz(6)
+  last_error     String?
+  dead_lettered_at DateTime? @db.Timestamptz(6)
+
+  // Partial index: only index rows that need work — keeps the index tiny as events accumulate
+  @@index([status, next_attempt_at], map: "idx_outbox_pending")
+  @@index([aggregate_id], map: "idx_outbox_aggregate_id")
+  @@index([dead_lettered_at], map: "idx_outbox_dead_letter")
 }

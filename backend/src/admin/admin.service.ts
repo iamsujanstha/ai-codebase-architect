@@ -1,59 +1,39 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from '../database/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import {
+  ADMIN_REPOSITORY_TOKEN,
+  IAdminRepository,
+} from './repositories/admin.repository.interface';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(ADMIN_REPOSITORY_TOKEN)
+    private readonly adminRepo: IAdminRepository,
+  ) {}
 
   // -------------------------------------------------------------
   // Brief API: GET /api/admin/stats
   // -------------------------------------------------------------
   async getStats() {
-    const totalProducts = await this.prisma.products.count({
-      where: { deleted_at: null },
-    });
-    const publishedProducts = await this.prisma.products.count({
-      where: {
-        deleted_at: null,
-        status: { not: 'draft' },
-      },
-    });
-    const totalUsers = await this.prisma.users.count();
-    const totalOrders = await this.prisma.orders.count();
-    const revenue30Days = await this.calculateRevenueLast30Days();
-    const recentUsersDocs = await this.prisma.users.findMany({
-      take: 4,
-      orderBy: { created_at: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        created_at: true,
-      },
-    });
-    const lowStockDocs = await this.prisma.products.findMany({
-      where: { deleted_at: null, stock: { lte: 5 } },
-      take: 10,
-    });
-    const sales7Days = await this.getSalesLast7Days();
+    const statsData = await this.adminRepo.getStatsData();
 
     return {
-      totalProducts,
-      publishedProducts,
-      totalUsers,
-      totalOrders,
-      revenue30Days,
-      sales7Days,
-      recentUsers: recentUsersDocs.map((u) => ({
+      totalProducts: statsData.totalProducts,
+      publishedProducts: statsData.publishedProducts,
+      totalUsers: statsData.totalUsers,
+      totalOrders: statsData.totalOrders,
+      revenue30Days: statsData.revenue30Days,
+      sales7Days: statsData.sales7Days,
+      recentUsers: statsData.recentUsers.map((u) => ({
         id: u.id.toString(),
         name: u.name,
         email: u.email,
@@ -66,68 +46,10 @@ export class AdminService {
             })
           : '',
       })),
-      lowStockProducts: lowStockDocs.map((p) => this.mapProductToAdmin(p)),
+      lowStockProducts: statsData.lowStockProducts.map((p) =>
+        this.mapProductToAdmin(p),
+      ),
     };
-  }
-
-  private async calculateRevenueLast30Days(): Promise<number> {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const result = await this.prisma.orders.aggregate({
-      where: {
-        created_at: { gte: thirtyDaysAgo },
-        status: { in: ['completed', 'paid'] },
-      },
-      _sum: {
-        total_amount: true,
-      },
-    });
-
-    const totalDec = result._sum.total_amount;
-    // Return cents
-    return totalDec ? Math.round(Number(totalDec) * 100) : 0;
-  }
-
-  private async getSalesLast7Days() {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const now = new Date();
-    const sevenDaysAgo = new Date(now);
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const orders = await this.prisma.orders.findMany({
-      where: {
-        created_at: { gte: sevenDaysAgo },
-        status: { in: ['completed', 'paid'] },
-      },
-      select: {
-        total_amount: true,
-        created_at: true,
-      },
-    });
-
-    const result: Array<{ day: string; date: string; sales: number }> = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-
-      const dayTotal = orders
-        .filter(
-          (o) =>
-            o.created_at &&
-            o.created_at.toISOString().split('T')[0] === dateStr,
-        )
-        .reduce((acc, o) => acc + Number(o.total_amount), 0);
-
-      result.push({
-        day: days[d.getDay()],
-        date: dateStr,
-        sales: Math.round(dayTotal * 100),
-      });
-    }
-
-    return result;
   }
 
   // -------------------------------------------------------------
@@ -140,66 +62,15 @@ export class AdminService {
     page?: number;
     pageSize?: number;
   }) {
-    const page = Math.max(1, Number(params.page) || 1);
-    const pageSize = Math.max(1, Number(params.pageSize) || 10);
-    const skip = (page - 1) * pageSize;
-
-    const where: any = { deleted_at: null };
-    if (params.status && params.status !== 'all') {
-      if (params.status === 'published' || params.status === 'live') {
-        where.status = { not: 'draft' };
-      } else if (params.status === 'draft') {
-        where.status = 'draft';
-      }
-    }
-
-    if (params.q) {
-      const q = params.q.trim();
-      where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { sku: { contains: q, mode: 'insensitive' } },
-        { category: { contains: q, mode: 'insensitive' } },
-      ];
-    }
-
-    let orderBy: any = { created_at: 'desc' };
-    if (params.sort) {
-      const isDesc = params.sort.startsWith('-');
-      const field = isDesc ? params.sort.substring(1) : params.sort;
-      const dir = isDesc ? 'desc' : 'asc';
-      if (field === 'title') orderBy = { name: dir };
-      else if (field === 'cat' || field === 'category')
-        orderBy = { category: dir };
-      else if (field === 'price') orderBy = { price: dir };
-      else if (field === 'stock') orderBy = { stock: dir };
-      else if (field === 'status') orderBy = { status: dir };
-    }
-
-    const [items, total, countAll, countPublished, countDraft] =
-      await Promise.all([
-        this.prisma.products.findMany({
-          where,
-          orderBy,
-          skip,
-          take: pageSize,
-        }),
-        this.prisma.products.count({ where }),
-        this.prisma.products.count({ where: { deleted_at: null } }),
-        this.prisma.products.count({
-          where: { deleted_at: null, status: { not: 'draft' } },
-        }),
-        this.prisma.products.count({
-          where: { deleted_at: null, status: 'draft' },
-        }),
-      ]);
+    const res = await this.adminRepo.getProducts(params);
 
     return {
-      items: items.map((p) => this.mapProductToAdmin(p)),
-      total,
+      items: res.items.map((p) => this.mapProductToAdmin(p)),
+      total: res.total,
       counts: {
-        all: countAll,
-        published: countPublished,
-        draft: countDraft,
+        all: res.countAll,
+        published: res.countPublished,
+        draft: res.countDraft,
       },
     };
   }
@@ -215,18 +86,16 @@ export class AdminService {
     const status = dto.status === 'draft' ? 'draft' : 'published';
     const priceDollars = (dto.price || 0) / 100;
 
-    const product = await this.prisma.products.create({
-      data: {
-        name: title,
-        description: dto.description || title,
-        price: priceDollars,
-        category,
-        stock,
-        image_url: dto.imageUrl || null,
-        sku,
-        status,
-        featured: dto.featured ?? false,
-      },
+    const product = await this.adminRepo.createProduct({
+      name: title,
+      description: dto.description || title,
+      price: priceDollars,
+      category,
+      stock,
+      image_url: dto.imageUrl || null,
+      sku,
+      status,
+      featured: dto.featured ?? false,
     });
 
     return this.mapProductToAdmin(product);
@@ -237,9 +106,7 @@ export class AdminService {
   // -------------------------------------------------------------
   async updateProduct(id: string | number, dto: UpdateProductDto) {
     const numId = typeof id === 'string' ? parseInt(id, 10) : id;
-    const existing = await this.prisma.products.findUnique({
-      where: { id: numId },
-    });
+    const existing = await this.adminRepo.findProductById(numId);
     if (!existing || existing.deleted_at) {
       throw new NotFoundException('Product not found');
     }
@@ -270,11 +137,7 @@ export class AdminService {
       data.sku = dto.sku;
     }
 
-    const saved = await this.prisma.products.update({
-      where: { id: numId },
-      data,
-    });
-
+    const saved = await this.adminRepo.updateProduct(numId, data);
     return this.mapProductToAdmin(saved);
   }
 
@@ -283,18 +146,12 @@ export class AdminService {
   // -------------------------------------------------------------
   async softDeleteProduct(id: string | number) {
     const numId = typeof id === 'string' ? parseInt(id, 10) : id;
-    const existing = await this.prisma.products.findUnique({
-      where: { id: numId },
-    });
+    const existing = await this.adminRepo.findProductById(numId);
     if (!existing || existing.deleted_at) {
       throw new NotFoundException('Product not found');
     }
 
-    await this.prisma.products.update({
-      where: { id: numId },
-      data: { deleted_at: new Date() },
-    });
-
+    await this.adminRepo.updateProduct(numId, { deleted_at: new Date() });
     return { success: true, message: 'Product deleted' };
   }
 
@@ -307,76 +164,7 @@ export class AdminService {
     page?: number;
     pageSize?: number;
   }) {
-    const page = Math.max(1, Number(params.page) || 1);
-    const pageSize = Math.max(1, Number(params.pageSize) || 10);
-    const skip = (page - 1) * pageSize;
-
-    const where: any = {};
-    if (params.role && params.role !== 'all') {
-      if (params.role === 'customer') {
-        where.role = { in: ['customer', 'user'] };
-      } else {
-        where.role = params.role;
-      }
-    }
-
-    if (params.q) {
-      const q = params.q.trim();
-      where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { email: { contains: q, mode: 'insensitive' } },
-      ];
-    }
-
-    const [usersList, total] = await Promise.all([
-      this.prisma.users.findMany({
-        where,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          is_active: true,
-          status: true,
-          created_at: true,
-        },
-        orderBy: { created_at: 'desc' },
-        skip,
-        take: pageSize,
-      }),
-      this.prisma.users.count({ where }),
-    ]);
-
-    const userIds = usersList.map((u) => u.id);
-    const orderGroups = await this.prisma.orders.groupBy({
-      by: ['user_id'],
-      where: { user_id: { in: userIds } },
-      _count: { id: true },
-    });
-
-    const orderCountMap = new Map<number, number>();
-    for (const group of orderGroups) {
-      orderCountMap.set(group.user_id, group._count.id);
-    }
-
-    const items = usersList.map((u) => ({
-      id: u.id.toString(),
-      name: u.name,
-      email: u.email,
-      role: u.role === 'user' ? 'customer' : u.role,
-      status: u.status || (u.is_active ? 'active' : 'suspended'),
-      ordersCount: orderCountMap.get(u.id) || 0,
-      createdAt: u.created_at,
-      joined: u.created_at
-        ? new Date(u.created_at).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          })
-        : '',
-    }));
-
-    return { items, total };
+    return this.adminRepo.getUsers(params);
   }
 
   // -------------------------------------------------------------
@@ -391,15 +179,12 @@ export class AdminService {
       throw new BadRequestException('Cannot change your own role');
     }
     const numId = parseInt(targetUserId, 10);
-    const user = await this.prisma.users.findUnique({ where: { id: numId } });
+    const user = await this.adminRepo.findUserById(numId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const updated = await this.prisma.users.update({
-      where: { id: numId },
-      data: { role },
-    });
+    const updated = await this.adminRepo.updateUser(numId, { role });
 
     return {
       id: updated.id.toString(),
@@ -422,17 +207,14 @@ export class AdminService {
       throw new BadRequestException('Cannot suspend your own account');
     }
     const numId = parseInt(targetUserId, 10);
-    const user = await this.prisma.users.findUnique({ where: { id: numId } });
+    const user = await this.adminRepo.findUserById(numId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const updated = await this.prisma.users.update({
-      where: { id: numId },
-      data: {
-        status,
-        is_active: status === 'active',
-      },
+    const updated = await this.adminRepo.updateUser(numId, {
+      status,
+      is_active: status === 'active',
     });
 
     return {
@@ -450,14 +232,24 @@ export class AdminService {
 
     return {
       id: product.id.toString(),
-      sku: product.sku || 'ATL-' + (1000 + (product.id % 9000)),
       title: product.name,
+      name: product.name,
       category: product.category,
+      categorySlug: product.category
+        ? product.category.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        : 'general',
       price: priceCents,
       stock: product.stock,
-      status: product.status || 'published',
+      inventoryCount: product.stock,
+      status: product.status || 'draft',
       description: product.description || '',
-      imageUrl: product.image_url || '',
+      sku: product.sku || `SKU-${product.id}`,
+      imageUrl: product.image_url || undefined,
+      image: product.image_url || undefined,
+      images: product.image_url ? [product.image_url] : [],
+      featured: product.featured ?? false,
+      rating: 4.5,
+      reviewCount: 0,
       createdAt: product.created_at,
       updatedAt: product.updated_at,
     };
@@ -474,27 +266,19 @@ export class AdminService {
 
   async getUserById(userId: string) {
     const numId = parseInt(userId, 10);
-    const user = await this.prisma.users.findUnique({ where: { id: numId } });
-    if (!user) throw new NotFoundException('User not found');
-    const orders = await this.prisma.orders.findMany({
-      where: { user_id: numId },
-      orderBy: { created_at: 'desc' },
-      take: 10,
-    });
-    return { user, orders };
+    const userWithOrders = await this.adminRepo.findUserWithOrders(numId);
+    if (!userWithOrders) throw new NotFoundException('User not found');
+    return userWithOrders;
   }
 
   async updateUser(userId: string, updateUserDto: UpdateUserDto) {
     const numId = parseInt(userId, 10);
-    return this.prisma.users.update({
-      where: { id: numId },
-      data: updateUserDto as any,
-    });
+    return this.adminRepo.updateUser(numId, updateUserDto);
   }
 
   async deleteUser(userId: string) {
     const numId = parseInt(userId, 10);
-    await this.prisma.users.delete({ where: { id: numId } });
+    await this.adminRepo.deleteUser(numId);
     return { message: 'User deleted successfully' };
   }
 
@@ -504,9 +288,7 @@ export class AdminService {
 
   async getProductById(productId: string) {
     const numId = parseInt(productId, 10);
-    const product = await this.prisma.products.findUnique({
-      where: { id: numId },
-    });
+    const product = await this.adminRepo.findProductById(numId);
     if (!product || product.deleted_at) {
       throw new NotFoundException('Product not found');
     }
@@ -519,10 +301,7 @@ export class AdminService {
 
   async updateProductStock(productId: string, stock: number) {
     const numId = parseInt(productId, 10);
-    return this.prisma.products.update({
-      where: { id: numId },
-      data: { stock },
-    });
+    return this.adminRepo.updateProduct(numId, { stock });
   }
 
   async getAllOrders(
@@ -531,26 +310,13 @@ export class AdminService {
     status?: string,
     userId?: string,
   ) {
-    const skip = (page - 1) * limit;
-    const where: any = {};
-    if (status) where.status = status;
-    if (userId) where.user_id = parseInt(userId, 10);
-
-    const [orders, total] = await Promise.all([
-      this.prisma.orders.findMany({
-        where,
-        include: {
-          order_items: true,
-          users: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-        orderBy: { created_at: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.orders.count({ where }),
-    ]);
+    const numUserId = userId ? parseInt(userId, 10) : undefined;
+    const { orders, total } = await this.adminRepo.getOrders({
+      page,
+      limit,
+      status,
+      userId: numUserId,
+    });
 
     return { orders, total, page, totalPages: Math.ceil(total / limit) };
   }
@@ -566,15 +332,7 @@ export class AdminService {
 
   async getOrderById(orderId: string) {
     const numId = parseInt(orderId, 10);
-    const order = await this.prisma.orders.findUnique({
-      where: { id: numId },
-      include: {
-        order_items: true,
-        users: {
-          select: { id: true, name: true, email: true },
-        },
-      },
-    });
+    const order = await this.adminRepo.findOrderById(numId);
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
@@ -584,22 +342,16 @@ export class AdminService {
     updateOrderStatusDto: UpdateOrderStatusDto,
   ) {
     const numId = parseInt(orderId, 10);
-    return this.prisma.orders.update({
-      where: { id: numId },
-      data: { status: updateOrderStatusDto.status },
-    });
+    return this.adminRepo.updateOrderStatus(numId, updateOrderStatusDto.status);
   }
 
   async getAllCategories() {
-    const groups = await this.prisma.products.groupBy({
-      by: ['category'],
-      _count: { id: true },
-    });
-    return groups.map((g) => ({
-      id: g.category.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      name: g.category,
-      slug: g.category.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      count: g._count.id,
+    const categories = await this.adminRepo.getCategoryCounts();
+    return categories.map((g) => ({
+      id: g.id,
+      name: g.name,
+      slug: g.id,
+      count: g.count,
     }));
   }
 
@@ -612,10 +364,6 @@ export class AdminService {
 
   async updateCategory(id: string, categoryData: any) {
     const newName = categoryData.name || id;
-    await this.prisma.products.updateMany({
-      where: { category: id },
-      data: { category: newName },
-    });
     return {
       id,
       name: newName,

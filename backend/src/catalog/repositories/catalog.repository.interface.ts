@@ -37,6 +37,7 @@ export interface CreateProductParams {
 }
 
 export interface ICatalogRepository {
+  count(): Promise<number>;
   getCategoryCounts(): Promise<CategoryCountRow[]>;
   findFeatured(limit: number): Promise<ProductRow[]>;
   findNewArrivals(limit: number): Promise<ProductRow[]>;

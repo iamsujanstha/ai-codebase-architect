@@ -4,19 +4,20 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
-  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import axios from 'axios';
 import { createHmac, randomBytes } from 'crypto';
 import Stripe from 'stripe';
-import { PrismaService } from '../database/prisma.service';
-import { Prisma } from '@prisma/client';
-import { PostgresService } from '../database/postgres.service';
+import {
+  IPaymentsRepository,
+  PAYMENTS_REPOSITORY_TOKEN,
+} from './repositories/payments.repository.interface';
 import { CheckoutCustomerDto } from './dto/checkout-customer.dto';
 import { CreatePaymentSessionDto } from './dto/create-payment-session.dto';
 import { PaymentQuoteRequestDto } from './dto/payment-quote-request.dto';
@@ -205,10 +206,9 @@ export class PaymentsService {
   });
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(PAYMENTS_REPOSITORY_TOKEN)
+    private readonly paymentsRepo: IPaymentsRepository,
     private readonly mailService: MailService,
-    @Optional()
-    private readonly postgresService?: PostgresService,
   ) {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? '';
     this.stripeClient = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
@@ -600,36 +600,10 @@ export class PaymentsService {
     userId?: string,
     userEmail?: string,
   ): Promise<OrderSummaryResponse[]> {
-    let pgUserId: number | undefined;
-    if (userEmail) {
-      const pgUser = await this.prisma.users.findUnique({
-        where: { email: userEmail.toLowerCase() },
-      });
-      if (pgUser) {
-        pgUserId = pgUser.id;
-      }
-    }
-    if (!pgUserId && userId && /^\d+$/.test(userId)) {
-      pgUserId = parseInt(userId, 10);
-    }
-
-    const whereConditions: any[] = [];
-    if (pgUserId) {
-      whereConditions.push({ user_id: pgUserId });
-    }
-    if (userEmail) {
-      whereConditions.push({ users: { email: userEmail.toLowerCase() } });
-    }
-
-    const rows = await this.prisma.orders.findMany({
-      where: whereConditions.length > 0 ? { OR: whereConditions } : undefined,
-      include: {
-        order_items: true,
-        users: true,
-      },
-      orderBy: { created_at: 'desc' },
-      take: 100,
-    });
+    const rows = await this.paymentsRepo.findOrdersByUserIdOrEmail(
+      userId,
+      userEmail,
+    );
 
     return rows.map(
       (order: {
@@ -866,12 +840,7 @@ export class PaymentsService {
       .map((id) => parseInt(id, 10))
       .filter((id) => !isNaN(id));
 
-    const products = await this.prisma.products.findMany({
-      where: {
-        id: { in: intIds },
-        deleted_at: null,
-      },
-    });
+    const products = await this.paymentsRepo.findProductsByIds(intIds);
 
     if (products.length !== normalizedItems.length) {
       throw new BadRequestException(
@@ -1086,52 +1055,35 @@ export class PaymentsService {
     if (userId && /^\d+$/.test(userId)) {
       numericUserId = parseInt(userId, 10);
     } else {
-      let user = await this.prisma.users.findUnique({
-        where: { email: customer.email.toLowerCase() },
-      });
-      if (!user) {
-        user = await this.prisma.users.create({
-          data: {
-            email: customer.email.toLowerCase(),
-            name: customer.fullName || customer.email.split('@')[0],
-            password: '',
-            role: 'customer',
-            status: 'active',
-          },
-        });
-      }
+      const user = await this.paymentsRepo.findOrCreateCustomer(
+        customer.email,
+        customer.fullName,
+      );
       numericUserId = user.id;
     }
 
     if (!numericUserId) {
-      const firstUser = await this.prisma.users.findFirst({
-        select: { id: true },
-      });
-      numericUserId = firstUser ? firstUser.id : 1;
+      numericUserId = await this.paymentsRepo.getFirstUserId();
     }
 
-    await this.prisma.orders.create({
-      data: {
-        user_id: numericUserId,
-        order_number: orderNumber,
-        total_amount: quote.total,
-        status: 'pending',
-        payment_method: provider.toLowerCase(),
-        order_items: {
-          create: pricedCart.map((item) => {
-            const intProdId = parseInt(item.productId, 10);
-            return {
-              product_id: !isNaN(intProdId) ? intProdId : 1,
-              name: item.name,
-              price:
-                provider === PaymentProvider.STRIPE
-                  ? item.unitAmountUsd
-                  : (item.unitAmountNpr ?? 0),
-              quantity: item.quantity,
-            };
-          }),
-        },
-      },
+    await this.paymentsRepo.createOrderSnapshot({
+      userId: numericUserId,
+      orderNumber,
+      totalAmount: quote.total,
+      status: 'pending',
+      paymentMethod: provider.toLowerCase(),
+      items: pricedCart.map((item) => {
+        const intProdId = parseInt(item.productId, 10);
+        return {
+          productId: !isNaN(intProdId) ? intProdId : 1,
+          name: item.name,
+          price:
+            provider === PaymentProvider.STRIPE
+              ? item.unitAmountUsd
+              : (item.unitAmountNpr ?? 0),
+          quantity: item.quantity,
+        };
+      }),
     });
 
     const snapshot: OrderRecord = {
@@ -1179,23 +1131,18 @@ export class PaymentsService {
         },
       ],
       save: async () => {
-        await this.prisma.orders.update({
-          where: { order_number: orderNumber },
-          data: {
-            status:
-              snapshot.status === OrderStatus.PAID
-                ? 'paid'
-                : snapshot.status === OrderStatus.FAILED
-                  ? 'failed'
-                  : 'pending',
-            payment_intent_id:
-              snapshot.paymentReference ??
-              snapshot.providerReference ??
-              snapshot.providerMetadata?.stripeCheckoutSessionId ??
-              null,
-            updated_at: new Date(),
-          },
-        });
+        await this.paymentsRepo.updateOrderStatus(
+          orderNumber,
+          snapshot.status === OrderStatus.PAID
+            ? 'paid'
+            : snapshot.status === OrderStatus.FAILED
+              ? 'failed'
+              : 'pending',
+          snapshot.paymentReference ??
+            snapshot.providerReference ??
+            snapshot.providerMetadata?.stripeCheckoutSessionId ??
+            null,
+        );
       },
     };
 
@@ -1273,54 +1220,118 @@ export class PaymentsService {
       note: options.note,
       changedAt: new Date(),
     });
-    await order.save();
 
-    // Sync paid status and decrement inventory in Neon PostgreSQL
-    if (this.postgresService?.isReady()) {
+    // OUTBOX PATTERN — CRITICAL FIX
+    //
+    // Problem this solves:
+    //   Before this fix, the call sequence was:
+    //     1. order.save()              ← Postgres write (commits)
+    //     2. postgresService.query()   ← separate write (can fail)
+    //     3. mailService.sendEmail()   ← external call (can fail)
+    //
+    //   If step 2 or 3 failed, the order was marked PAID in the DB
+    //   but the inventory was never decremented and the customer
+    //   never received a confirmation email. Silent data loss.
+    //
+    // Solution:
+    //   Write the order status update AND the outbox event in a SINGLE
+    //   Prisma transaction. Either both commit or both roll back.
+    //   A background worker (OutboxWorker) then picks up pending events
+    //   and executes side-effects with retry logic.
+    //
+    // Guarantees:
+    //   - At-least-once delivery of all downstream effects
+    //   - Order status and outbox event are always in sync
+    //   - Email and inventory failures are retried automatically
+    //   - Dead-lettered events are alerted on (never silently lost)
+    //
+    // See: docs/architecture/adr/013-outbox-pattern-for-payment-events.md
+    await this.paymentsRepo.markOrderAsPaidAtomic({
+      orderNumber,
+      paymentIntentId:
+        order.paymentReference ??
+        order.providerReference ??
+        order.providerMetadata?.stripeCheckoutSessionId ??
+        null,
+      outboxEvent: {
+        aggregateId: orderNumber,
+        aggregateType: 'Order',
+        eventType: 'order.paid',
+        payload: {
+          orderNumber,
+          userId: order.userId,
+          provider: order.paymentProvider,
+          providerReference: order.providerReference ?? null,
+          paymentReference: order.paymentReference ?? null,
+          providerMetadata: order.providerMetadata,
+          customerEmail: order.customer.email,
+          customerName: order.customer.fullName,
+          pricingTotal: order.pricing.total,
+          pricingCurrency: order.pricing.currency,
+          items: order.items.map((i) => ({
+            productId: i.productId,
+            name: i.name,
+            quantity: i.quantity,
+          })),
+          note: options.note,
+        },
+        nextAttemptAt: new Date(),
+      },
+    });
+
+    this.logger.log({
+      event: 'order_paid_committed',
+      orderNumber,
+      message: 'Order status and outbox event committed atomically',
+    });
+
+    // IMPORTANT: Direct side-effects below are intentionally kept as a
+    // best-effort fast path ONLY. The outbox worker is the guaranteed path.
+    // These fire-and-forget calls provide low-latency confirmation on the
+    // happy path (most common case) without blocking or risking consistency.
+    //
+    // If they fail, the OutboxWorker will retry from the outbox_events table.
+    // Do NOT await these in a way that can roll back the already-committed payment.
+
+    // Fast-path: inventory decrement (non-blocking, best-effort)
+    setImmediate(async () => {
       try {
-        await this.postgresService.query(
-          `UPDATE orders SET status = 'paid', payment_intent_id = $1, updated_at = NOW() WHERE order_number = $2`,
-          [
-            options.paymentReference ?? options.providerReference ?? null,
-            orderNumber,
-          ],
-        );
-        for (const item of order.items) {
-          const intId = parseInt(item.productId, 10);
-          if (!isNaN(intId)) {
-            await this.postgresService.query(
-              `UPDATE products SET stock = GREATEST(0, stock - $1), updated_at = NOW() WHERE id = $2`,
-              [item.quantity, intId],
-            );
-          }
-        }
+        const stockItems = order.items
+          .map((item) => ({
+            productId: parseInt(item.productId, 10),
+            quantity: item.quantity,
+          }))
+          .filter((item) => !isNaN(item.productId));
+
+        await this.paymentsRepo.decrementProductStock(stockItems);
         this.logger.log(
-          `✅ Order ${orderNumber} updated to paid in Neon PostgreSQL`,
+          `✅ Inventory decremented for order ${orderNumber} (fast path)`,
         );
       } catch (pgErr: unknown) {
         const message = pgErr instanceof Error ? pgErr.message : String(pgErr);
+        // Not fatal — OutboxWorker will retry via outbox_events
         this.logger.warn(
-          `Could not update order status in Neon PostgreSQL: ${message}`,
+          `Inventory fast-path failed for ${orderNumber}, OutboxWorker will retry: ${message}`,
         );
       }
-    }
+    });
 
-    // Send confirmation email to the customer.
-    // We await it properly so errors surface in logs instead of being silently swallowed.
-    // The email goes to the customer snapshot email on the order (which is the
-    // logged-in user's email, since checkout requires authentication).
-    try {
-      await this.mailService.sendOrderConfirmation(order);
-    } catch (emailError) {
-      // Email failure must never roll back a confirmed payment — log and continue.
-      this.logger.error(
-        `Order ${orderNumber} was paid but confirmation email failed: ` +
-          (emailError instanceof Error
-            ? emailError.message
-            : String(emailError)),
-      );
-    }
+    // Fast-path: confirmation email (non-blocking, best-effort)
+    setImmediate(async () => {
+      try {
+        await this.mailService.sendOrderConfirmation(order);
+      } catch (emailError) {
+        // Not fatal — OutboxWorker will retry via outbox_events
+        this.logger.warn(
+          `Email fast-path failed for ${orderNumber}, OutboxWorker will retry: ` +
+            (emailError instanceof Error
+              ? emailError.message
+              : String(emailError)),
+        );
+      }
+    });
   }
+
 
   private async markOrderAsFailed(
     orderNumber: string | null,
@@ -1471,13 +1482,7 @@ export class PaymentsService {
   private async getOrderByOrderNumber(
     orderNumber: string,
   ): Promise<OrderRecord> {
-    const order = await this.prisma.orders.findUnique({
-      where: { order_number: orderNumber },
-      include: {
-        users: true,
-        order_items: true,
-      },
-    });
+    const order = await this.paymentsRepo.findOrderByOrderNumber(orderNumber);
 
     if (!order) {
       throw new NotFoundException(
@@ -1538,23 +1543,18 @@ export class PaymentsService {
       createdAt: order.created_at,
       updatedAt: order.updated_at,
       save: async () => {
-        await this.prisma.orders.update({
-          where: { order_number: orderNumber },
-          data: {
-            status:
-              snapshot.status === OrderStatus.PAID
-                ? 'paid'
-                : snapshot.status === OrderStatus.FAILED
-                  ? 'failed'
-                  : 'pending',
-            payment_intent_id:
-              snapshot.paymentReference ??
-              snapshot.providerReference ??
-              snapshot.providerMetadata?.stripeCheckoutSessionId ??
-              null,
-            updated_at: new Date(),
-          },
-        });
+        await this.paymentsRepo.updateOrderStatus(
+          orderNumber,
+          snapshot.status === OrderStatus.PAID
+            ? 'paid'
+            : snapshot.status === OrderStatus.FAILED
+              ? 'failed'
+              : 'pending',
+          snapshot.paymentReference ??
+            snapshot.providerReference ??
+            snapshot.providerMetadata?.stripeCheckoutSessionId ??
+            null,
+        );
       },
     };
 
@@ -1659,90 +1659,20 @@ export class PaymentsService {
    */
 
   private async checkWebhookIdempotency(key: string): Promise<boolean> {
-    try {
-      const existing = await this.prisma.idempotency_keys.findUnique({
-        where: { key },
-      });
-      return !!existing;
-    } catch (error) {
-      this.logger.error({
-        event: 'webhook_idempotency_check_failed',
-        key,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return false;
-    }
+    return this.paymentsRepo.checkIdempotencyKey(key);
   }
 
   private async markWebhookAsProcessing(key: string): Promise<void> {
-    try {
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 72);
-
-      await this.prisma.idempotency_keys.create({
-        data: {
-          key,
-          status: 'processing',
-          expires_at: expiresAt,
-        },
-      });
-    } catch (error: unknown) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        this.logger.log({
-          event: 'webhook_concurrent_processing_detected',
-          key,
-        });
-        throw new ConflictException('Webhook is already being processed');
-      }
-
-      this.logger.error({
-        event: 'webhook_idempotency_insert_failed',
-        key,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 72);
+    await this.paymentsRepo.createIdempotencyKey(key, expiresAt);
   }
 
   private async markWebhookAsProcessed(key: string): Promise<void> {
-    try {
-      await this.prisma.idempotency_keys.update({
-        where: { key },
-        data: { status: 'processed' },
-      });
-
-      this.logger.log({
-        event: 'webhook_processed',
-        key,
-      });
-    } catch (error) {
-      this.logger.error({
-        event: 'webhook_idempotency_update_failed',
-        key,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await this.paymentsRepo.markIdempotencyKeyProcessed(key);
   }
 
   private async removeWebhookIdempotency(key: string): Promise<void> {
-    try {
-      await this.prisma.idempotency_keys.delete({
-        where: { key },
-      });
-
-      this.logger.log({
-        event: 'webhook_idempotency_removed',
-        key,
-        reason: 'Processing failed, allowing Stripe to retry',
-      });
-    } catch (error) {
-      this.logger.error({
-        event: 'webhook_idempotency_removal_failed',
-        key,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await this.paymentsRepo.deleteIdempotencyKey(key);
   }
 }

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { PostgresService } from './database/postgres.service';
+import { HEALTH_REPOSITORY_TOKEN } from './database/repositories/health.repository.interface';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -12,10 +12,14 @@ describe('AppController', () => {
       providers: [
         AppService,
         {
-          provide: PostgresService,
+          provide: HEALTH_REPOSITORY_TOKEN,
           useValue: {
-            isReady: () => true,
-            query: jest.fn().mockResolvedValue({ rows: [{ count: '10' }] }),
+            isDatabaseReady: () => true,
+            getSystemCounts: jest.fn().mockResolvedValue({
+              products: 10,
+              users: 5,
+              orders: 2,
+            }),
           },
         },
       ],

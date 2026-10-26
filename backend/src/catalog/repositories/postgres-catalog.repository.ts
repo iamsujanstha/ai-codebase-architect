@@ -12,6 +12,13 @@ import {
 export class PostgresCatalogRepository implements ICatalogRepository {
   constructor(private readonly pg: PostgresService) {}
 
+  async count(): Promise<number> {
+    const res = await this.pg.query<{ count: string | number }>(
+      'SELECT COUNT(*)::int AS count FROM products WHERE deleted_at IS NULL;',
+    );
+    return Number(res.rows[0]?.count || 0);
+  }
+
   async getCategoryCounts(): Promise<CategoryCountRow[]> {
     const sql = `
       SELECT category, COUNT(*)::int AS count

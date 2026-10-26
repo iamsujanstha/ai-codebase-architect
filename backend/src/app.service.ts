@@ -1,14 +1,20 @@
-import { Injectable } from '@nestjs/common';
-import { PostgresService } from './database/postgres.service';
+import { Inject, Injectable } from '@nestjs/common';
+import {
+  HEALTH_REPOSITORY_TOKEN,
+  IHealthRepository,
+} from './database/repositories/health.repository.interface';
 
 @Injectable()
 export class AppService {
-  constructor(private readonly postgresService: PostgresService) {}
+  constructor(
+    @Inject(HEALTH_REPOSITORY_TOKEN)
+    private readonly healthRepo: IHealthRepository,
+  ) {}
 
   getOverview() {
     return {
       service: 'AI Commerce + Local LLM Backend Gateway',
-      database: 'Neon Serverless PostgreSQL (via Prisma ORM)',
+      database: 'Neon Serverless PostgreSQL (via raw pg connection pool)',
       responsibility:
         'Validate client requests, orchestrate AI service calls, expose Neon PostgreSQL-backed ecommerce catalog APIs, and return stable contracts to the frontend.',
       endpoints: {
@@ -41,19 +47,10 @@ export class AppService {
       host: 'ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech',
     };
 
-    if (this.postgresService.isReady()) {
+    if (this.healthRepo.isDatabaseReady()) {
       try {
-        const [prodCount, userCount, orderCount] = await Promise.all([
-          this.postgresService.query('SELECT COUNT(*) FROM products'),
-          this.postgresService.query('SELECT COUNT(*) FROM users'),
-          this.postgresService.query('SELECT COUNT(*) FROM orders'),
-        ]);
-
-        pgDetails.counts = {
-          products: parseInt(prodCount.rows[0].count, 10),
-          users: parseInt(userCount.rows[0].count, 10),
-          orders: parseInt(orderCount.rows[0].count, 10),
-        };
+        const counts = await this.healthRepo.getSystemCounts();
+        pgDetails.counts = counts;
       } catch (err: any) {
         pgDetails.state = 'error';
         pgDetails.error = err.message;

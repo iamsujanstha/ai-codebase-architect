@@ -1,15 +1,21 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { PrismaService } from '../database/prisma.service';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  CATALOG_REPOSITORY_TOKEN,
+  ICatalogRepository,
+} from './repositories/catalog.repository.interface';
 
 @Injectable()
 export class CatalogSeedService implements OnModuleInit {
   private readonly logger = new Logger(CatalogSeedService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(CATALOG_REPOSITORY_TOKEN)
+    private readonly catalogRepo: ICatalogRepository,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     try {
-      const count = await this.prisma.products.count();
+      const count = await this.catalogRepo.count();
       this.logger.log(
         `PostgreSQL catalog verified. Active products count: ${count}`,
       );

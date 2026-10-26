@@ -1,24 +1,21 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../database/prisma.service';
+import { Inject, Injectable } from '@nestjs/common';
 import { SaveThreadDto } from './dto/save-thread.dto';
+import {
+  CHAT_THREADS_REPOSITORY_TOKEN,
+  IChatThreadsRepository,
+} from './repositories/chat-threads.repository.interface';
 
 @Injectable()
 export class ChatThreadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(CHAT_THREADS_REPOSITORY_TOKEN)
+    private readonly threadsRepo: IChatThreadsRepository,
+  ) {}
 
   /** Return all threads for a user, newest first. */
   async getThreadsForUser(userId: string) {
     const numericUserId = parseInt(userId, 10) || 1;
-    const rows = await this.prisma.chat_threads.findMany({
-      where: { user_id: numericUserId },
-      include: {
-        chat_messages: {
-          orderBy: { timestamp: 'asc' },
-        },
-      },
-      orderBy: { updated_at: 'desc' },
-      take: 100,
-    });
+    const rows = await this.threadsRepo.findByUserId(numericUserId);
 
     return rows.map((r) => ({
       id: r.id.toString(),
@@ -42,44 +39,13 @@ export class ChatThreadsService {
   async saveThread(userId: string, clientThreadId: string, dto: SaveThreadDto) {
     const numericUserId = parseInt(userId, 10) || 1;
 
-    let thread = await this.prisma.chat_threads.findFirst({
-      where: { user_id: numericUserId, client_thread_id: clientThreadId },
-    });
-
-    if (!thread) {
-      thread = await this.prisma.chat_threads.create({
-        data: {
-          user_id: numericUserId,
-          client_thread_id: clientThreadId,
-          title: dto.title,
-          model: dto.model ?? null,
-        },
-      });
-    } else {
-      thread = await this.prisma.chat_threads.update({
-        where: { id: thread.id },
-        data: {
-          title: dto.title,
-          model: dto.model ?? null,
-          updated_at: new Date(),
-        },
-      });
-    }
-
-    await this.prisma.chat_messages.deleteMany({
-      where: { thread_id: thread.id },
-    });
-
-    if (dto.messages && dto.messages.length > 0) {
-      await this.prisma.chat_messages.createMany({
-        data: dto.messages.map((m) => ({
-          thread_id: thread.id,
-          role: m.role || 'user',
-          content: m.content || '',
-          timestamp: m.createdAt ? new Date(m.createdAt) : new Date(),
-        })),
-      });
-    }
+    const thread = await this.threadsRepo.upsertThreadWithMessages(
+      numericUserId,
+      clientThreadId,
+      dto.title,
+      dto.model ?? null,
+      dto.messages,
+    );
 
     return {
       id: thread.id.toString(),
@@ -92,13 +58,6 @@ export class ChatThreadsService {
   /** Delete a thread — silently succeeds if it doesn't exist. */
   async deleteThread(userId: string, clientThreadId: string): Promise<void> {
     const numericUserId = parseInt(userId, 10) || 1;
-    const thread = await this.prisma.chat_threads.findFirst({
-      where: { user_id: numericUserId, client_thread_id: clientThreadId },
-    });
-    if (thread) {
-      await this.prisma.chat_threads.delete({
-        where: { id: thread.id },
-      });
-    }
+    await this.threadsRepo.deleteByClientThreadId(numericUserId, clientThreadId);
   }
 }

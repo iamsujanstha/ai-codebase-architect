@@ -1,5 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../database/prisma.service';
+import { Inject, Injectable } from '@nestjs/common';
+import {
+  IUsersRepository,
+  USERS_REPOSITORY_TOKEN,
+  UserRecord,
+} from './repositories/users.repository.interface';
 
 export enum UserRole {
   USER = 'user',
@@ -9,9 +13,12 @@ export enum UserRole {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(USERS_REPOSITORY_TOKEN)
+    private readonly usersRepo: IUsersRepository,
+  ) {}
 
-  private mapUser(row: any): any {
+  private mapUser(row: UserRecord | null): any {
     if (!row) return null;
     return {
       _id: row.id.toString(),
@@ -33,81 +40,52 @@ export class UsersService {
   }
 
   async create(userData: any): Promise<any> {
-    const row = await this.prisma.users.create({
-      data: {
-        email: userData.email,
-        password: userData.password,
-        name: userData.name,
-        role: userData.role || 'user',
-        google_id: userData.googleId || null,
-        avatar: userData.avatar || null,
-        is_active: userData.isActive ?? true,
-        status: userData.status || 'active',
-      },
+    const row = await this.usersRepo.create({
+      email: userData.email,
+      password: userData.password,
+      name: userData.name,
+      role: userData.role || 'user',
+      googleId: userData.googleId || null,
+      avatar: userData.avatar || null,
+      isActive: userData.isActive ?? true,
+      status: userData.status || 'active',
     });
     return this.mapUser(row);
   }
 
   async findByEmail(email: string): Promise<any> {
-    const row = await this.prisma.users.findUnique({
-      where: { email },
-    });
+    const row = await this.usersRepo.findByEmail(email);
     return this.mapUser(row);
   }
 
   async findById(id: string | number): Promise<any> {
     const numId = typeof id === 'string' ? parseInt(id, 10) : id;
     if (isNaN(numId)) return null;
-    const row = await this.prisma.users.findUnique({
-      where: { id: numId },
-    });
+    const row = await this.usersRepo.findById(numId);
     return this.mapUser(row);
   }
 
   async findByGoogleId(googleId: string): Promise<any> {
-    const row = await this.prisma.users.findUnique({
-      where: { google_id: googleId },
-    });
+    const row = await this.usersRepo.findByGoogleId(googleId);
     return this.mapUser(row);
   }
 
   async findByResetToken(token: string): Promise<any> {
-    const row = await this.prisma.users.findFirst({
-      where: {
-        reset_token: token,
-        reset_token_expires: { gt: new Date() },
-      },
-    });
+    const row = await this.usersRepo.findByResetToken(token);
     return this.mapUser(row);
   }
 
   async update(id: string | number, updateData: any): Promise<any> {
     const numId = typeof id === 'string' ? parseInt(id, 10) : id;
-    const data: any = {};
-    if (updateData.name !== undefined) data.name = updateData.name;
-    if (updateData.password !== undefined) data.password = updateData.password;
-    if (updateData.role !== undefined) data.role = updateData.role;
-    if (updateData.googleId !== undefined) data.google_id = updateData.googleId;
-    if (updateData.avatar !== undefined) data.avatar = updateData.avatar;
-    if (updateData.resetToken !== undefined)
-      data.reset_token = updateData.resetToken;
-    if (updateData.resetTokenExpires !== undefined)
-      data.reset_token_expires = updateData.resetTokenExpires;
-    if (updateData.isActive !== undefined) data.is_active = updateData.isActive;
-    if (updateData.status !== undefined) data.status = updateData.status;
-
-    const row = await this.prisma.users.update({
-      where: { id: numId },
-      data,
-    });
+    if (isNaN(numId)) return null;
+    const row = await this.usersRepo.update(numId, updateData);
     return this.mapUser(row);
   }
 
   async delete(id: string | number): Promise<any> {
     const numId = typeof id === 'string' ? parseInt(id, 10) : id;
-    await this.prisma.users.delete({
-      where: { id: numId },
-    });
+    if (isNaN(numId)) return { success: false };
+    await this.usersRepo.delete(numId);
     return { success: true };
   }
 }

@@ -1,13 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { UsersService, UserRole } from '../users/users.service';
-import { PrismaService } from '../database/prisma.service';
+import { PostgresService } from '../database/postgres.service';
 import * as bcrypt from 'bcrypt';
 
 async function seedAdmin() {
   const app = await NestFactory.createApplicationContext(AppModule);
   const usersService = app.get(UsersService);
-  const prisma = app.get(PrismaService);
+  const pg = app.get(PostgresService);
 
   const hashedPassword = await bcrypt.hash('password', 10);
 
@@ -169,25 +169,19 @@ async function seedAdmin() {
     ];
 
     for (const p of sampleProducts) {
-      const existingProduct = await prisma.products.findFirst({
-        where: { name: p.title },
-      });
-      if (!existingProduct) {
-        await prisma.products.create({
-          data: {
-            name: p.title,
-            description: p.description,
-            price: p.price,
-            stock: p.stock,
-            category: p.category,
-            status: p.status,
-            sku: p.sku,
-            featured: true,
-          },
-        });
+      const existingProduct = await pg.query(
+        'SELECT id FROM products WHERE name = $1 LIMIT 1;',
+        [p.title],
+      );
+      if (existingProduct.rows.length === 0) {
+        await pg.query(
+          `INSERT INTO products (name, description, price, stock, category, status, sku, featured, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW(), NOW());`,
+          [p.title, p.description, p.price, p.stock, p.category, p.status, p.sku],
+        );
       }
     }
-    console.log('✅ Products seeded successfully in PostgreSQL!');
+    console.log('✅ Products seeded successfully in PostgreSQL via pg pool!');
   } catch (error) {
     console.error('Error seeding data:', error);
     process.exit(1);

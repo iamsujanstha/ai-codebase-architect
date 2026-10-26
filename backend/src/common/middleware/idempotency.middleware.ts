@@ -1,18 +1,25 @@
 import {
   Injectable,
+  Inject,
   NestMiddleware,
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { PrismaService } from '../../database/prisma.service';
+import {
+  IIdempotencyRepository,
+  IDEMPOTENCY_REPOSITORY_TOKEN,
+} from '../repositories/idempotency.repository.interface';
 
 @Injectable()
 export class IdempotencyMiddleware implements NestMiddleware {
   private readonly IDEMPOTENCY_HEADER = 'idempotency-key';
   private readonly EXPIRY_HOURS = 24;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(IDEMPOTENCY_REPOSITORY_TOKEN)
+    private readonly idempotencyRepo: IIdempotencyRepository,
+  ) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
     if (
@@ -42,9 +49,7 @@ export class IdempotencyMiddleware implements NestMiddleware {
     );
 
     try {
-      const existing = await this.prisma.idempotency_keys.findUnique({
-        where: { key: compositeKey },
-      });
+      const existing = await this.idempotencyRepo.findKey(compositeKey);
 
       if (existing) {
         return res.status(409).json({
@@ -76,21 +81,12 @@ export class IdempotencyMiddleware implements NestMiddleware {
   private async cacheResponse(key: string, statusCode: number, body: any) {
     if (statusCode >= 400) return;
     try {
-      const expiresAt = new Date(Date.now() + this.EXPIRY_HOURS * 3600 * 1000);
-      await this.prisma.idempotency_keys.upsert({
-        where: { key },
-        create: {
-          key,
-          status: 'processed',
-          response: { statusCode, body },
-          expires_at: expiresAt,
-        },
-        update: {
-          status: 'processed',
-          response: { statusCode, body },
-          expires_at: expiresAt,
-        },
-      });
+      await this.idempotencyRepo.saveKey(
+        key,
+        statusCode,
+        body,
+        this.EXPIRY_HOURS,
+      );
     } catch (e) {
       console.warn('Could not cache idempotency key:', e);
     }
