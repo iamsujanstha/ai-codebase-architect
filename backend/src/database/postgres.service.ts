@@ -26,7 +26,11 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
         ssl: {
           rejectUnauthorized: false,
         },
-        max: 20,
+        max: Number(
+          this.configService.get<string>('POSTGRES_POOL_MAX') ||
+            process.env.POSTGRES_POOL_MAX ||
+            20,
+        ),
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 30000,
       });

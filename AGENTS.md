@@ -27,6 +27,14 @@ All business logic services and workers depend strictly on interfaces via NestJS
 | Idempotency | `IIdempotencyRepository` | `IDEMPOTENCY_REPOSITORY_TOKEN` | `PostgresIdempotencyRepository` (Raw SQL) |
 | System Health | `IHealthRepository` | `HEALTH_REPOSITORY_TOKEN` | `PostgresHealthRepository` (Raw SQL) |
 
+## Payment Provider Adapters
+Payment gateway integrations are fully decoupled from domain orchestration via the Adapter Pattern:
+
+| Gateway | Interface | Token | Implementation |
+|---|---|---|---|
+| Stripe | `IStripeProvider` | `STRIPE_PROVIDER_TOKEN` | `StripeProvider` |
+| eSewa | `IEsewaProvider` | `ESEWA_PROVIDER_TOKEN` | `EsewaProvider` |
+
 ## Rules for Code Modification
 1. **Never inject PostgresService directly into Domain Services, Controllers, or Workers.** Always route through the repository interface.
 2. **Never expose database-specific error codes (e.g. `23505`) out of repositories.** Map them to standard NestJS exceptions (e.g. `ConflictException`, `NotFoundException`).

@@ -84,7 +84,7 @@ Neither of these is acceptable in a commerce system.
 | File | Change |
 |---|---|
 | `prisma/schema.prisma` | Added `outbox_events` model; added retry fields to `webhook_events`; removed duplicate `idx_orders_status_demo` |
-| `prisma/manual_migrations/add_outbox_events_and_webhook_retry.sql` | Raw SQL migration (safe, additive-only) |
+| `src/database/migrations/002-outbox-and-webhook-retry.sql` | Raw SQL migration (safe, additive-only) |
 | `src/payments/payments.service.ts` | `markOrderAsPaid()` now uses `prisma.$transaction` to atomically write order update + outbox event |
 | `src/payments/outbox.worker.ts` | New NestJS provider — polls `outbox_events`, dispatches handlers, retries with backoff, dead-letters on permanent failure |
 | `src/payments/payments.module.ts` | Registered `OutboxWorker` as a provider |

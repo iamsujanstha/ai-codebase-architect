@@ -11,7 +11,6 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { UserDocument } from '../users/schemas/user.schema';
 
 @Injectable()
 export class AuthService {
@@ -115,7 +114,7 @@ export class AuthService {
     return this.generateToken(user);
   }
 
-  private generateToken(user: UserDocument) {
+  private generateToken(user: any) {
     const payload = {
       email: user.email,
       sub: user._id,

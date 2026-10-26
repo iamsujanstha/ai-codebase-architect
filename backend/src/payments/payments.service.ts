@@ -3,16 +3,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   BadRequestException,
-  ConflictException,
   Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
-import axios from 'axios';
-import { createHmac, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 import Stripe from 'stripe';
 import {
   IPaymentsRepository,
@@ -35,12 +32,14 @@ import {
   PaymentQuoteResponse,
   ProviderQuote,
 } from './interfaces/payment-quote.interface';
-import { MailService } from '../mail/mail.service';
 import {
-  CircuitBreaker,
-  CircuitBreakerOpenError,
-} from '../common/utils/circuit-breaker.util';
-import { retryWithBackoff } from '../common/utils/retry.util';
+  ESEWA_PROVIDER_TOKEN,
+  IEsewaProvider,
+  IStripeProvider,
+  PricedCartLine,
+  STRIPE_PROVIDER_TOKEN,
+} from './interfaces/payment-provider.interface';
+import { MailService } from '../mail/mail.service';
 
 export interface ProviderMetadata {
   stripeCheckoutSessionId?: string | null;
@@ -93,133 +92,38 @@ export interface OrderRecord {
   paidAt?: Date | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;
-  save: () => Promise<void>;
-  toObject?: () => Record<string, unknown>;
 }
 
-interface PricedCartLine {
-  productId: string;
-  slug: string;
-  name: string;
-  quantity: number;
-  unitAmountUsd: number;
-  unitAmountNpr: number | null;
-}
-
-interface QuoteBreakdown {
-  currency: string;
-  subtotal: number;
-  taxAmount: number;
-  serviceCharge: number;
-  deliveryCharge: number;
-  total: number;
-}
-
-interface EsewaSuccessPayload {
-  transaction_code?: string;
-  status?: string;
-  total_amount?: number | string;
-  transaction_uuid?: string;
-  product_code?: string;
-  signed_field_names?: string;
-  signature?: string;
-}
-
-// The payment service is the orchestration layer for commerce payments.
-// It does not trust client-side prices, quantities, or provider callbacks blindly.
-//
-// Production best-practice themes reflected here:
-// - server-side pricing
-// - provider-specific order snapshots
-// - webhook verification
-// - signed callback verification
-// - consistent internal order state no matter which provider is used
-//
-// PHASE 2 IMPROVEMENTS:
-// - Circuit breaker for Stripe API (prevents cascading failures)
-// - Retry with exponential backoff (handles transient errors)
-// - Fail fast when Stripe is down (better UX)
+/**
+ * PaymentsService — Domain Workflow Orchestrator
+ *
+ * Responsibilities:
+ * - Server-side cart validation and catalog pricing
+ * - Order snapshot creation and atomic state management
+ * - Delegation to dedicated payment provider adapters (StripeProvider, EsewaProvider)
+ * - Atomic transactional outbox dispatch for payment side-effects
+ * - Order retrieval and purchase history queries
+ */
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
-  private readonly frontendPublicUrl =
-    process.env.FRONTEND_PUBLIC_URL ?? 'http://localhost:8080';
-  private readonly backendPublicUrl =
-    process.env.BACKEND_PUBLIC_URL ?? 'http://localhost:3000';
-  private readonly stripeAutomaticTaxEnabled =
-    (process.env.STRIPE_AUTOMATIC_TAX_ENABLED ?? 'false') === 'true';
-  private readonly stripeShippingFeeUsd = Number(
-    process.env.STRIPE_SHIPPING_FEE_USD ?? '0',
-  );
-  private readonly esewaTaxAmountNpr = Number(
-    process.env.ESEWA_TAX_AMOUNT_NPR ?? '0',
-  );
-  private readonly esewaServiceChargeNpr = Number(
-    process.env.ESEWA_SERVICE_CHARGE_NPR ?? '0',
-  );
-  private readonly esewaDeliveryChargeNpr = Number(
-    process.env.ESEWA_DELIVERY_CHARGE_NPR ?? '0',
-  );
-  private readonly esewaProductCode = process.env.ESEWA_PRODUCT_CODE ?? '';
-  private readonly esewaSecretKey = process.env.ESEWA_SECRET_KEY ?? '';
-  private readonly esewaFormUrl =
-    process.env.ESEWA_FORM_URL ??
-    'https://rc-epay.esewa.com.np/api/epay/main/v2/form';
-  private readonly esewaStatusCheckUrl =
-    process.env.ESEWA_STATUS_CHECK_URL ??
-    'https://rc.esewa.com.np/api/epay/transaction/status/';
-  private readonly stripeWebhookSecret =
-    process.env.STRIPE_WEBHOOK_SECRET ?? '';
-  private readonly stripeClient: Stripe | null;
-
-  /**
-   * PHASE 2: Circuit breaker for Stripe API calls
-   *
-   * Why: Stripe API failures should not cascade to entire system
-   * Threshold: 3 failures (payments are critical, fail fast)
-   * Reset: 60 seconds (give Stripe time to recover)
-   *
-   * Behavior:
-   * - First 3 Stripe failures: Try normally (with retry)
-   * - After 3 failures: Circuit opens
-   * - While open: Reject immediately (no timeout wait)
-   * - After 60s: Try one request (half-open)
-   * - If success: Circuit closes
-   * - If failure: Circuit opens again
-   */
-  private readonly stripeCircuitBreaker = new CircuitBreaker({
-    name: 'stripe-api',
-    failureThreshold: 3,
-    resetTimeout: 60000,
-  });
-
-  /**
-   * PHASE 2: Circuit breaker for eSewa API calls
-   *
-   * Threshold: 5 failures (less critical, more tolerant)
-   * Reset: 120 seconds (longer recovery time)
-   */
-  private readonly esewaCircuitBreaker = new CircuitBreaker({
-    name: 'esewa-api',
-    failureThreshold: 5,
-    resetTimeout: 120000,
-  });
 
   constructor(
     @Inject(PAYMENTS_REPOSITORY_TOKEN)
     private readonly paymentsRepo: IPaymentsRepository,
+    @Inject(STRIPE_PROVIDER_TOKEN)
+    private readonly stripeProvider: IStripeProvider,
+    @Inject(ESEWA_PROVIDER_TOKEN)
+    private readonly esewaProvider: IEsewaProvider,
     private readonly mailService: MailService,
-  ) {
-    const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? '';
-    this.stripeClient = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
-  }
+  ) {}
 
   async getQuote(
     request: PaymentQuoteRequestDto,
   ): Promise<PaymentQuoteResponse> {
     const pricedCart = await this.buildPricedCart(request.items);
-    const stripeQuote = this.buildStripeQuote(pricedCart);
-    const esewaQuote = this.buildEsewaQuote(pricedCart);
+    const stripeQuote = this.stripeProvider.buildQuote(pricedCart);
+    const esewaQuote = this.esewaProvider.buildQuote(pricedCart);
 
     return {
       items: pricedCart.map((item) => ({
@@ -238,14 +142,8 @@ export class PaymentsService {
     request: CreatePaymentSessionDto,
     userId?: string,
   ): Promise<CreateStripeCheckoutSessionResponse> {
-    if (!this.stripeClient) {
-      throw new BadRequestException(
-        'Stripe is not configured. Add STRIPE_SECRET_KEY to enable this provider.',
-      );
-    }
-
     const pricedCart = await this.buildPricedCart(request.items);
-    const quote = this.buildStripeQuote(pricedCart);
+    const quote = this.stripeProvider.buildQuote(pricedCart);
 
     if (!quote.enabled) {
       throw new BadRequestException(
@@ -262,136 +160,26 @@ export class PaymentsService {
     );
 
     try {
-      /**
-       * PHASE 2: Circuit breaker + retry for Stripe API calls
-       *
-       * Flow:
-       * 1. Check circuit state (closed/open/half-open)
-       * 2. If open: Throw immediately (fail fast)
-       * 3. If closed/half-open: Execute with retry
-       * 4. Retry up to 3 times with exponential backoff (100ms → 200ms → 400ms)
-       * 5. If all retries fail: Circuit breaker counts as 1 failure
-       * 6. After 3 failures: Circuit opens
-       *
-       * Benefits:
-       * - Transient errors: Recovered by retry (user doesn't see error)
-       * - Sustained outage: Circuit opens (fail fast, no timeout wait)
-       * - Better UX: "Payment system unavailable, try again in 1 minute"
-       */
-      const stripeSession = await this.stripeCircuitBreaker.execute(
-        async () => {
-          return await retryWithBackoff(
-            async () => {
-              return await this.stripeClient!.checkout.sessions.create(
-                {
-                  mode: 'payment',
-                  client_reference_id: order.orderNumber,
-                  customer_creation: 'always',
-                  customer_email: request.customer.email,
-                  billing_address_collection: 'auto',
-                  phone_number_collection: {
-                    enabled: true,
-                  },
-                  automatic_tax: {
-                    enabled: this.stripeAutomaticTaxEnabled,
-                  },
-                  success_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&session_id={CHECKOUT_SESSION_ID}`,
-                  cancel_url: `${this.frontendPublicUrl}/checkout/result?provider=stripe&orderNumber=${encodeURIComponent(order.orderNumber)}&status=canceled`,
-                  line_items: this.buildStripeLineItems(pricedCart, quote),
-                  metadata: {
-                    orderNumber: order.orderNumber,
-                    customerEmail: request.customer.email,
-                    paymentProvider: PaymentProvider.STRIPE,
-                  },
-                  payment_intent_data: {
-                    metadata: {
-                      orderNumber: order.orderNumber,
-                      paymentProvider: PaymentProvider.STRIPE,
-                    },
-                  },
-                  expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-                },
-                {
-                  idempotencyKey: `order-${order.orderNumber}`,
-                },
-              );
-            },
-            {
-              maxRetries: 3,
-              initialDelay: 100,
-              context: 'stripe-checkout-session',
-              shouldRetry: (error: unknown) => {
-                const err = error as { code?: string; type?: string };
-                // Retry on network errors
-                if (err?.code === 'ECONNREFUSED' || err?.code === 'ETIMEDOUT') {
-                  return true;
-                }
-                // Retry on Stripe rate limit
-                if (err?.type === 'StripeRateLimitError') {
-                  return true;
-                }
-                // Retry on Stripe API errors (but not card errors)
-                if (err?.type === 'StripeAPIError') {
-                  return true;
-                }
-                // Don't retry card errors (user needs to fix)
-                if (err?.type === 'StripeCardError') {
-                  return false;
-                }
-                // Don't retry invalid request (our bug, not transient)
-                if (err?.type === 'StripeInvalidRequestError') {
-                  return false;
-                }
-                return false;
-              },
-            },
-          );
-        },
+      const response = await this.stripeProvider.createCheckoutSession({
+        orderNumber: order.orderNumber,
+        customerEmail: request.customer.email,
+        pricedCart,
+        quote,
+      });
+
+      await this.paymentsRepo.updateOrderStatus(
+        order.orderNumber,
+        'pending',
+        response.orderNumber,
       );
 
-      order.providerMetadata.stripeCheckoutSessionId = stripeSession.id;
-      order.history.push({
-        status: OrderStatus.PENDING_PAYMENT,
-        note: 'Stripe Checkout Session created.',
-        changedAt: new Date(),
-      });
-      await order.save();
-
-      if (!stripeSession.url) {
-        throw new InternalServerErrorException(
-          'Stripe returned a checkout session without a redirect URL.',
-        );
-      }
-
-      return {
-        orderNumber: order.orderNumber,
-        checkoutUrl: stripeSession.url,
-      };
+      return response;
     } catch (error) {
       await this.markOrderAsFailed(
         order.orderNumber,
         'Stripe session creation failed before redirect.',
       );
-
-      // Circuit breaker open: Return user-friendly error
-      if (error instanceof CircuitBreakerOpenError) {
-        this.logger.error({
-          event: 'stripe_circuit_open',
-          orderNumber: order.orderNumber,
-          message: 'Stripe circuit breaker is open - service appears down',
-        });
-        throw new ServiceUnavailableException(
-          'Payment system is temporarily unavailable. Please try again in 1 minute.',
-        );
-      }
-
-      this.logger.error(
-        'Stripe checkout session creation failed.',
-        error instanceof Error ? error.stack : String(error),
-      );
-      throw new InternalServerErrorException(
-        'The server could not create a Stripe checkout session.',
-      );
+      throw error;
     }
   }
 
@@ -400,7 +188,7 @@ export class PaymentsService {
     userId?: string,
   ): Promise<EsewaCheckoutResponse> {
     const pricedCart = await this.buildPricedCart(request.items);
-    const quote = this.buildEsewaQuote(pricedCart);
+    const quote = this.esewaProvider.buildQuote(pricedCart);
 
     if (!quote.enabled) {
       throw new BadRequestException(
@@ -416,76 +204,30 @@ export class PaymentsService {
       userId,
     );
 
-    const fields = {
-      amount: this.formatEsewaAmount(quote.subtotal),
-      tax_amount: this.formatEsewaAmount(quote.taxAmount),
-      total_amount: this.formatEsewaAmount(quote.total),
-      transaction_uuid: order.orderNumber,
-      product_code: this.esewaProductCode,
-      product_service_charge: this.formatEsewaAmount(quote.serviceCharge),
-      product_delivery_charge: this.formatEsewaAmount(quote.deliveryCharge),
-      success_url: `${this.backendPublicUrl}/payments/esewa/success?orderNumber=${encodeURIComponent(order.orderNumber)}`,
-      failure_url: `${this.backendPublicUrl}/payments/esewa/failure?orderNumber=${encodeURIComponent(order.orderNumber)}`,
-      signed_field_names: 'total_amount,transaction_uuid,product_code',
-      signature: this.generateEsewaSignature({
-        total_amount: this.formatEsewaAmount(quote.total),
-        transaction_uuid: order.orderNumber,
-        product_code: this.esewaProductCode,
-      }),
-    };
-
-    order.providerMetadata.esewaTransactionUuid = order.orderNumber;
-    order.history.push({
-      status: OrderStatus.PENDING_PAYMENT,
-      note: 'eSewa payment redirect prepared.',
-      changedAt: new Date(),
-    });
-    await order.save();
-
-    return {
+    const checkoutResponse = this.esewaProvider.createCheckout({
       orderNumber: order.orderNumber,
-      actionUrl: this.esewaFormUrl,
-      method: 'POST',
-      fields,
-    };
+      quote,
+    });
+
+    await this.paymentsRepo.updateOrderStatus(
+      order.orderNumber,
+      'pending',
+      order.orderNumber,
+    );
+
+    return checkoutResponse;
   }
 
   async handleStripeWebhook(
     rawBody: Buffer | undefined,
     stripeSignature: string | undefined,
   ): Promise<{ received: true }> {
-    if (!this.stripeClient || !this.stripeWebhookSecret) {
-      throw new BadRequestException(
-        'Stripe webhook handling requires STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.',
-      );
-    }
+    const event = this.stripeProvider.constructWebhookEvent(
+      rawBody,
+      stripeSignature,
+    );
 
-    if (!rawBody || !stripeSignature) {
-      throw new BadRequestException(
-        'Stripe webhook signature verification requires the raw body and Stripe-Signature header.',
-      );
-    }
-
-    let event: Stripe.Event;
-
-    try {
-      event = this.stripeClient.webhooks.constructEvent(
-        rawBody,
-        stripeSignature,
-        this.stripeWebhookSecret,
-      );
-    } catch (error) {
-      this.logger.warn(
-        `Stripe webhook signature verification failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      throw new BadRequestException('Invalid Stripe webhook signature.');
-    }
-
-    // PHASE 1 CRITICAL FIX: Webhook Deduplication
-    // Stripe may send the same webhook multiple times (network retry, failover)
-    // Use Stripe event ID as idempotency key to prevent duplicate processing
+    // Webhook Deduplication via Idempotency Key
     const idempotencyKey = `stripe_webhook:${event.id}`;
     const isDuplicate = await this.checkWebhookIdempotency(idempotencyKey);
 
@@ -496,31 +238,30 @@ export class PaymentsService {
         stripeEventType: event.type,
         message: 'Duplicate webhook ignored (already processed)',
       });
-      return { received: true }; // Return success (idempotent)
+      return { received: true };
     }
 
-    // Mark as processing (atomic operation prevents race condition)
     await this.markWebhookAsProcessing(idempotencyKey);
 
     try {
       switch (event.type) {
         case 'checkout.session.completed':
         case 'checkout.session.async_payment_succeeded': {
-          const session = event.data.object;
+          const session = event.data.object as Stripe.Checkout.Session;
           await this.syncOrderWithStripeSession(session);
           break;
         }
         case 'checkout.session.async_payment_failed': {
-          const session = event.data.object;
+          const session = event.data.object as Stripe.Checkout.Session;
           await this.markOrderAsFailed(
-            this.extractOrderNumberFromStripeSession(session),
+            this.stripeProvider.extractOrderNumber(session),
             'Stripe reported that the asynchronous payment failed.',
           );
           break;
         }
         case 'checkout.session.expired': {
-          const session = event.data.object;
-          const orderNumber = this.extractOrderNumberFromStripeSession(session);
+          const session = event.data.object as Stripe.Checkout.Session;
+          const orderNumber = this.stripeProvider.extractOrderNumber(session);
           if (orderNumber) {
             await this.updateOrderStatus(
               orderNumber,
@@ -531,7 +272,6 @@ export class PaymentsService {
           break;
         }
         default:
-          // Unknown event type, log but don't fail
           this.logger.log({
             event: 'webhook_unknown_type',
             stripeEventId: event.id,
@@ -540,12 +280,10 @@ export class PaymentsService {
           break;
       }
 
-      // Mark as successfully processed
       await this.markWebhookAsProcessed(idempotencyKey);
     } catch (error) {
-      // If processing fails, remove the idempotency key so Stripe can retry
       await this.removeWebhookIdempotency(idempotencyKey);
-      throw error; // Let Stripe know to retry
+      throw error;
     }
 
     return { received: true };
@@ -555,15 +293,12 @@ export class PaymentsService {
     checkoutSessionId: string,
     requestedOrderNumber?: string,
   ): Promise<StripeSessionStatusResponse> {
-    if (!this.stripeClient) {
-      throw new BadRequestException('Stripe is not configured.');
-    }
-
     const session =
-      await this.stripeClient.checkout.sessions.retrieve(checkoutSessionId);
+      await this.stripeProvider.retrieveSession(checkoutSessionId);
 
     const orderNumber =
-      requestedOrderNumber || this.extractOrderNumberFromStripeSession(session);
+      requestedOrderNumber ||
+      this.stripeProvider.extractOrderNumber(session);
 
     if (!orderNumber) {
       throw new NotFoundException(
@@ -605,71 +340,55 @@ export class PaymentsService {
       userEmail,
     );
 
-    return rows.map(
-      (order: {
-        order_items: any;
-        total_amount: any;
-        order_number: any;
-        status: string;
-        payment_method: string | null;
-        users: { name: any; email: any };
-        created_at: { toISOString: () => any };
-        updated_at: { toISOString: () => any };
-      }) => {
-        const items = (order.order_items || []).map(
-          (oi: {
-            product_id: any;
-            name: string;
-            quantity: any;
-            price: any;
-            subtotal: any;
-          }) => ({
-            productId: String(oi.product_id),
-            slug: oi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            name: oi.name,
-            quantity: oi.quantity,
-            unitAmount: Number(oi.price),
-            lineTotal: Number(oi.subtotal),
-            currency: 'USD',
-          }),
-        );
-        const total = Number(order.total_amount);
+    return rows.map((order) => {
+      const items = (order.order_items || []).map((oi: any) => ({
+        productId: String(oi.product_id),
+        slug: (oi.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        name: oi.name,
+        quantity: oi.quantity,
+        unitAmount: Number(oi.price),
+        lineTotal: Number(oi.subtotal),
+        currency: 'USD',
+      }));
 
-        return {
-          orderNumber: order.order_number,
-          status:
-            order.status === 'paid'
-              ? OrderStatus.PAID
-              : order.status === 'failed'
-                ? OrderStatus.FAILED
-                : OrderStatus.PENDING_PAYMENT,
-          paymentProvider:
-            order.payment_method?.toUpperCase() === 'ESEWA'
-              ? PaymentProvider.ESEWA
-              : PaymentProvider.STRIPE,
-          customer: {
-            fullName: order.users?.name || order.users?.email || 'Customer',
-            email: order.users?.email || '',
-            phone: undefined,
-          },
-          items,
-          pricing: {
-            currency: 'USD',
-            subtotal: total,
-            taxAmount: 0,
-            serviceCharge: 0,
-            deliveryCharge: 0,
-            total,
-          },
-          createdAt: order.created_at
-            ? order.created_at.toISOString()
-            : new Date().toISOString(),
-          updatedAt: order.updated_at
-            ? order.updated_at.toISOString()
-            : new Date().toISOString(),
-        };
-      },
-    );
+      const total = Number(order.total_amount);
+      const createdAtRaw = order.created_at;
+      const createdAt =
+        createdAtRaw instanceof Date
+          ? createdAtRaw.toISOString()
+          : typeof createdAtRaw === 'string'
+            ? createdAtRaw
+            : new Date().toISOString();
+
+      return {
+        orderNumber: order.order_number,
+        status:
+          order.status === 'paid'
+            ? OrderStatus.PAID
+            : order.status === 'failed'
+              ? OrderStatus.FAILED
+              : OrderStatus.PENDING_PAYMENT,
+        paymentProvider:
+          order.payment_method?.toUpperCase() === 'ESEWA'
+            ? PaymentProvider.ESEWA
+            : PaymentProvider.STRIPE,
+        customer: {
+          fullName: order.users?.name || order.users?.email || 'Customer',
+          email: order.users?.email || '',
+        },
+        pricing: {
+          currency: 'USD',
+          subtotal: total,
+          taxAmount: 0,
+          serviceCharge: 0,
+          deliveryCharge: 0,
+          total,
+        },
+        items,
+        paymentReference: order.payment_intent_id ?? undefined,
+        createdAt,
+      };
+    });
   }
 
   async getPurchasedProductsForUser(
@@ -677,47 +396,45 @@ export class PaymentsService {
     userEmail?: string,
   ): Promise<{
     productIds: string[];
-    purchasedItems: Array<{
+    items: Array<{
       productId: string;
       name: string;
-      quantity: number;
-      price: number;
-      orderNumber: string;
+      slug: string;
       purchasedAt: string;
-      status: string;
+      orderNumber: string;
     }>;
     totalOrders: number;
   }> {
     const orders = await this.getOrdersForUser(userId, userEmail);
-    const productIds = new Set<string>();
-    const purchasedItems: Array<{
+    const paidOrders = orders.filter((o) => o.status === OrderStatus.PAID);
+
+    const seenIds = new Set<string>();
+    const items: Array<{
       productId: string;
       name: string;
-      quantity: number;
-      price: number;
-      orderNumber: string;
+      slug: string;
       purchasedAt: string;
-      status: string;
+      orderNumber: string;
     }> = [];
 
-    for (const order of orders) {
+    for (const order of paidOrders) {
       for (const item of order.items) {
-        productIds.add(item.productId);
-        purchasedItems.push({
-          productId: item.productId,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.unitAmount,
-          orderNumber: order.orderNumber,
-          purchasedAt: order.createdAt,
-          status: order.status,
-        });
+        if (!seenIds.has(item.productId)) {
+          seenIds.add(item.productId);
+          items.push({
+            productId: item.productId,
+            name: item.name,
+            slug: item.slug,
+            purchasedAt: order.createdAt,
+            orderNumber: order.orderNumber,
+          });
+        }
       }
     }
 
     return {
-      productIds: Array.from(productIds),
-      purchasedItems,
+      productIds: Array.from(seenIds),
+      items,
       totalOrders: orders.length,
     };
   }
@@ -727,42 +444,19 @@ export class PaymentsService {
     query: Record<string, string | undefined>,
   ): Promise<string> {
     const order = await this.getOrderByOrderNumber(orderNumber);
-    const encodedPayload = query.data ?? this.extractEsewaEncodedPayload(query);
+    const verification = this.esewaProvider.verifyCallbackPayload(query);
 
-    if (!encodedPayload) {
+    if (!verification.verified || !verification.payload) {
       await this.markOrderAsFailed(
         orderNumber,
-        'eSewa returned without an encoded success payload.',
+        verification.failureReason ??
+          'The eSewa success callback signature could not be verified.',
       );
-      return this.buildFrontendResultUrl(
-        orderNumber,
-        PaymentProvider.ESEWA,
-        'failed',
-      );
+      return this.esewaProvider.buildFrontendResultUrl(orderNumber, 'failed');
     }
 
-    const successPayload = this.parseEsewaSuccessPayload(encodedPayload);
-    const verifiedLocally =
-      successPayload.signature &&
-      successPayload.signed_field_names &&
-      this.verifyEsewaSignature(
-        successPayload,
-        successPayload.signed_field_names,
-      );
-
-    if (!verifiedLocally) {
-      await this.markOrderAsFailed(
-        orderNumber,
-        'The eSewa success callback signature could not be verified.',
-      );
-      return this.buildFrontendResultUrl(
-        orderNumber,
-        PaymentProvider.ESEWA,
-        'failed',
-      );
-    }
-
-    const statusResponse = await this.queryEsewaStatus({
+    const successPayload = verification.payload;
+    const statusResponse = await this.esewaProvider.queryStatus({
       transactionUuid:
         (successPayload.transaction_uuid ||
           order.providerMetadata.esewaTransactionUuid) ??
@@ -786,9 +480,8 @@ export class PaymentsService {
         note: 'eSewa status check confirmed a complete payment.',
       });
 
-      return this.buildFrontendResultUrl(
+      return this.esewaProvider.buildFrontendResultUrl(
         order.orderNumber,
-        PaymentProvider.ESEWA,
         'success',
       );
     }
@@ -809,9 +502,8 @@ export class PaymentsService {
       successPayload.transaction_code ?? null,
     );
 
-    return this.buildFrontendResultUrl(
+    return this.esewaProvider.buildFrontendResultUrl(
       order.orderNumber,
-      PaymentProvider.ESEWA,
       mappedStatus === OrderStatus.PENDING_PAYMENT ? 'pending' : 'failed',
     );
   }
@@ -823,11 +515,7 @@ export class PaymentsService {
       'Customer returned from eSewa without completing payment.',
     );
 
-    return this.buildFrontendResultUrl(
-      orderNumber,
-      PaymentProvider.ESEWA,
-      'failed',
-    );
+    return this.esewaProvider.buildFrontendResultUrl(orderNumber, 'failed');
   }
 
   private async buildPricedCart(
@@ -900,147 +588,6 @@ export class PaymentsService {
       productId,
       quantity,
     }));
-  }
-
-  private buildStripeQuote(pricedCart: PricedCartLine[]): ProviderQuote {
-    const subtotal = pricedCart.reduce(
-      (total, item) => total + item.unitAmountUsd * item.quantity,
-      0,
-    );
-    const breakdown = this.buildBreakdown({
-      currency: 'USD',
-      subtotal,
-      taxAmount: 0,
-      serviceCharge: 0,
-      deliveryCharge: this.stripeShippingFeeUsd,
-      total: 0,
-    });
-
-    return {
-      provider: PaymentProvider.STRIPE,
-      displayName: 'Stripe Checkout',
-      enabled: Boolean(this.stripeClient),
-      reasonUnavailable: this.stripeClient
-        ? undefined
-        : 'Add STRIPE_SECRET_KEY to enable hosted Stripe Checkout.',
-      currency: breakdown.currency,
-      subtotal: breakdown.subtotal,
-      taxAmount: breakdown.taxAmount,
-      serviceCharge: breakdown.serviceCharge,
-      deliveryCharge: breakdown.deliveryCharge,
-      total: breakdown.total,
-      note: 'Stripe redirects customers to a hosted Checkout page. Payment confirmation is finalized server-side through signed webhooks.',
-    };
-  }
-
-  private buildEsewaQuote(pricedCart: PricedCartLine[]): ProviderQuote {
-    const productsMissingNprPricing = pricedCart.filter(
-      (item) => item.unitAmountNpr === null,
-    );
-
-    if (productsMissingNprPricing.length > 0) {
-      return {
-        provider: PaymentProvider.ESEWA,
-        displayName: 'eSewa ePay',
-        enabled: false,
-        reasonUnavailable:
-          'One or more products are missing NPR pricing, so eSewa cannot price this cart safely.',
-        currency: 'NPR',
-        subtotal: 0,
-        taxAmount: 0,
-        serviceCharge: 0,
-        deliveryCharge: 0,
-        total: 0,
-        note: 'eSewa requires merchant-signed NPR totals, so prices must be explicit rather than converted loosely at checkout time.',
-      };
-    }
-
-    const subtotal = pricedCart.reduce(
-      (total, item) => total + (item.unitAmountNpr ?? 0) * item.quantity,
-      0,
-    );
-    const breakdown = this.buildBreakdown({
-      currency: 'NPR',
-      subtotal,
-      taxAmount: this.esewaTaxAmountNpr,
-      serviceCharge: this.esewaServiceChargeNpr,
-      deliveryCharge: this.esewaDeliveryChargeNpr,
-      total: 0,
-    });
-    const configured = Boolean(this.esewaProductCode && this.esewaSecretKey);
-
-    return {
-      provider: PaymentProvider.ESEWA,
-      displayName: 'eSewa ePay',
-      enabled: configured,
-      reasonUnavailable: configured
-        ? undefined
-        : 'Add ESEWA_PRODUCT_CODE and ESEWA_SECRET_KEY to enable merchant-signed eSewa redirects.',
-      currency: breakdown.currency,
-      subtotal: breakdown.subtotal,
-      taxAmount: breakdown.taxAmount,
-      serviceCharge: breakdown.serviceCharge,
-      deliveryCharge: breakdown.deliveryCharge,
-      total: breakdown.total,
-      note: 'eSewa uses a signed form POST and a server-side status verification call before the order is marked paid.',
-    };
-  }
-
-  private buildBreakdown(input: QuoteBreakdown): QuoteBreakdown {
-    const rounded = {
-      currency: input.currency,
-      subtotal: this.roundToCurrency(input.subtotal),
-      taxAmount: this.roundToCurrency(input.taxAmount),
-      serviceCharge: this.roundToCurrency(input.serviceCharge),
-      deliveryCharge: this.roundToCurrency(input.deliveryCharge),
-      total: 0,
-    };
-
-    rounded.total = this.roundToCurrency(
-      rounded.subtotal +
-        rounded.taxAmount +
-        rounded.serviceCharge +
-        rounded.deliveryCharge,
-    );
-
-    return rounded;
-  }
-
-  private buildStripeLineItems(
-    pricedCart: PricedCartLine[],
-    quote: ProviderQuote,
-  ): Stripe.Checkout.SessionCreateParams.LineItem[] {
-    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] =
-      pricedCart.map((item) => ({
-        quantity: item.quantity,
-        price_data: {
-          currency: 'usd',
-          unit_amount: this.toStripeMinorUnits(item.unitAmountUsd),
-          product_data: {
-            name: item.name,
-            metadata: {
-              productId: item.productId,
-              slug: item.slug,
-            },
-          },
-        },
-      }));
-
-    if (quote.deliveryCharge > 0) {
-      lineItems.push({
-        quantity: 1,
-        price_data: {
-          currency: 'usd',
-          unit_amount: this.toStripeMinorUnits(quote.deliveryCharge),
-          product_data: {
-            name: 'Shipping',
-            description: 'Merchant-managed shipping and handling',
-          },
-        },
-      });
-    }
-
-    return lineItems;
   }
 
   private async createOrderSnapshot(
@@ -1130,20 +677,6 @@ export class PaymentsService {
           changedAt: new Date(),
         },
       ],
-      save: async () => {
-        await this.paymentsRepo.updateOrderStatus(
-          orderNumber,
-          snapshot.status === OrderStatus.PAID
-            ? 'paid'
-            : snapshot.status === OrderStatus.FAILED
-              ? 'failed'
-              : 'pending',
-          snapshot.paymentReference ??
-            snapshot.providerReference ??
-            snapshot.providerMetadata?.stripeCheckoutSessionId ??
-            null,
-        );
-      },
     };
 
     return snapshot;
@@ -1152,7 +685,7 @@ export class PaymentsService {
   private async syncOrderWithStripeSession(
     session: Stripe.Checkout.Session,
   ): Promise<void> {
-    const orderNumber = this.extractOrderNumberFromStripeSession(session);
+    const orderNumber = this.stripeProvider.extractOrderNumber(session);
 
     if (!orderNumber) {
       this.logger.warn(
@@ -1178,12 +711,6 @@ export class PaymentsService {
         note: 'Stripe webhook confirmed the Checkout Session as paid.',
       });
     }
-  }
-
-  private extractOrderNumberFromStripeSession(
-    session: Stripe.Checkout.Session,
-  ): string | null {
-    return session.metadata?.orderNumber ?? session.client_reference_id ?? null;
   }
 
   private async markOrderAsPaid(
@@ -1221,31 +748,7 @@ export class PaymentsService {
       changedAt: new Date(),
     });
 
-    // OUTBOX PATTERN — CRITICAL FIX
-    //
-    // Problem this solves:
-    //   Before this fix, the call sequence was:
-    //     1. order.save()              ← Postgres write (commits)
-    //     2. postgresService.query()   ← separate write (can fail)
-    //     3. mailService.sendEmail()   ← external call (can fail)
-    //
-    //   If step 2 or 3 failed, the order was marked PAID in the DB
-    //   but the inventory was never decremented and the customer
-    //   never received a confirmation email. Silent data loss.
-    //
-    // Solution:
-    //   Write the order status update AND the outbox event in a SINGLE
-    //   Prisma transaction. Either both commit or both roll back.
-    //   A background worker (OutboxWorker) then picks up pending events
-    //   and executes side-effects with retry logic.
-    //
-    // Guarantees:
-    //   - At-least-once delivery of all downstream effects
-    //   - Order status and outbox event are always in sync
-    //   - Email and inventory failures are retried automatically
-    //   - Dead-lettered events are alerted on (never silently lost)
-    //
-    // See: docs/architecture/adr/013-outbox-pattern-for-payment-events.md
+    // Transactional Outbox Pattern: Atomic Order State + Outbox Event Commit
     await this.paymentsRepo.markOrderAsPaidAtomic({
       orderNumber,
       paymentIntentId:
@@ -1285,15 +788,7 @@ export class PaymentsService {
       message: 'Order status and outbox event committed atomically',
     });
 
-    // IMPORTANT: Direct side-effects below are intentionally kept as a
-    // best-effort fast path ONLY. The outbox worker is the guaranteed path.
-    // These fire-and-forget calls provide low-latency confirmation on the
-    // happy path (most common case) without blocking or risking consistency.
-    //
-    // If they fail, the OutboxWorker will retry from the outbox_events table.
-    // Do NOT await these in a way that can roll back the already-committed payment.
-
-    // Fast-path: inventory decrement (non-blocking, best-effort)
+    // Fast-path best-effort side-effects: inventory decrement
     setImmediate(async () => {
       try {
         const stockItems = order.items
@@ -1309,19 +804,17 @@ export class PaymentsService {
         );
       } catch (pgErr: unknown) {
         const message = pgErr instanceof Error ? pgErr.message : String(pgErr);
-        // Not fatal — OutboxWorker will retry via outbox_events
         this.logger.warn(
           `Inventory fast-path failed for ${orderNumber}, OutboxWorker will retry: ${message}`,
         );
       }
     });
 
-    // Fast-path: confirmation email (non-blocking, best-effort)
+    // Fast-path best-effort side-effects: confirmation email
     setImmediate(async () => {
       try {
         await this.mailService.sendOrderConfirmation(order);
       } catch (emailError) {
-        // Not fatal — OutboxWorker will retry via outbox_events
         this.logger.warn(
           `Email fast-path failed for ${orderNumber}, OutboxWorker will retry: ` +
             (emailError instanceof Error
@@ -1331,7 +824,6 @@ export class PaymentsService {
       }
     });
   }
-
 
   private async markOrderAsFailed(
     orderNumber: string | null,
@@ -1358,125 +850,35 @@ export class PaymentsService {
     const order = await this.getOrderByOrderNumber(orderNumber);
 
     if (order.status === OrderStatus.PAID && status !== OrderStatus.PAID) {
+      this.logger.warn(
+        `Attempted to change order ${orderNumber} status from PAID to ${status}. Update rejected.`,
+      );
       return;
     }
 
     order.status = status;
-    if (status !== OrderStatus.PAID) {
+    order.providerReference = providerReference ?? order.providerReference;
+    order.paymentReference = paymentReference ?? order.paymentReference;
+
+    if (status === OrderStatus.FAILED) {
       order.failureReason = note;
     }
-    if (providerReference !== undefined) {
-      order.providerReference = providerReference;
-    }
-    if (paymentReference !== undefined) {
-      order.paymentReference = paymentReference;
-    }
+
     order.history.push({
       status,
       note,
       changedAt: new Date(),
     });
-    await order.save();
-  }
 
-  private async queryEsewaStatus(input: {
-    transactionUuid: string | null;
-    totalAmount: string;
-  }): Promise<{ status: string; ref_id?: string | null }> {
-    if (!input.transactionUuid) {
-      throw new BadRequestException(
-        'eSewa transaction verification is missing the transaction UUID.',
-      );
-    }
+    const dbStatus =
+      status === OrderStatus.PAID
+        ? 'paid'
+        : status === OrderStatus.FAILED
+          ? 'failed'
+          : 'pending';
 
-    const url = `${this.esewaStatusCheckUrl}?product_code=${encodeURIComponent(this.esewaProductCode)}&total_amount=${encodeURIComponent(input.totalAmount)}&transaction_uuid=${encodeURIComponent(input.transactionUuid)}`;
-
-    const { data } = await axios.get<{
-      status: string;
-      ref_id?: string | null;
-    }>(url, {
-      timeout: 15000,
-    });
-
-    return data;
-  }
-
-  private parseEsewaSuccessPayload(
-    encodedPayload: string,
-  ): EsewaSuccessPayload {
-    try {
-      const decodedJson = Buffer.from(encodedPayload, 'base64').toString(
-        'utf-8',
-      );
-      return JSON.parse(decodedJson) as EsewaSuccessPayload;
-    } catch (error) {
-      throw new BadRequestException(
-        `eSewa returned an unreadable success payload: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  private extractEsewaEncodedPayload(
-    query: Record<string, string | undefined>,
-  ): string | undefined {
-    const candidateKeys = ['data', 'payload', 'response'];
-
-    for (const key of candidateKeys) {
-      if (query[key]) {
-        return query[key];
-      }
-    }
-
-    return undefined;
-  }
-
-  private generateEsewaSignature(payload: {
-    total_amount: string;
-    transaction_uuid: string;
-    product_code: string;
-  }): string {
-    const message = `total_amount=${payload.total_amount},transaction_uuid=${payload.transaction_uuid},product_code=${payload.product_code}`;
-    return createHmac('sha256', this.esewaSecretKey)
-      .update(message)
-      .digest('base64');
-  }
-
-  private verifyEsewaSignature(
-    payload: EsewaSuccessPayload,
-    signedFieldNames: string,
-  ): boolean {
-    if (!payload.signature) {
-      return false;
-    }
-
-    const signedFields = signedFieldNames
-      .split(',')
-      .map((field) => field.trim())
-      .filter(Boolean);
-
-    const rawPayload = payload as Record<string, string | number | undefined>;
-    const message = signedFields
-      .map((fieldName) => {
-        const val = rawPayload[fieldName];
-        return `${fieldName}=${val !== undefined && val !== null ? String(val) : ''}`;
-      })
-      .join(',');
-
-    const expectedSignature = createHmac('sha256', this.esewaSecretKey)
-      .update(message)
-      .digest('base64');
-
-    return expectedSignature === payload.signature;
-  }
-
-  private buildFrontendResultUrl(
-    orderNumber: string,
-    provider: PaymentProvider,
-    status: 'success' | 'failed' | 'pending',
-  ): string {
-    return `${this.frontendPublicUrl}/checkout/result?provider=${provider}&orderNumber=${encodeURIComponent(orderNumber)}&status=${status}`;
+    const ref = paymentReference ?? providerReference ?? null;
+    await this.paymentsRepo.updateOrderStatus(orderNumber, dbStatus, ref);
   }
 
   private async getOrderByOrderNumber(
@@ -1542,20 +944,6 @@ export class PaymentsService {
       paymentReference: order.payment_intent_id ?? undefined,
       createdAt: order.created_at,
       updatedAt: order.updated_at,
-      save: async () => {
-        await this.paymentsRepo.updateOrderStatus(
-          orderNumber,
-          snapshot.status === OrderStatus.PAID
-            ? 'paid'
-            : snapshot.status === OrderStatus.FAILED
-              ? 'failed'
-              : 'pending',
-          snapshot.paymentReference ??
-            snapshot.providerReference ??
-            snapshot.providerMetadata?.stripeCheckoutSessionId ??
-            null,
-        );
-      },
     };
 
     return snapshot;
@@ -1611,52 +999,6 @@ export class PaymentsService {
     const randomSuffix = randomBytes(3).toString('hex').toUpperCase();
     return `ACL-${datePart}-${randomSuffix}`;
   }
-
-  private toStripeMinorUnits(amount: number): number {
-    return Math.round(amount * 100);
-  }
-
-  private roundToCurrency(amount: number): number {
-    return Math.round(amount * 100) / 100;
-  }
-
-  private formatEsewaAmount(amount: number): string {
-    const normalized = this.roundToCurrency(amount);
-    return Number.isInteger(normalized)
-      ? String(normalized)
-      : normalized.toFixed(2);
-  }
-
-  /**
-   * PHASE 1: Webhook Idempotency Helpers
-   *
-   * These methods prevent duplicate webhook processing using MongoDB as storage.
-   *
-   * CRITICAL: Stripe may send the same webhook multiple times due to:
-   * - Network retry (if we respond with 5xx or timeout)
-   * - Stripe failover (server restarts)
-   * - Manual replay (in Stripe dashboard)
-   *
-   * We use Stripe event ID as idempotency key because:
-   * - It's unique per event
-   * - It's stable (same event always has same ID)
-   * - It's provided by Stripe (we don't generate it)
-   *
-   * Flow:
-   * 1. Webhook arrives with event.id = "evt_abc123"
-   * 2. Check if evt_abc123 exists in idempotency collection
-   * 3. If exists: Return success (already processed)
-   * 4. If not: Process and store evt_abc123
-   *
-   * Race condition handling:
-   * - Multiple webhook deliveries arrive simultaneously
-   * - Both try to insert same event ID
-   * - MongoDB unique index ensures only one succeeds
-   * - Loser gets duplicate key error → treated as already processed
-   *
-   * TTL: 72 hours (Stripe retries for 3 days)
-   * After 72 hours, MongoDB automatically deletes the record.
-   */
 
   private async checkWebhookIdempotency(key: string): Promise<boolean> {
     return this.paymentsRepo.checkIdempotencyKey(key);

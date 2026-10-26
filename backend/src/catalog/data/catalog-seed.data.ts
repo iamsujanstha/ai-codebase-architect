@@ -3,17 +3,20 @@ import {
   CatalogTestimonial,
   CatalogValueProp,
 } from '../interfaces/catalog-home-response.interface';
-import { Category } from '../schemas/category.schema';
-import { Product } from '../schemas/product.schema';
+
+export interface CategorySeedItem {
+  slug: string;
+  name: string;
+  description: string;
+  accentColor: string;
+  icon: string;
+  featuredCopy: string;
+  sortOrder: number;
+}
 
 // Seed data is a teaching-friendly stand-in for the merchandising data
 // a real ecommerce team would create in an admin panel or CMS.
-//
-// Why seed at all?
-// - New developers can run the stack and immediately see meaningful UI.
-// - Reviewers can validate the design without hand-entering records.
-// - Atlas/local Mongo setups stay consistent across environments.
-export const CATEGORY_SEED_DATA: Array<Omit<Category, never>> = [
+export const CATEGORY_SEED_DATA: CategorySeedItem[] = [
   {
     slug: 'desk',
     name: 'Desks',
@@ -91,7 +94,7 @@ export const CATEGORY_SEED_DATA: Array<Omit<Category, never>> = [
   },
 ];
 
-export const PRODUCT_SEED_DATA: Array<Omit<Product, never>> = [
+export const PRODUCT_SEED_DATA: any[] = [
   {
     slug: 'walnut-standing-desk',
     name: 'Walnut standing desk',

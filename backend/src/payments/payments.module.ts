@@ -9,6 +9,12 @@ import { DatabaseModule } from '../database/database.module';
 import { IdempotencyMiddleware } from '../common/middleware/idempotency.middleware';
 import { PostgresPaymentsRepository } from './repositories/postgres-payments.repository';
 import { PAYMENTS_REPOSITORY_TOKEN } from './repositories/payments.repository.interface';
+import { StripeProvider } from './providers/stripe.provider';
+import { EsewaProvider } from './providers/esewa.provider';
+import {
+  STRIPE_PROVIDER_TOKEN,
+  ESEWA_PROVIDER_TOKEN,
+} from './interfaces/payment-provider.interface';
 
 @Module({
   imports: [PassportModule, AuthModule, DatabaseModule, MailModule],
@@ -21,8 +27,24 @@ import { PAYMENTS_REPOSITORY_TOKEN } from './repositories/payments.repository.in
       provide: PAYMENTS_REPOSITORY_TOKEN,
       useClass: PostgresPaymentsRepository,
     },
+    StripeProvider,
+    {
+      provide: STRIPE_PROVIDER_TOKEN,
+      useClass: StripeProvider,
+    },
+    EsewaProvider,
+    {
+      provide: ESEWA_PROVIDER_TOKEN,
+      useClass: EsewaProvider,
+    },
   ],
-  exports: [PaymentsService, PAYMENTS_REPOSITORY_TOKEN, PostgresPaymentsRepository],
+  exports: [
+    PaymentsService,
+    PAYMENTS_REPOSITORY_TOKEN,
+    PostgresPaymentsRepository,
+    STRIPE_PROVIDER_TOKEN,
+    ESEWA_PROVIDER_TOKEN,
+  ],
 })
 export class PaymentsModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

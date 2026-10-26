@@ -1,13 +1,26 @@
--- Migration: add_outbox_events_and_webhook_retry — 2026-10-25
+-- Migration: 002-outbox-and-webhook-retry.sql
 -- ADR: docs/architecture/adr/013-outbox-pattern-for-payment-events.md
--- SAFE: all additive changes only.
+-- SAFE: all additive and idempotent changes only.
 
--- 1. Harden webhook_events with retry/dead-letter tracking
-ALTER TABLE webhook_events
-  ADD COLUMN IF NOT EXISTS retry_count      INTEGER   NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS next_retry_at    TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS error_message    TEXT,
-  ADD COLUMN IF NOT EXISTS dead_lettered_at TIMESTAMPTZ;
+-- 1. Create or harden webhook_events table with retry/dead-letter tracking
+CREATE TABLE IF NOT EXISTS webhook_events (
+  id               SERIAL PRIMARY KEY,
+  event_id         VARCHAR(255) NOT NULL UNIQUE,
+  event_type       VARCHAR(100),
+  payload          JSONB,
+  status           VARCHAR(20) DEFAULT 'processing',
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  processed_at     TIMESTAMPTZ,
+  retry_count      INTEGER NOT NULL DEFAULT 0,
+  next_retry_at    TIMESTAMPTZ,
+  error_message    TEXT,
+  dead_lettered_at TIMESTAMPTZ
+);
+
+ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ;
+ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS error_message TEXT;
+ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS dead_lettered_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_webhook_events_retry
   ON webhook_events (status, next_retry_at)
@@ -37,6 +50,12 @@ CREATE TABLE IF NOT EXISTS outbox_events (
   dead_lettered_at TIMESTAMPTZ
 );
 
+ALTER TABLE outbox_events ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE outbox_events ADD COLUMN IF NOT EXISTS max_attempts INTEGER NOT NULL DEFAULT 5;
+ALTER TABLE outbox_events ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ;
+ALTER TABLE outbox_events ADD COLUMN IF NOT EXISTS last_error TEXT;
+ALTER TABLE outbox_events ADD COLUMN IF NOT EXISTS dead_lettered_at TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS idx_outbox_pending
   ON outbox_events (created_at ASC)
   WHERE status = 'pending';
@@ -50,7 +69,3 @@ CREATE INDEX IF NOT EXISTS idx_outbox_dead_letter
 
 CREATE INDEX IF NOT EXISTS idx_outbox_payload_gin
   ON outbox_events USING GIN (payload);
-
--- ROLLBACK:
--- ALTER TABLE webhook_events DROP COLUMN IF EXISTS retry_count, next_retry_at, error_message, dead_lettered_at;
--- DROP TABLE IF EXISTS outbox_events;

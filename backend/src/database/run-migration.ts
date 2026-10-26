@@ -1,7 +1,7 @@
 #!/usr/bin/env ts-node
 /**
- * PostgreSQL Migration Runner
- * Runs the initial schema migration to create all tables
+ * Production-Grade PostgreSQL Migration Runner
+ * Tracks applied migrations in a schema_migrations table so migrations run idempotently.
  */
 
 import { Client } from 'pg';
@@ -16,32 +16,91 @@ async function runMigration() {
   const client = new Client({
     connectionString,
     ssl: {
-      rejectUnauthorized: false, // Neon uses self-signed certs
+      rejectUnauthorized: false,
     },
   });
 
   try {
     console.log('🔌 Connecting to PostgreSQL...');
     await client.connect();
-    console.log('✅ Connected successfully!');
+    console.log('✅ Connected successfully!\n');
 
-    // Read migration file
-    const migrationPath = path.join(
-      __dirname,
-      'migrations',
-      '001-initial-schema.sql',
+    // 1. Ensure schema_migrations table exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version VARCHAR(255) PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // 2. Fetch already applied migrations
+    const appliedRes = await client.query<{ version: string }>(
+      'SELECT version FROM schema_migrations;',
     );
-    const migrationSQL = fs.readFileSync(migrationPath, 'utf-8');
+    const appliedSet = new Set(appliedRes.rows.map((r) => r.version));
 
-    console.log('\n📝 Running migration: 001-initial-schema.sql');
-    console.log('⏳ Creating tables, indexes, and sample data...\n');
+    // Special bootstrap check: If 001-initial-schema is not recorded but 'users' table exists, mark 001 as applied
+    const usersTableCheck = await client.query(`
+      SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users';
+    `);
+    if (usersTableCheck.rows.length > 0 && !appliedSet.has('001-initial-schema.sql')) {
+      await client.query(
+        'INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING;',
+        ['001-initial-schema.sql'],
+      );
+      appliedSet.add('001-initial-schema.sql');
+    }
 
-    // Execute migration
-    await client.query(migrationSQL);
+    const migrationsDir = path.join(__dirname, 'migrations');
+    const migrationFiles = fs
+      .readdirSync(migrationsDir)
+      .filter((file) => file.endsWith('.sql'))
+      .sort();
 
-    console.log('✅ Migration completed successfully!\n');
+    console.log(`📋 Found ${migrationFiles.length} migration(s):`);
 
-    // Verify tables created
+    for (const file of migrationFiles) {
+      if (appliedSet.has(file)) {
+        console.log(`   ⏭️  Already applied: ${file}`);
+        continue;
+      }
+
+      console.log(`   ⏳ Applying migration: ${file}...`);
+      const filePath = path.join(migrationsDir, file);
+      const sql = fs.readFileSync(filePath, 'utf-8');
+
+      try {
+        await client.query('BEGIN');
+        
+        // Split statements by semicolon while ignoring comments
+        const cleanedSql = sql
+          .split('\n')
+          .filter((line) => !line.trim().startsWith('--'))
+          .join('\n');
+
+        const statements = cleanedSql
+          .split(';')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+
+        for (const stmt of statements) {
+          console.log(`   🔹 Running: ${stmt.substring(0, 70)}...`);
+          await client.query(stmt);
+        }
+
+        await client.query(
+          'INSERT INTO schema_migrations (version) VALUES ($1);',
+          [file],
+        );
+        await client.query('COMMIT');
+        console.log(`   ✅ Successfully applied: ${file}\n`);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      }
+    }
+
+    // Verify active tables
     const result = await client.query(`
       SELECT tablename 
       FROM pg_tables 
@@ -49,55 +108,18 @@ async function runMigration() {
       ORDER BY tablename;
     `);
 
-    console.log('📊 Tables created:');
+    console.log('\n📊 Active public tables:');
     result.rows.forEach((row) => {
       console.log(`   ✓ ${row.tablename}`);
     });
 
-    // Count rows in each table
-    console.log('\n📈 Sample data:');
-    const tables = result.rows.map((r) => r.tablename);
-    for (const table of tables) {
-      const countResult = await client.query(`SELECT COUNT(*) FROM ${table}`);
-      const count = countResult.rows[0].count;
-      console.log(`   ${table}: ${count} rows`);
-    }
-
-    // Verify indexes
-    const indexResult = await client.query(`
-      SELECT tablename, COUNT(*) as index_count
-      FROM pg_indexes
-      WHERE schemaname = 'public'
-      GROUP BY tablename
-      ORDER BY tablename;
-    `);
-
-    console.log('\n🔍 Indexes created:');
-    indexResult.rows.forEach((row) => {
-      console.log(`   ${row.tablename}: ${row.index_count} indexes`);
-    });
-
-    console.log('\n🎉 PostgreSQL setup complete!');
-    console.log('\n📚 Next steps:');
-    console.log('   1. Practice SQL queries (see POSTGRES_SETUP_COMMANDS.md)');
-    console.log('   2. Learn indexes with EXPLAIN ANALYZE');
-    console.log('   3. Test transactions and isolation levels');
-    console.log('   4. Start dual-write implementation\n');
+    console.log('\n🎉 PostgreSQL migrations verified & up to date!');
   } catch (error) {
     console.error('❌ Migration failed:', error);
-    throw error;
+    process.exit(1);
   } finally {
     await client.end();
   }
 }
 
-// Run migration
-runMigration()
-  .then(() => {
-    console.log('✅ Done!');
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error('❌ Error:', error.message);
-    process.exit(1);
-  });
+runMigration();

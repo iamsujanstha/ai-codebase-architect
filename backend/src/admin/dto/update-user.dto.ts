@@ -5,7 +5,7 @@ import {
   IsEnum,
   IsBoolean,
 } from 'class-validator';
-import { UserRole } from '../../users/schemas/user.schema';
+import { UserRole } from '../../users/users.service';
 
 export class UpdateUserDto {
   @IsString()
