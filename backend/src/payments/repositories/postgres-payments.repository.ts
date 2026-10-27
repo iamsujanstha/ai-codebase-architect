@@ -21,10 +21,10 @@ import {
 export class PostgresPaymentsRepository implements IPaymentsRepository {
   private readonly logger = new Logger(PostgresPaymentsRepository.name);
 
-  constructor(private readonly pg: PostgresService) {}
+  constructor(private readonly pg: PostgresService) { }
 
   /**
-   * Fetch products by IDs in a single round-trip using PostgreSQL native array matching:
+   * Fetch product list by IDs in a single round-trip using PostgreSQL native array matching:
    * WHERE id = ANY($1::int[])
    */
   async findProductsByIds(ids: number[]): Promise<ProductCatalogItem[]> {
