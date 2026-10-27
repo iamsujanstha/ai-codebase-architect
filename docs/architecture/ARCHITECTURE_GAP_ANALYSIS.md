@@ -1,5 +1,7 @@
 # Architecture Gap Analysis — Atlas Commerce Lab
 
+> Historical assessment snapshot. Completion-report references below describe documents that have since been consolidated. Current operational guidance is in [the runbook index](../RUNBOOKS/README.md).
+
 **Date:** October 10, 2026  
 **Scope:** Comprehensive audit of repository against Staff/Principal Engineer expectations  
 **Methodology:** File-by-file source analysis, not directory inference
@@ -56,7 +58,7 @@ This repository demonstrates a **substantially implemented, production-oriented 
 | **Architecture Decision Records (ADRs)** | MISSING | No ADRs exist explaining MongoDB vs Postgres, NestJS choice, etc. | High | P0 |
 | **Design Patterns Documentation** | MISSING | Patterns used but not documented (Factory in providers, Strategy in LLM routing) | Medium | P1 |
 
-**Recommendation:** Create `docs/architecture/adr/` with 10 core ADRs explaining technology choices.
+**Recommendation:** Create `docs/ADRs/` with 10 core ADRs explaining technology choices.
 
 ---
 

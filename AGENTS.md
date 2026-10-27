@@ -39,4 +39,4 @@ Payment gateway integrations are fully decoupled from domain orchestration via t
 1. **Never inject PostgresService directly into Domain Services, Controllers, or Workers.** Always route through the repository interface.
 2. **Never expose database-specific error codes (e.g. `23505`) out of repositories.** Map them to standard NestJS exceptions (e.g. `ConflictException`, `NotFoundException`).
 3. **Use parameterized queries (`$1, $2, ...`) for all SQL statements.** Never concatenate user input into SQL strings.
-4. **Keep ADRs up to date** when changing architectural decisions. Refer to `docs/architecture/adr/`.
+4. **Keep ADRs up to date** when changing architectural decisions. Refer to `docs/ADRs/`.

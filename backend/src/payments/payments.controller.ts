@@ -3,12 +3,15 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
   RawBody,
   Req,
   Res,
+  UseInterceptors,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -16,6 +19,7 @@ import { Response } from 'express';
 import { CreatePaymentSessionDto } from './dto/create-payment-session.dto';
 import { PaymentQuoteRequestDto } from './dto/payment-quote-request.dto';
 import { PaymentsService } from './payments.service';
+import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor';
 
 @Controller('payments')
 export class PaymentsController {
@@ -28,6 +32,8 @@ export class PaymentsController {
 
   // Requires authentication — userId is extracted from the JWT and stored on the order.
   @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(IdempotencyInterceptor)
+  @HttpCode(HttpStatus.CREATED)
   @Post('stripe/checkout-session')
   async createStripeCheckoutSession(
     @Body() request: CreatePaymentSessionDto,
@@ -55,6 +61,8 @@ export class PaymentsController {
 
   // Requires authentication — userId is extracted from the JWT and stored on the order.
   @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(IdempotencyInterceptor)
+  @HttpCode(HttpStatus.CREATED)
   @Post('esewa/initiate')
   async initiateEsewaCheckout(
     @Body() request: CreatePaymentSessionDto,

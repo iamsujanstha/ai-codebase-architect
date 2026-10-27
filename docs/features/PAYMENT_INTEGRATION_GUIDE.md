@@ -227,6 +227,7 @@ The payment lifecycle is designed with a **zero-trust frontend model** and a **d
   ```http
   POST /payments/stripe/checkout-session
   Authorization: Bearer <JWT_ACCESS_TOKEN>
+  Idempotency-Key: <unique key for this checkout attempt>
   Content-Type: application/json
 
   {
@@ -243,6 +244,8 @@ The payment lifecycle is designed with a **zero-trust frontend model** and a **d
     }
   }
   ```
+
+The authenticated checkout endpoints require an `Idempotency-Key`. Reuse the same key for retries of an unchanged request; a changed checkout payload needs a new key. A completed retry replays the original response, while a concurrent request or key reused with different input receives `409 Conflict`.
 
 * **Backend Processing Pipeline (Step-by-Step)**:
   1. **Authentication Guard**: Validates JWT signature; extracts `userId`.
@@ -2213,6 +2216,7 @@ describe('POST /payments/stripe/checkout-session', () => {
     const response = await request(app.getHttpServer())
       .post('/payments/stripe/checkout-session')
       .set('Authorization', `Bearer ${authToken}`)
+      .set('Idempotency-Key', 'checkout-test-request-key-001')
       .send({
         items: [{ productId: 'abc', quantity: 1 }],
         customer: {

@@ -6,6 +6,7 @@ import { PostgresChatThreadsRepository } from '../ai/repositories/postgres-chat-
 import { PostgresAdminRepository } from '../admin/repositories/postgres-admin.repository';
 import { PostgresIdempotencyRepository } from '../common/repositories/postgres-idempotency.repository';
 import { PostgresHealthRepository } from './repositories/postgres-health.repository';
+import { PostgresService } from './postgres.service';
 
 describe('Repository Pattern (100% Raw PostgreSQL - Zero ORM)', () => {
   const createMockPg = () => ({
@@ -68,7 +69,6 @@ describe('Repository Pattern (100% Raw PostgreSQL - Zero ORM)', () => {
     expect(typeof repo.markIdempotencyKeyProcessed).toBe('function');
     expect(typeof repo.deleteIdempotencyKey).toBe('function');
     expect(typeof repo.claimPendingOutboxEvents).toBe('function');
-    expect(typeof repo.markOutboxEventProcessing).toBe('function');
     expect(typeof repo.markOutboxEventProcessed).toBe('function');
     expect(typeof repo.scheduleOutboxEventRetry).toBe('function');
     expect(typeof repo.deadLetterOutboxEvent).toBe('function');
@@ -115,10 +115,11 @@ describe('Repository Pattern (100% Raw PostgreSQL - Zero ORM)', () => {
   });
 
   it('should have required methods on PostgresIdempotencyRepository', () => {
-    const mockPg = createMockPg() as any;
+    const mockPg = createMockPg() as unknown as PostgresService;
     const repo = new PostgresIdempotencyRepository(mockPg);
-    expect(typeof repo.findKey).toBe('function');
-    expect(typeof repo.saveKey).toBe('function');
+    expect(typeof repo.claimKey).toBe('function');
+    expect(typeof repo.completeKey).toBe('function');
+    expect(typeof repo.failKey).toBe('function');
   });
 
   it('should have required methods on PostgresHealthRepository', () => {

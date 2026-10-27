@@ -1,4 +1,4 @@
-import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
@@ -6,7 +6,7 @@ import { OutboxWorker } from './outbox.worker';
 import { MailModule } from '../mail/mail.module';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
-import { IdempotencyMiddleware } from '../common/middleware/idempotency.middleware';
+import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor';
 import { PostgresPaymentsRepository } from './repositories/postgres-payments.repository';
 import { PAYMENTS_REPOSITORY_TOKEN } from './repositories/payments.repository.interface';
 import { StripeProvider } from './providers/stripe.provider';
@@ -22,6 +22,7 @@ import {
   providers: [
     PaymentsService,
     OutboxWorker,
+    IdempotencyInterceptor,
     PostgresPaymentsRepository,
     {
       provide: PAYMENTS_REPOSITORY_TOKEN,
@@ -46,10 +47,4 @@ import {
     ESEWA_PROVIDER_TOKEN,
   ],
 })
-export class PaymentsModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(IdempotencyMiddleware)
-      .forRoutes('payments/stripe/checkout-session', 'payments/esewa/initiate');
-  }
-}
+export class PaymentsModule {}

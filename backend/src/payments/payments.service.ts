@@ -1,11 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   BadRequestException,
   Inject,
   Injectable,
-  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
@@ -39,7 +35,6 @@ import {
   PricedCartLine,
   STRIPE_PROVIDER_TOKEN,
 } from './interfaces/payment-provider.interface';
-import { MailService } from '../mail/mail.service';
 
 export interface ProviderMetadata {
   stripeCheckoutSessionId?: string | null;
@@ -115,7 +110,6 @@ export class PaymentsService {
     private readonly stripeProvider: IStripeProvider,
     @Inject(ESEWA_PROVIDER_TOKEN)
     private readonly esewaProvider: IEsewaProvider,
-    private readonly mailService: MailService,
   ) {}
 
   async getQuote(
@@ -247,12 +241,12 @@ export class PaymentsService {
       switch (event.type) {
         case 'checkout.session.completed':
         case 'checkout.session.async_payment_succeeded': {
-          const session = event.data.object as Stripe.Checkout.Session;
+          const session = event.data.object;
           await this.syncOrderWithStripeSession(session);
           break;
         }
         case 'checkout.session.async_payment_failed': {
-          const session = event.data.object as Stripe.Checkout.Session;
+          const session = event.data.object;
           await this.markOrderAsFailed(
             this.stripeProvider.extractOrderNumber(session),
             'Stripe reported that the asynchronous payment failed.',
@@ -260,7 +254,7 @@ export class PaymentsService {
           break;
         }
         case 'checkout.session.expired': {
-          const session = event.data.object as Stripe.Checkout.Session;
+          const session = event.data.object;
           const orderNumber = this.stripeProvider.extractOrderNumber(session);
           if (orderNumber) {
             await this.updateOrderStatus(
@@ -297,8 +291,7 @@ export class PaymentsService {
       await this.stripeProvider.retrieveSession(checkoutSessionId);
 
     const orderNumber =
-      requestedOrderNumber ||
-      this.stripeProvider.extractOrderNumber(session);
+      requestedOrderNumber || this.stripeProvider.extractOrderNumber(session);
 
     if (!orderNumber) {
       throw new NotFoundException(
@@ -341,7 +334,7 @@ export class PaymentsService {
     );
 
     return rows.map((order) => {
-      const items = (order.order_items || []).map((oi: any) => ({
+      const items = order.order_items.map((oi) => ({
         productId: String(oi.product_id),
         slug: (oi.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
         name: oi.name,
@@ -536,9 +529,7 @@ export class PaymentsService {
       );
     }
 
-    const productMap = new Map(
-      products.map((r) => [String(r.id), r] as const),
-    );
+    const productMap = new Map(products.map((r) => [String(r.id), r] as const));
 
     return normalizedItems.map((item) => {
       const product = productMap.get(item.productId);
@@ -762,19 +753,19 @@ export class PaymentsService {
         eventType: 'order.paid',
         payload: {
           orderNumber,
-          userId: order.userId,
           provider: order.paymentProvider,
           providerReference: order.providerReference ?? null,
           paymentReference: order.paymentReference ?? null,
-          providerMetadata: order.providerMetadata,
-          customerEmail: order.customer.email,
-          customerName: order.customer.fullName,
-          pricingTotal: order.pricing.total,
-          pricingCurrency: order.pricing.currency,
+          paidAt: order.paidAt?.toISOString() ?? new Date().toISOString(),
+          customer: order.customer,
+          pricing: order.pricing,
           items: order.items.map((i) => ({
             productId: i.productId,
             name: i.name,
             quantity: i.quantity,
+            unitAmount: i.unitAmount,
+            lineTotal: i.lineTotal,
+            currency: i.currency,
           })),
           note: options.note,
         },
@@ -786,42 +777,6 @@ export class PaymentsService {
       event: 'order_paid_committed',
       orderNumber,
       message: 'Order status and outbox event committed atomically',
-    });
-
-    // Fast-path best-effort side-effects: inventory decrement
-    setImmediate(async () => {
-      try {
-        const stockItems = order.items
-          .map((item) => ({
-            productId: parseInt(item.productId, 10),
-            quantity: item.quantity,
-          }))
-          .filter((item) => !isNaN(item.productId));
-
-        await this.paymentsRepo.decrementProductStock(stockItems);
-        this.logger.log(
-          `✅ Inventory decremented for order ${orderNumber} (fast path)`,
-        );
-      } catch (pgErr: unknown) {
-        const message = pgErr instanceof Error ? pgErr.message : String(pgErr);
-        this.logger.warn(
-          `Inventory fast-path failed for ${orderNumber}, OutboxWorker will retry: ${message}`,
-        );
-      }
-    });
-
-    // Fast-path best-effort side-effects: confirmation email
-    setImmediate(async () => {
-      try {
-        await this.mailService.sendOrderConfirmation(order);
-      } catch (emailError) {
-        this.logger.warn(
-          `Email fast-path failed for ${orderNumber}, OutboxWorker will retry: ` +
-            (emailError instanceof Error
-              ? emailError.message
-              : String(emailError)),
-        );
-      }
     });
   }
 
@@ -892,23 +847,15 @@ export class PaymentsService {
       );
     }
 
-    const items = (order.order_items || []).map(
-      (oi: {
-        product_id: any;
-        name: string;
-        quantity: any;
-        price: any;
-        subtotal: any;
-      }) => ({
-        productId: String(oi.product_id),
-        slug: oi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        name: oi.name,
-        quantity: oi.quantity,
-        unitAmount: Number(oi.price),
-        lineTotal: Number(oi.subtotal),
-        currency: 'USD',
-      }),
-    );
+    const items = order.order_items.map((oi) => ({
+      productId: String(oi.product_id),
+      slug: oi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      name: oi.name,
+      quantity: oi.quantity,
+      unitAmount: Number(oi.price),
+      lineTotal: Number(oi.subtotal),
+      currency: 'USD',
+    }));
 
     const total = Number(order.total_amount);
 

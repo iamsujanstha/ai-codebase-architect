@@ -103,11 +103,11 @@ export class AiGatewayService {
           quantizationLevel: model.quantization_level ?? null,
         })),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.logger.warn({
         event: 'ai_models_fallback',
         operation: 'list_models',
-        message: `Downstream AI service error (${error.message}). Returning fallback model list.`,
+        message: `Downstream AI service error (${error instanceof Error ? error.message : String(error)}). Returning fallback model list.`,
       });
       return {
         provider: 'ollama',
@@ -180,7 +180,9 @@ export class AiGatewayService {
             initialDelay: 500,
             maxDelay: 2000,
             context: 'ai-generate',
-            shouldRetry: (error, attempt) => {
+            shouldRetry: (error: unknown) => {
+              if (!axios.isAxiosError(error)) return false;
+
               // Don't retry timeouts (AI generation is slow, timeout is intentional)
               if (error.code === 'ECONNABORTED') {
                 return false;
@@ -193,7 +195,10 @@ export class AiGatewayService {
                 return true;
               }
               // Retry 5xx server errors
-              if (error.response?.status >= 500) {
+              if (
+                error.response?.status !== undefined &&
+                error.response.status >= 500
+              ) {
                 return true;
               }
               // Don't retry client errors (4xx)
@@ -311,6 +316,12 @@ export class AiGatewayService {
 
         throw new BadGatewayException(
           'The backend could not reach the AI service.',
+        );
+      }
+
+      if (error.response.status === 429) {
+        throw new ServiceUnavailableException(
+          'The AI service is temporarily limiting requests.',
         );
       }
 

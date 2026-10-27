@@ -1,4 +1,5 @@
 import { Injectable, Logger, ConflictException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PostgresService } from '../../database/postgres.service';
 import {
   AtomicOrderPaidParams,
@@ -6,6 +7,7 @@ import {
   CustomerUserData,
   IPaymentsRepository,
   OutboxEventRecord,
+  OrderWithRelations,
   ProductCatalogItem,
 } from './payments.repository.interface';
 
@@ -21,7 +23,7 @@ import {
 export class PostgresPaymentsRepository implements IPaymentsRepository {
   private readonly logger = new Logger(PostgresPaymentsRepository.name);
 
-  constructor(private readonly pg: PostgresService) { }
+  constructor(private readonly pg: PostgresService) {}
 
   /**
    * Fetch product list by IDs in a single round-trip using PostgreSQL native array matching:
@@ -78,7 +80,8 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
     fullName?: string,
   ): Promise<CustomerUserData> {
     const normalizedEmail = email.trim().toLowerCase();
-    const resolvedName = (fullName && fullName.trim()) || normalizedEmail.split('@')[0];
+    const resolvedName =
+      (fullName && fullName.trim()) || normalizedEmail.split('@')[0];
 
     const sql = `
       INSERT INTO users (email, name, password, role, status, created_at, updated_at)
@@ -118,7 +121,7 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
       const orderId = orderRes.rows[0].id;
 
       if (dto.items && dto.items.length > 0) {
-        const values: any[] = [];
+        const values: Array<number | string> = [];
         const placeholders: string[] = [];
 
         dto.items.forEach((item, index) => {
@@ -170,7 +173,9 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
    * Retrieves an order with denormalized user and aggregated items in a SINGLE query
    * utilizing PostgreSQL json_build_object and json_agg subqueries (zero N+1 queries).
    */
-  async findOrderByOrderNumber(orderNumber: string): Promise<any | null> {
+  async findOrderByOrderNumber(
+    orderNumber: string,
+  ): Promise<OrderWithRelations | null> {
     const sql = `
       SELECT 
         o.id,
@@ -209,7 +214,7 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
       WHERE o.order_number = $1
       LIMIT 1;
     `;
-    const res = await this.pg.query(sql, [orderNumber]);
+    const res = await this.pg.query<OrderWithRelations>(sql, [orderNumber]);
     return res.rows[0] ?? null;
   }
 
@@ -219,7 +224,7 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
   async findOrdersByUserIdOrEmail(
     userId?: string,
     userEmail?: string,
-  ): Promise<any[]> {
+  ): Promise<OrderWithRelations[]> {
     let pgUserId: number | null = null;
     if (userId && /^\d+$/.test(userId)) {
       pgUserId = parseInt(userId, 10);
@@ -270,7 +275,10 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
       ORDER BY o.created_at DESC
       LIMIT 100;
     `;
-    const res = await this.pg.query(sql, [pgUserId, normalizedEmail]);
+    const res = await this.pg.query<OrderWithRelations>(sql, [
+      pgUserId,
+      normalizedEmail,
+    ]);
     return res.rows;
   }
 
@@ -331,22 +339,49 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
    * GREATEST(0, stock - $1)
    */
   async decrementProductStock(
+    eventId: number,
     items: Array<{ productId: number; quantity: number }>,
   ): Promise<void> {
-    for (const item of items) {
-      const sql = `
-        UPDATE products
-        SET stock = GREATEST(0, stock - $1),
-            updated_at = NOW()
-        WHERE id = $2;
-      `;
-      await this.pg.query(sql, [item.quantity, item.productId]);
+    const client = await this.pg.getClient();
+    try {
+      await client.query('BEGIN');
+      const claim = await client.query(
+        `INSERT INTO outbox_effects (event_id, effect_type)
+         VALUES ($1, 'inventory_decrement')
+         ON CONFLICT (event_id, effect_type) DO NOTHING
+         RETURNING event_id;`,
+        [eventId],
+      );
+      if (claim.rowCount === 0) {
+        await client.query('COMMIT');
+        return;
+      }
+
+      for (const item of items) {
+        await client.query(
+          `UPDATE products
+           SET stock = GREATEST(0, stock - $1), updated_at = NOW()
+           WHERE id = $2;`,
+          [item.quantity, item.productId],
+        );
+      }
+      await client.query('COMMIT');
+    } catch (error: unknown) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
   }
 
   async checkIdempotencyKey(key: string): Promise<boolean> {
     try {
-      const sql = `SELECT 1 FROM idempotency_keys WHERE key = $1 LIMIT 1;`;
+      const sql = `
+        SELECT 1
+        FROM idempotency_keys
+        WHERE key = $1 AND status = 'completed' AND expires_at > NOW()
+        LIMIT 1;
+      `;
       const res = await this.pg.query(sql, [key]);
       return res.rows.length > 0;
     } catch (error) {
@@ -359,24 +394,32 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
     }
   }
 
-  /**
-   * Native PostgreSQL unique constraint violation handling:
-   * Inspects SQLSTATE code '23505' (unique_violation) to catch concurrent duplicate requests.
-   */
+  /** Claims a webhook key or rejects a still-active claim atomically. */
   async createIdempotencyKey(key: string, expiresAt: Date): Promise<void> {
     try {
       const sql = `
         INSERT INTO idempotency_keys (key, status, expires_at, created_at)
-        VALUES ($1, 'processing', $2, NOW());
+        VALUES ($1, 'processing', $2, NOW())
+        ON CONFLICT (key) DO UPDATE
+          SET request_hash = NULL,
+              status = 'processing',
+              response = NULL,
+              expires_at = EXCLUDED.expires_at,
+              created_at = NOW()
+        WHERE idempotency_keys.expires_at <= NOW()
+        RETURNING key;
       `;
-      await this.pg.query(sql, [key, expiresAt]);
-    } catch (error: any) {
-      if (error?.code === '23505') {
-        this.logger.log({
-          event: 'webhook_concurrent_processing_detected',
-          key,
-        });
+      const result = await this.pg.query<{ key: string }>(sql, [
+        key,
+        expiresAt,
+      ]);
+
+      if (result.rows.length === 0) {
         throw new ConflictException('Webhook is already being processed');
+      }
+    } catch (error: unknown) {
+      if (error instanceof ConflictException) {
+        throw error;
       }
 
       this.logger.error({
@@ -389,15 +432,15 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
   }
 
   async markIdempotencyKeyProcessed(key: string): Promise<void> {
-    try {
-      const sql = `UPDATE idempotency_keys SET status = 'processed' WHERE key = $1;`;
-      await this.pg.query(sql, [key]);
-    } catch (error) {
-      this.logger.error({
-        event: 'webhook_idempotency_update_failed',
-        key,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    const sql = `
+      UPDATE idempotency_keys
+      SET status = 'completed'
+      WHERE key = $1 AND status = 'processing';
+    `;
+    const result = await this.pg.query(sql, [key]);
+
+    if (result.rowCount !== 1) {
+      throw new Error('Webhook idempotency claim could not be completed');
     }
   }
 
@@ -422,67 +465,127 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
   async claimPendingOutboxEvents(
     batchSize: number,
     now: Date,
+    staleClaimBefore: Date,
   ): Promise<OutboxEventRecord[]> {
+    await this.pg.query(
+      `UPDATE outbox_events SET claimed_at = $1 WHERE status = 'processing' AND claimed_at IS NULL;`,
+      [now],
+    );
+    await this.pg.query(
+      `
+        UPDATE outbox_events
+        SET status = 'dead_lettered',
+            dead_lettered_at = $1,
+            last_error = COALESCE(last_error, 'Worker lease expired after the final attempt'),
+            claimed_at = NULL,
+            claim_token = NULL
+        WHERE status = 'processing'
+          AND attempts >= max_attempts
+          AND claimed_at <= $2;
+      `,
+      [now, staleClaimBefore],
+    );
+
+    const claimToken = randomUUID();
     const sql = `
-      SELECT id, aggregate_id, aggregate_type, event_type, payload, attempts, max_attempts, next_attempt_at
-      FROM outbox_events
-      WHERE status = 'pending'
-        AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
-      ORDER BY created_at ASC
-      LIMIT $2
-      FOR UPDATE SKIP LOCKED;
+      WITH claimable_events AS (
+        SELECT id
+        FROM outbox_events
+        WHERE (
+          status = 'pending'
+          AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+          AND attempts < max_attempts
+        ) OR (
+          status = 'processing'
+          AND claimed_at <= $2
+          AND attempts < max_attempts
+        )
+        ORDER BY created_at ASC, id ASC
+        LIMIT $3
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE outbox_events AS events
+      SET status = 'processing',
+          claimed_at = $1,
+          claim_token = $4,
+          attempts = events.attempts + 1
+      FROM claimable_events
+      WHERE events.id = claimable_events.id
+      RETURNING events.id, events.aggregate_id, events.aggregate_type,
+                events.event_type, events.payload, events.attempts,
+                events.max_attempts, events.claim_token;
     `;
-    const res = await this.pg.query<OutboxEventRecord>(sql, [now, batchSize]);
+    const res = await this.pg.query<OutboxEventRecord>(sql, [
+      now,
+      staleClaimBefore,
+      batchSize,
+      claimToken,
+    ]);
     return res.rows;
   }
 
-  async markOutboxEventProcessing(id: number): Promise<void> {
-    const sql = `UPDATE outbox_events SET status = 'processing' WHERE id = $1;`;
-    await this.pg.query(sql, [id]);
-  }
-
-  async markOutboxEventProcessed(id: number, attempts: number): Promise<void> {
+  async markOutboxEventProcessed(
+    id: number,
+    claimToken: string,
+  ): Promise<void> {
     const sql = `
       UPDATE outbox_events
       SET status = 'processed',
           processed_at = NOW(),
-          attempts = $1,
-          last_error = NULL
-      WHERE id = $2;
+          last_error = NULL,
+          claimed_at = NULL,
+          claim_token = NULL
+      WHERE id = $1 AND claim_token = $2 AND status = 'processing';
     `;
-    await this.pg.query(sql, [attempts, id]);
+    const result = await this.pg.query(sql, [id, claimToken]);
+    if (result.rowCount !== 1) {
+      throw new Error('Outbox event claim was lost before completion');
+    }
   }
 
   async scheduleOutboxEventRetry(
     id: number,
-    attempts: number,
+    claimToken: string,
     nextAttemptAt: Date,
     error: string,
   ): Promise<void> {
     const sql = `
       UPDATE outbox_events
       SET status = 'pending',
-          attempts = $1,
-          last_error = $2,
-          next_attempt_at = $3
-      WHERE id = $4;
+          last_error = $3,
+          next_attempt_at = $4,
+          claimed_at = NULL,
+          claim_token = NULL
+      WHERE id = $1 AND claim_token = $2 AND status = 'processing';
     `;
-    await this.pg.query(sql, [attempts, error, nextAttemptAt, id]);
+    const result = await this.pg.query(sql, [
+      id,
+      claimToken,
+      error,
+      nextAttemptAt,
+    ]);
+    if (result.rowCount !== 1) {
+      throw new Error('Outbox event claim was lost before retry scheduling');
+    }
   }
 
   async deadLetterOutboxEvent(
     id: number,
-    attempts: number,
+    claimToken: string,
     error: string,
   ): Promise<void> {
     const sql = `
       UPDATE outbox_events
       SET status = 'dead_lettered',
-          attempts = $1,
-          last_error = $2,
-          dead_lettered_at = NOW()
-      WHERE id = $3;
+          last_error = $3,
+          dead_lettered_at = NOW(),
+          claimed_at = NULL,
+          claim_token = NULL
+      WHERE id = $1 AND claim_token = $2 AND status = 'processing';
     `;
-    await this.pg.query(sql, [attempts, error, id]);
+    const result = await this.pg.query(sql, [id, claimToken, error]);
+    if (result.rowCount !== 1) {
+      throw new Error('Outbox event claim was lost before dead lettering');
+    }
   }
 }

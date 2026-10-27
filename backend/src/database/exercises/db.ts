@@ -1,13 +1,14 @@
 import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { getRequiredPostgresUrl } from '../database-connection';
 
 // Load .env from project root
 dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 
-export const connectionString =
-  process.env.POSTGRES_URL ||
-  'postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+export const connectionString = getRequiredPostgresUrl(
+  process.env.POSTGRES_URL,
+);
 
 export const pool = new Pool({
   connectionString,

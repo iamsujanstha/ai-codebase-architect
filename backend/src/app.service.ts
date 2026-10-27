@@ -3,6 +3,17 @@ import {
   HEALTH_REPOSITORY_TOKEN,
   IHealthRepository,
 } from './database/repositories/health.repository.interface';
+import type { SystemCounts } from './database/repositories/health.repository.interface';
+
+type DatabaseHealthState = 'connected' | 'disconnected' | 'error';
+
+interface DatabaseHealthDetails {
+  engine: string;
+  provider: string;
+  name: string;
+  state: DatabaseHealthState;
+  counts?: SystemCounts;
+}
 
 @Injectable()
 export class AppService {
@@ -38,32 +49,25 @@ export class AppService {
     };
   }
 
+  /**
+   * Checks database readiness and returns the service health contract.
+   *
+   * @returns Health details with an error status when database readiness fails.
+   */
   async getHealth() {
-    let pgDetails: any = {
+    const databaseReady = this.healthRepo.isDatabaseReady();
+    const databaseDetails: DatabaseHealthDetails = {
       engine: 'postgresql',
       provider: 'neon',
       name: process.env.POSTGRES_DB || 'neondb',
-      state: 'connected',
-      host: 'ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech',
+      state: databaseReady ? 'connected' : 'disconnected',
     };
-
-    if (this.healthRepo.isDatabaseReady()) {
-      try {
-        const counts = await this.healthRepo.getSystemCounts();
-        pgDetails.counts = counts;
-      } catch (err: any) {
-        pgDetails.state = 'error';
-        pgDetails.error = err.message;
-      }
-    }
-
-    return {
-      status: 'ok',
+    const healthDetails = {
       service: 'backend-gateway',
       timestamp: new Date().toISOString(),
       aiServiceUrl: process.env.AI_SERVICE_URL ?? 'http://localhost:8000',
       databaseMode: 'postgres-only',
-      database: pgDetails,
+      database: databaseDetails,
       payments: {
         stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
         esewaConfigured: Boolean(
@@ -71,5 +75,18 @@ export class AppService {
         ),
       },
     };
+
+    if (!databaseReady) {
+      return { status: 'error' as const, ...healthDetails };
+    }
+
+    try {
+      databaseDetails.counts = await this.healthRepo.getSystemCounts();
+    } catch {
+      databaseDetails.state = 'error';
+      return { status: 'error' as const, ...healthDetails };
+    }
+
+    return { status: 'ok' as const, ...healthDetails };
   }
 }

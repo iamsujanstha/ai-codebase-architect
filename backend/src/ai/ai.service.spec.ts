@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { PassThrough } from 'stream';
 import { Response } from 'express';
 import { AiGatewayService } from './ai.service';
@@ -27,6 +28,21 @@ describe('AI gateway provider boundary', () => {
     const result = await new AiGatewayService().listModels();
     expect(result.provider).toBe('mock');
     expect(result.models[0].sizeLabel).toBe('Development fixture');
+  });
+
+  it('maps upstream throttling to 503 without retrying the request', async () => {
+    const throttleError = Object.assign(new Error('Too Many Requests'), {
+      isAxiosError: true,
+      response: { status: 429 },
+    });
+    mockedAxios.isAxiosError.mockReturnValue(true);
+    mockedAxios.post.mockRejectedValue(throttleError);
+
+    await expect(
+      new AiGatewayService().generateResponse('Explain database indexes'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    expect(mockedAxios.post.mock.calls).toHaveLength(1);
   });
 
   it('aborts and destroys the upstream stream when the browser disconnects', async () => {

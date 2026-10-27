@@ -2,8 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { MailSendOptions } from './interfaces/mail-send-options.interface';
+import type { OrderConfirmationEmail } from './interfaces/order-confirmation.interface';
 import { buildOrderConfirmationHtml } from './templates/order-confirmation.template';
 import { buildPasswordResetHtml } from './templates/password-reset.template';
+
+const SMTP_CONNECTION_TIMEOUT_MILLISECONDS = 10_000;
+const SMTP_GREETING_TIMEOUT_MILLISECONDS = 10_000;
+const SMTP_SOCKET_TIMEOUT_MILLISECONDS = 30_000;
 
 /**
  * MailService — thin orchestration layer.
@@ -40,6 +45,9 @@ export class MailService {
         host,
         port,
         secure: port === 465, // 465 = implicit TLS, 587 = STARTTLS
+        connectionTimeout: SMTP_CONNECTION_TIMEOUT_MILLISECONDS,
+        greetingTimeout: SMTP_GREETING_TIMEOUT_MILLISECONDS,
+        socketTimeout: SMTP_SOCKET_TIMEOUT_MILLISECONDS,
         auth: user && pass ? { user, pass } : undefined,
         tls: { rejectUnauthorized: true },
       });
@@ -67,9 +75,13 @@ export class MailService {
 
   // ── public API ────────────────────────────────────────────────────────────
 
-  async sendOrderConfirmation(order: any): Promise<void> {
+  /**
+   * Sends the paid-order receipt through SMTP or logs a local development preview.
+   * @throws SMTP transport errors so the outbox worker can retry delivery.
+   */
+  async sendOrderConfirmation(order: OrderConfirmationEmail): Promise<void> {
     await this.send({
-      to: order.customer?.email as string,
+      to: order.customer.email,
       subject: `Order confirmed — #${order.orderNumber}`,
       html: buildOrderConfirmationHtml(order, this.frontendUrl),
     });
@@ -88,33 +100,22 @@ export class MailService {
 
   private async send(options: MailSendOptions): Promise<void> {
     if (this.transporter) {
-      try {
-        const info = await this.transporter.sendMail({
-          from: this.fromAddress,
-          to: options.to,
-          subject: options.subject,
-          html: options.html,
-        });
-        this.logger.log(
-          `Email sent ✓  to=${options.to}  subject="${options.subject}"  id=${info.messageId}`,
-        );
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        const code = (err as any)?.code ?? '';
-        const response = (err as any)?.response ?? '';
-        this.logger.error(
-          `Email failed  to=${options.to}  ${msg}` +
-            (code ? `  [code: ${code}]` : '') +
-            (response ? `  [smtp: ${response}]` : ''),
-        );
-      }
-    } else {
-      // Dev console fallback — structured so it's easy to spot in logs.
-      this.logger.log('┌── MOCK EMAIL ──────────────────────────────────');
-      this.logger.log(`│  To:      ${options.to}`);
-      this.logger.log(`│  Subject: ${options.subject}`);
-      this.logger.log('│  Set MAIL_HOST in .env to send real emails.');
-      this.logger.log('└────────────────────────────────────────────────');
+      await this.transporter.sendMail({
+        from: this.fromAddress,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      });
+      this.logger.log(
+        `Email sent to=${options.to} subject="${options.subject}"`,
+      );
+      return;
     }
+    // WHY: Local development remains usable without configuring an SMTP server.
+    this.logger.log('┌── MOCK EMAIL ──────────────────────────────────');
+    this.logger.log(`│  To:      ${options.to}`);
+    this.logger.log(`│  Subject: ${options.subject}`);
+    this.logger.log('│  Set MAIL_HOST in .env to send real emails.');
+    this.logger.log('└────────────────────────────────────────────────');
   }
 }

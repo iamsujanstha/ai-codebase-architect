@@ -8,6 +8,7 @@ import { UsersModule } from '../users/users.module';
 import { MailModule } from '../mail/mail.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { getRequiredJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET') || 'fallback_secret',
+        secret: getRequiredJwtSecret(configService.get<string>('JWT_SECRET')),
         signOptions: { expiresIn: '7d' },
       }),
     }),

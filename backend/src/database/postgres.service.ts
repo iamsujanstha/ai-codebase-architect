@@ -6,6 +6,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import {
+  getPostgresSslConfig,
+  getRequiredPostgresUrl,
+} from './database-connection';
+
+const MAX_CONNECTION_ATTEMPTS = 3;
+const CONNECTION_RETRY_DELAY_MILLISECONDS = 2000;
 
 /**
  * ============================================================================
@@ -68,104 +75,68 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
    * Called once by NestJS when the application boots up.
    * Configures the connection pool and performs a health-check handshake.
    */
-  async onModuleInit() {
-    const connectionString =
-      this.configService.get<string>('POSTGRES_URL') ||
-      process.env.POSTGRES_URL;
+  async onModuleInit(): Promise<void> {
+    const connectionString = getRequiredPostgresUrl(
+      this.configService.get<string>('POSTGRES_URL'),
+    );
+    const pool = new Pool({
+      connectionString,
+      ssl: getPostgresSslConfig(this.configService.get<string>('POSTGRES_SSL')),
+      max: Number(
+        this.configService.get<string>('POSTGRES_POOL_MAX') ||
+          process.env.POSTGRES_POOL_MAX ||
+          20,
+      ),
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 30000,
+    });
+    this.pool = pool;
 
-    try {
-      this.pool = new Pool({
-        connectionString,
+    pool.on('error', (error) => {
+      this.logger.error(`PostgreSQL pool client error: ${error.message}`);
+    });
 
-        // SSL / TLS Configuration:
-        // Required for cloud databases (Neon, AWS RDS, Supabase).
-        // rejectUnauthorized: false allows connecting securely via TLS without
-        // needing a local custom CA certificate bundled into the Docker container.
-        ssl: {
-          rejectUnauthorized: false,
-        },
+    let lastConnectionError: unknown;
 
-        // POOL SIZING (CRITICAL FOR SCALE):
-        // `max`: Maximum number of concurrent database connections allowed in the pool.
-        // A single connection in Node.js handles async queries sequentially. A pool of
-        // 20 connections can easily handle 2,000+ requests/sec when queries run in 1-5ms.
-        max: Number(
-          this.configService.get<string>('POSTGRES_POOL_MAX') ||
-            process.env.POSTGRES_POOL_MAX ||
-            20,
-        ),
+    for (let attempt = 1; attempt <= MAX_CONNECTION_ATTEMPTS; attempt += 1) {
+      let client: PoolClient | undefined;
 
-        // IDLE TIMEOUT:
-        // How long an unused socket stays open in the pool before being closed (30s).
-        // Frees server resources on Neon during low-traffic periods.
-        idleTimeoutMillis: 30000,
-
-        // CONNECTION TIMEOUT:
-        // Maximum time to wait when acquiring a connection from the pool before throwing (30s).
-        // Protects against thread starvation if all pool connections are busy.
-        connectionTimeoutMillis: 30000,
-      });
-
-      /**
-       * CRITICAL ERROR HANDLER FOR IDLE POOL CLIENTS:
-       *
-       * In PostgreSQL, an idle connection sitting in the pool can be severed
-       * by the server (e.g., firewall timeout, server restart, network drop).
-       * Without this listener, an unhandled error on an idle socket will cause
-       * the entire Node.js process to exit with an unhandled exception!
-       */
-      this.pool.on('error', (err) => {
-        this.logger.error(`PostgreSQL pool client error: ${err.message}`);
-      });
-
-      /**
-       * RESILIENT CONNECTION HANDSHAKE (NEON COLD-START RETRIES):
-       *
-       * Serverless Postgres (like Neon) suspends compute to 0 when idle.
-       * The very first request after an idle period may take 1-2 seconds while
-       * Neon spins up the VM. If the initial TCP connect times out, we retry
-       * up to 3 times before failing the application startup.
-       */
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          // Borrow a client from the newly created pool
-          const client = await this.pool.connect();
-          try {
-            // Run a lightweight probe query to verify authentication and database name
-            const res = await client.query(
-              'SELECT current_database() as db, version() as ver;',
-            );
-            this.isConnected = true;
-            this.logger.log(
-              `✅ Connected to Neon PostgreSQL database: ${res.rows[0].db}`,
-            );
-            break; // Connection verified successfully
-          } finally {
-            // ALWAYS release the client back to the pool in a finally block!
-            client.release();
-          }
-        } catch (err: any) {
-          retries--;
-          this.logger.warn(
-            `PostgreSQL connect attempt failed: ${err.message}. Retries remaining: ${retries}`,
-          );
-          if (retries === 0) {
-            this.logger.error(
-              `❌ Failed to connect to PostgreSQL after retries: ${err.message}`,
-            );
-          } else {
-            // Exponential/linear backoff: wait 2 seconds before retrying
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-          }
-        }
+      try {
+        client = await pool.connect();
+        const result = await client.query<{ database_name: string }>(
+          'SELECT current_database() AS database_name;',
+        );
+        this.isConnected = true;
+        this.logger.log(
+          `Connected to PostgreSQL database: ${result.rows[0].database_name}`,
+        );
+        return;
+      } catch (error: unknown) {
+        lastConnectionError = error;
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const attemptsRemaining = MAX_CONNECTION_ATTEMPTS - attempt;
+        this.logger.warn(
+          `PostgreSQL connect attempt failed: ${errorMessage}. Retries remaining: ${attemptsRemaining}`,
+        );
+      } finally {
+        client?.release();
       }
-    } catch (err: any) {
-      this.logger.error(
-        `❌ Failed to initialize PostgreSQL pool: ${err.message}`,
-        err.stack,
-      );
+
+      if (attempt < MAX_CONNECTION_ATTEMPTS) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, CONNECTION_RETRY_DELAY_MILLISECONDS),
+        );
+      }
     }
+
+    await pool.end();
+    this.pool = null;
+    this.isConnected = false;
+    this.logger.error(
+      `Failed to connect to PostgreSQL after ${MAX_CONNECTION_ATTEMPTS} attempts`,
+    );
+    throw lastConnectionError;
   }
 
   /**
@@ -179,6 +150,8 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy() {
     if (this.pool) {
       await this.pool.end();
+      this.pool = null;
+      this.isConnected = false;
       this.logger.log('PostgreSQL connection pool closed');
     }
   }
@@ -233,9 +206,9 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
    * @param params Sanitized values matching placeholders [$1, $2, ...]
    * @returns QueryResult containing typed `.rows`
    */
-  async query<T extends QueryResultRow = any>(
+  async query<T extends QueryResultRow = QueryResultRow>(
     text: string,
-    params?: any[],
+    params?: unknown[],
   ): Promise<QueryResult<T>> {
     if (!this.pool) {
       throw new Error('PostgreSQL pool is not initialized');

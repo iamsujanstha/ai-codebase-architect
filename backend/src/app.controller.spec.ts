@@ -1,50 +1,42 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { HttpStatus } from '@nestjs/common';
+import type { Response } from 'express';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { HEALTH_REPOSITORY_TOKEN } from './database/repositories/health.repository.interface';
 
-describe('AppController', () => {
-  let appController: AppController;
+describe('AppController.getHealth', () => {
+  it('returns HTTP 503 when the service reports unavailable', async () => {
+    const health = { status: 'error' };
+    const appService = {
+      getHealth: jest.fn().mockResolvedValue(health),
+    } as unknown as AppService;
+    const response = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as unknown as Response;
+    const controller = new AppController(appService);
 
-  beforeEach(async () => {
-    const app: TestingModule = await Test.createTestingModule({
-      controllers: [AppController],
-      providers: [
-        AppService,
-        {
-          provide: HEALTH_REPOSITORY_TOKEN,
-          useValue: {
-            isDatabaseReady: () => true,
-            getSystemCounts: jest.fn().mockResolvedValue({
-              products: 10,
-              users: 5,
-              orders: 2,
-            }),
-          },
-        },
-      ],
-    }).compile();
+    await controller.getHealth(response);
 
-    appController = app.get<AppController>(AppController);
+    expect(response.status).toHaveBeenCalledWith(
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+    expect(response.json).toHaveBeenCalledWith(health);
   });
 
-  describe('root', () => {
-    it('should describe the gateway service', () => {
-      expect(appController.getOverview()).toEqual(
-        expect.objectContaining({
-          service: 'AI Commerce + Local LLM Backend Gateway',
-        }),
-      );
-    });
+  it('returns HTTP 200 when the service reports healthy', async () => {
+    const health = { status: 'ok' };
+    const appService = {
+      getHealth: jest.fn().mockResolvedValue(health),
+    } as unknown as AppService;
+    const response = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as unknown as Response;
+    const controller = new AppController(appService);
 
-    it('should report healthy status', async () => {
-      const health = await appController.getHealth();
-      expect(health).toEqual(
-        expect.objectContaining({
-          status: 'ok',
-          service: 'backend-gateway',
-        }),
-      );
-    });
+    await controller.getHealth(response);
+
+    expect(response.status).toHaveBeenCalledWith(HttpStatus.OK);
+    expect(response.json).toHaveBeenCalledWith(health);
   });
 });

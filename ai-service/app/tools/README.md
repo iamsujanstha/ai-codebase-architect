@@ -11,4 +11,4 @@ commands, SQL, or provider credentials from model output.
 Keep proposals separate from execution. Writes require a stored action preview,
 user confirmation, idempotency, and a business-layer permission check. Add a
 bounded tool loop to ChatService only after these contracts exist. See
-`docs/application-integration.md` for the proposed endpoint and approval flow.
+`docs/learning/ai-systems/application-integration.md` for the proposed endpoint and approval flow.

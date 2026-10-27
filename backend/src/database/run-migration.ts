@@ -7,17 +7,18 @@
 import { Client } from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
+import {
+  getPostgresSslConfig,
+  getRequiredPostgresUrl,
+} from './database-connection';
+import { applyMigration } from './migration-executor';
 
-const connectionString =
-  process.env.POSTGRES_URL ||
-  'postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+const connectionString = getRequiredPostgresUrl(process.env.POSTGRES_URL);
 
 async function runMigration() {
   const client = new Client({
     connectionString,
-    ssl: {
-      rejectUnauthorized: false,
-    },
+    ssl: getPostgresSslConfig(process.env.POSTGRES_SSL),
   });
 
   try {
@@ -43,7 +44,10 @@ async function runMigration() {
     const usersTableCheck = await client.query(`
       SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users';
     `);
-    if (usersTableCheck.rows.length > 0 && !appliedSet.has('001-initial-schema.sql')) {
+    if (
+      usersTableCheck.rows.length > 0 &&
+      !appliedSet.has('001-initial-schema.sql')
+    ) {
       await client.query(
         'INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING;',
         ['001-initial-schema.sql'],
@@ -69,39 +73,12 @@ async function runMigration() {
       const filePath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(filePath, 'utf-8');
 
-      try {
-        await client.query('BEGIN');
-        
-        // Split statements by semicolon while ignoring comments
-        const cleanedSql = sql
-          .split('\n')
-          .filter((line) => !line.trim().startsWith('--'))
-          .join('\n');
-
-        const statements = cleanedSql
-          .split(';')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-
-        for (const stmt of statements) {
-          console.log(`   🔹 Running: ${stmt.substring(0, 70)}...`);
-          await client.query(stmt);
-        }
-
-        await client.query(
-          'INSERT INTO schema_migrations (version) VALUES ($1);',
-          [file],
-        );
-        await client.query('COMMIT');
-        console.log(`   ✅ Successfully applied: ${file}\n`);
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      }
+      await applyMigration(client, file, sql);
+      console.log(`   ✅ Successfully applied: ${file}\n`);
     }
 
     // Verify active tables
-    const result = await client.query(`
+    const result = await client.query<{ tablename: string }>(`
       SELECT tablename 
       FROM pg_tables 
       WHERE schemaname = 'public'
@@ -122,4 +99,4 @@ async function runMigration() {
   }
 }
 
-runMigration();
+void runMigration();

@@ -1,28 +1,23 @@
-# Backend Service Notes
+# NestJS backend
 
-This folder contains the NestJS API gateway for the AI Code Assistant Platform.
+The backend is a NestJS modular monolith. It exposes catalog, orders, payments, authentication, users, admin, and AI gateway APIs. Controllers validate and map HTTP requests; services coordinate business workflows; repository interfaces isolate PostgreSQL access.
 
-Why a gateway layer exists:
-
-- browsers should not directly orchestrate internal AI services
-- request validation should happen in one trusted backend layer
-- future concerns like auth, rate limiting, billing, and audit logging belong here
-
-Public endpoints:
-
-- `GET /ai/models` — configured provider and available models
-- `POST /ai/generate` — complete JSON response
-- `POST /ai/generate/stream` — NDJSON stream with cancellation propagation
-- `GET /health` — process health
-
-Helpful local commands:
+## Run locally
 
 ```bash
 npm install
 npm run start:dev
 npm run build
-npm run test
+npm test
 ```
 
-For setup and provider extension instructions, read [the starter guide](../docs/provider-starter.md). The gateway is provider-neutral; keys and vendor clients belong in the Python service.
+The backend requires `POSTGRES_URL` for direct startup and Compose. It fails startup after database connection retries are exhausted, and `/health` returns HTTP 503 when database checks fail. See the [database runbook](../docs/RUNBOOKS/postgresql.md).
 
+## Key boundaries
+
+- Feature modules are composed in `src/app.module.ts`.
+- Database repositories implement domain-specific interfaces and injection tokens.
+- AI model-provider credentials and vendor protocols belong to the FastAPI service.
+- Payment gateway details are isolated behind provider adapters.
+
+See the root [system architecture](../ARCHITECTURE.md), [ADRs](../docs/ADRs/), and [runbooks](../docs/RUNBOOKS/).

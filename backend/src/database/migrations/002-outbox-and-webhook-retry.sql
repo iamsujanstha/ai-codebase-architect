@@ -1,5 +1,5 @@
 -- Migration: 002-outbox-and-webhook-retry.sql
--- ADR: docs/architecture/adr/013-outbox-pattern-for-payment-events.md
+-- ADR: docs/ADRs/013-outbox-pattern-for-payment-events.md
 -- SAFE: all additive and idempotent changes only.
 
 -- 1. Create or harden webhook_events table with retry/dead-letter tracking

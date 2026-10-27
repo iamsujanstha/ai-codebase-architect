@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ApiError } from '@/core/api/aiApi';
 import {
@@ -7,6 +7,7 @@ import {
   requestPaymentQuote,
 } from '@/core/api/paymentApi';
 import type {
+  CheckoutCartItemInput,
   CheckoutCustomerInput,
   PaymentQuoteResponse,
 } from '@/core/types/payment';
@@ -71,6 +72,30 @@ export function CheckoutPage(): JSX.Element {
   const [isSubmittingProvider, setIsSubmittingProvider] =
     useState<PaymentProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const checkoutAttemptRef = useRef<{
+    requestFingerprint: string;
+    idempotencyKey: string;
+  } | null>(null);
+
+  function getCheckoutIdempotencyKey(request: {
+    items: CheckoutCartItemInput[];
+    customer: CheckoutCustomerInput;
+  }): string {
+    const requestFingerprint = JSON.stringify(request);
+    if (requestFingerprint === undefined) {
+      throw new Error('Checkout request could not be serialized');
+    }
+
+    if (
+      checkoutAttemptRef.current?.requestFingerprint === requestFingerprint
+    ) {
+      return checkoutAttemptRef.current.idempotencyKey;
+    }
+
+    const idempotencyKey = crypto.randomUUID();
+    checkoutAttemptRef.current = { requestFingerprint, idempotencyKey };
+    return idempotencyKey;
+  }
 
   // Keep the email field in sync if the user logs in after the page mounts
   useEffect(() => {
@@ -163,10 +188,15 @@ export function CheckoutPage(): JSX.Element {
     setError(null);
 
     try {
-      const response = await createStripeCheckoutSession({
+      const checkoutRequest = {
         items: checkoutItems,
         customer,
-      });
+      };
+      const idempotencyKey = getCheckoutIdempotencyKey(checkoutRequest);
+      const response = await createStripeCheckoutSession(
+        checkoutRequest,
+        idempotencyKey,
+      );
 
       window.location.assign(response.checkoutUrl);
     } catch (caughtError) {
@@ -195,10 +225,15 @@ export function CheckoutPage(): JSX.Element {
     setError(null);
 
     try {
-      const response = await createEsewaCheckout({
+      const checkoutRequest = {
         items: checkoutItems,
         customer,
-      });
+      };
+      const idempotencyKey = getCheckoutIdempotencyKey(checkoutRequest);
+      const response = await createEsewaCheckout(
+        checkoutRequest,
+        idempotencyKey,
+      );
 
       const formElement = document.createElement('form');
       formElement.method = response.method;

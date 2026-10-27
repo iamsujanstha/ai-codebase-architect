@@ -5,10 +5,9 @@
  */
 
 import { Client } from 'pg';
+import { getRequiredPostgresUrl } from './database-connection';
 
-const connectionString =
-  process.env.POSTGRES_URL ||
-  'postgresql://neondb_owner:npg_HkO0lvFZzJ1u@ep-super-rice-b34nlx0w-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+const connectionString = getRequiredPostgresUrl(process.env.POSTGRES_URL);
 
 async function runQueries() {
   const client = new Client({

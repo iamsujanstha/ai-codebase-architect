@@ -1,4 +1,5 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { AppService } from './app.service';
 
 @Controller()
@@ -13,9 +14,14 @@ export class AppController {
   }
 
   @Get('health')
-  getHealth() {
-    // Health endpoints are operationally important.
-    // Load balancers, orchestration platforms, and Docker health checks rely on routes like this.
-    return this.appService.getHealth();
+  async getHealth(@Res() response: Response): Promise<void> {
+    // WHY: Orchestrators use HTTP status to keep unready instances out of rotation.
+    const health = await this.appService.getHealth();
+    const statusCode =
+      health.status === 'ok'
+        ? HttpStatus.OK
+        : HttpStatus.SERVICE_UNAVAILABLE;
+
+    response.status(statusCode).json(health);
   }
 }
