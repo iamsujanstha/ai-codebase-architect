@@ -18,6 +18,7 @@ This index points to maintained project documentation. Implementation details sh
 
 ## Learning
 
+- [RabbitMQ production learning path](learning/architecture/RABBITMQ_PRODUCTION_LEARNING.md)
 - [PostgreSQL learning materials](learning/postgresql/)
 - [AI systems and provider integration](learning/ai-systems/)
 - [Career and interview preparation](learning/career/)

@@ -77,7 +77,7 @@ export class MailService {
 
   /**
    * Sends the paid-order receipt through SMTP or logs a local development preview.
-   * @throws SMTP transport errors so the outbox worker can retry delivery.
+   * @throws SMTP transport errors to the calling workflow.
    */
   async sendOrderConfirmation(order: OrderConfirmationEmail): Promise<void> {
     await this.send({

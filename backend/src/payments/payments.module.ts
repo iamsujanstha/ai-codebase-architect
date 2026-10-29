@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
-import { OutboxWorker } from './outbox.worker';
+import { OutboxPublisher } from './outbox.publisher';
 import { MailModule } from '../mail/mail.module';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
@@ -21,7 +21,7 @@ import {
   controllers: [PaymentsController],
   providers: [
     PaymentsService,
-    OutboxWorker,
+    OutboxPublisher,
     IdempotencyInterceptor,
     PostgresPaymentsRepository,
     {

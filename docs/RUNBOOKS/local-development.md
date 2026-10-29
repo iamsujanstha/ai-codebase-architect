@@ -5,6 +5,7 @@
 - Node.js 20 or newer.
 - Python 3.11 or newer for the AI service.
 - PostgreSQL reachable from the backend.
+- RabbitMQ for the order-paid outbox flow; Compose starts a local broker.
 - Docker Compose if using the containerized stack.
 - A configured model provider, such as a local Ollama instance, for real AI responses.
 
@@ -21,7 +22,7 @@ Use `.env.example` as a variable reference and set `POSTGRES_URL` for both direc
 
 ## Run services
 
-Start the frontend and backend with the scripts declared in their package files. Start FastAPI from `ai-service/` with Uvicorn using `app.main:app`. For the containerized stack, use `docker compose up --build` after configuring `POSTGRES_URL` and the other required environment values.
+Start the frontend and backend with the scripts declared in their package files. Start FastAPI from `ai-service/` with Uvicorn using `app.main:app`. For the containerized stack, use `docker compose up --build` after configuring `POSTGRES_URL` and the other required environment values. RabbitMQ management UI is available at `http://localhost:15672`; Compose credentials are local-only. The app reconnects after broker outages and keeps committed payment events in the PostgreSQL outbox for later publication.
 
 ## Health endpoints
 

@@ -1,0 +1,1 @@
+export const ORDER_PAID_SCHEMA_VERSION = 1;

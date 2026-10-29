@@ -8,6 +8,28 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    restart: unless-stopped
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-commerce}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-local-development-only}
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging: *default-logging
+    networks:
+      - app-network
+
   # =========================================================
   # 1. FRONTEND (React SPA + Nginx Reverse Proxy)
   # =========================================================
@@ -84,6 +106,10 @@ services:
       MAIL_PASS: ${MAIL_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-"Atlas Commerce Lab" <noreply@atlascommerce.dev>}
 
+      # WHY: PostgreSQL remains the event source while RabbitMQ transports work to independent consumers.
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_USER:-commerce}:${RABBITMQ_PASSWORD:-local-development-only}@rabbitmq:5672}
+      RABBITMQ_QUEUE_TYPE: ${RABBITMQ_QUEUE_TYPE:-classic}
+
       # Payments
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
@@ -100,6 +126,8 @@ services:
     depends_on:
       ai-service:
         condition: service_healthy
+      rabbitmq:
+        condition: service_started
 
     healthcheck:
       test:
@@ -113,6 +141,31 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    logging: *default-logging
+    networks:
+      - app-network
+
+  rabbitmq-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["node", "dist/workers/rabbitmq-worker.main.js"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      POSTGRES_URL: ${POSTGRES_URL:?Set POSTGRES_URL in .env}
+      POSTGRES_SSL: ${POSTGRES_SSL:-true}
+      FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-http://localhost:8080}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASS: ${MAIL_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-"Atlas Commerce Lab" <noreply@atlascommerce.dev>}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_USER:-commerce}:${RABBITMQ_PASSWORD:-local-development-only}@rabbitmq:5672}
+      RABBITMQ_QUEUE_TYPE: ${RABBITMQ_QUEUE_TYPE:-classic}
+    depends_on:
+      rabbitmq:
+        condition: service_started
     logging: *default-logging
     networks:
       - app-network
@@ -183,3 +236,6 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  rabbitmq-data:

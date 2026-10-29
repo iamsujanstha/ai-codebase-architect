@@ -4,6 +4,7 @@
   "sourceRoot": "src",
   "x-learningNotes": "Nest CLI uses this file to understand where source lives and how builds should behave.",
   "compilerOptions": {
-    "deleteOutDir": true
+    "deleteOutDir": true,
+    "assets": ["database/migrations/*.sql"]
   }
 }

@@ -17,8 +17,11 @@ flowchart LR
     AI -. optional retrieval .-> Retrieval[Qdrant / vector-store adapters]
     API --> Stripe[Stripe Checkout and webhooks]
     API --> Esewa[eSewa ePay and status API]
-    PG --> Outbox[Payment outbox worker]
-    Outbox --> Mail[SMTP]
+    PG --> Outbox[Outbox publisher]
+    Outbox --> Rabbit[RabbitMQ]
+    Rabbit --> Consumer[Order-paid consumer]
+    Consumer --> PG
+    Consumer --> Mail[SMTP]
 ```
 
 ## Request and ownership boundaries
@@ -39,7 +42,8 @@ flowchart LR
 - `backend/` is a NestJS modular monolith. `backend/src/app.module.ts` wires catalog, payment, user, authentication, order, admin, AI, and database modules.
 - PostgreSQL is the commerce and application database. The backend uses the `pg` pool and repository implementations; it does not use MongoDB or Mongoose.
 - `ai-service/` is a FastAPI application. It supports Ollama, mock, OpenAI, Claude, Gemini, and OpenAI-compatible provider adapters. Retrieval defaults to disabled; Qdrant retrieval is optional.
-- Stripe and eSewa are external payment providers. SMTP is used for mail side effects.
+- Stripe and eSewa are external payment providers. Order-paid inventory and email effects flow through RabbitMQ after PostgreSQL outbox dispatch; password-reset mail remains direct SMTP.
+- RabbitMQ runs as a local Compose service for the learning topology. PostgreSQL remains the atomic event source and buffers payment events while RabbitMQ is disconnected.
 - `ai-service/app/jobs/ingestion.py` can enqueue Qdrant indexing through Redis/RQ. Compose does not currently define a Redis or RQ worker service, so that path requires separately provisioned infrastructure.
 
 ## Request flows
@@ -50,7 +54,7 @@ flowchart LR
 2. A controller validates the input and calls a domain service.
 3. The service calls repository interfaces for database reads and writes.
 4. Checkout is priced by the backend and delegated to a Stripe or eSewa provider adapter.
-5. Provider callbacks are verified before the backend changes order state. Payment side effects are handled through the outbox workflow.
+5. Provider callbacks are verified before the backend changes order state. The transaction records the order update and outbox event; an outbox publisher forwards it to RabbitMQ for inventory and email consumers.
 
 ### AI generation
 
@@ -70,5 +74,5 @@ flowchart LR
 
 - Compose and `PostgresService` use the required `POSTGRES_URL` connection string. Startup fails after connection retries are exhausted, and `/health` reports HTTP 503 when database checks fail.
 - AI concurrency limits are process-local. Multiple Uvicorn workers or replicas multiply the effective number of simultaneous model calls.
-- Retrieval and document ingestion are optional capabilities. A Redis/RQ deployment is not part of the checked-in Compose topology.
+- Retrieval and document ingestion are optional capabilities. Redis/RQ is not part of the checked-in Compose topology; RabbitMQ is used for order-paid events.
 - The root README and some historical docs may still contain older MongoDB/Mongoose claims. Treat implementation, migrations, Compose, and current ADRs as the source of truth until those documents are reconciled.

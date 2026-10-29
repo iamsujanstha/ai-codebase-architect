@@ -513,7 +513,7 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
       WHERE events.id = claimable_events.id
       RETURNING events.id, events.aggregate_id, events.aggregate_type,
                 events.event_type, events.payload, events.attempts,
-                events.max_attempts, events.claim_token;
+                events.max_attempts, events.claim_token, events.created_at;
     `;
     const res = await this.pg.query<OutboxEventRecord>(sql, [
       now,
@@ -524,14 +524,14 @@ export class PostgresPaymentsRepository implements IPaymentsRepository {
     return res.rows;
   }
 
-  async markOutboxEventProcessed(
+  async markOutboxEventPublished(
     id: number,
     claimToken: string,
   ): Promise<void> {
     const sql = `
       UPDATE outbox_events
-      SET status = 'processed',
-          processed_at = NOW(),
+      SET status = 'published',
+          published_at = NOW(),
           last_error = NULL,
           claimed_at = NULL,
           claim_token = NULL

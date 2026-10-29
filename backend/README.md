@@ -13,6 +13,8 @@ npm test
 
 The backend requires `POSTGRES_URL` for direct startup and Compose. It fails startup after database connection retries are exhausted, and `/health` returns HTTP 503 when database checks fail. See the [database runbook](../docs/RUNBOOKS/postgresql.md).
 
+Order-paid email and inventory effects flow through the PostgreSQL outbox and RabbitMQ. RabbitMQ connection state is reported in `/health`; a broker outage leaves committed events buffered in PostgreSQL for later publication. See the [RabbitMQ learning guide](../docs/learning/architecture/RABBITMQ_PRODUCTION_LEARNING.md).
+
 ## Key boundaries
 
 - Feature modules are composed in `src/app.module.ts`.

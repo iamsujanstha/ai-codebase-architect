@@ -11,11 +11,13 @@ import { OrdersModule } from './orders/orders.module';
 import { AdminModule } from './admin/admin.module';
 import { DatabaseModule } from './database/database.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { RabbitMqModule } from './messaging/rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
+    RabbitMqModule,
     AiModule,
     CatalogModule,
     PaymentsModule,

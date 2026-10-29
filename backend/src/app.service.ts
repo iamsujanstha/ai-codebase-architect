@@ -4,6 +4,10 @@ import {
   IHealthRepository,
 } from './database/repositories/health.repository.interface';
 import type { SystemCounts } from './database/repositories/health.repository.interface';
+import {
+  EVENT_PUBLISHER_TOKEN,
+  IEventPublisher,
+} from './messaging/contracts/event-publisher.interface';
 
 type DatabaseHealthState = 'connected' | 'disconnected' | 'error';
 
@@ -20,6 +24,8 @@ export class AppService {
   constructor(
     @Inject(HEALTH_REPOSITORY_TOKEN)
     private readonly healthRepo: IHealthRepository,
+    @Inject(EVENT_PUBLISHER_TOKEN)
+    private readonly eventPublisher: IEventPublisher,
   ) {}
 
   getOverview() {
@@ -68,6 +74,10 @@ export class AppService {
       aiServiceUrl: process.env.AI_SERVICE_URL ?? 'http://localhost:8000',
       databaseMode: 'postgres-only',
       database: databaseDetails,
+      messaging: {
+        state: this.eventPublisher.isAvailable() ? 'connected' : 'disconnected',
+        outboxBuffering: true,
+      },
       payments: {
         stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
         esewaConfigured: Boolean(

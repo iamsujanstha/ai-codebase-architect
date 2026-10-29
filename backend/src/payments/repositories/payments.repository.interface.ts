@@ -67,6 +67,7 @@ export interface OutboxEventRecord {
   aggregate_type: string;
   event_type: string;
   payload: unknown;
+  created_at: Date | string;
   attempts: number;
   max_attempts: number;
   claim_token: string;
@@ -108,7 +109,7 @@ export interface IPaymentsRepository {
     now: Date,
     staleClaimBefore: Date,
   ): Promise<OutboxEventRecord[]>;
-  markOutboxEventProcessed(id: number, claimToken: string): Promise<void>;
+  markOutboxEventPublished(id: number, claimToken: string): Promise<void>;
   scheduleOutboxEventRetry(
     id: number,
     claimToken: string,
