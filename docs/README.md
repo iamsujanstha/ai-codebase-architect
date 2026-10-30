@@ -8,6 +8,7 @@ This index points to maintained project documentation. Implementation details sh
 - [Architecture decision records](ADRs/) — numbered decisions, including superseded decisions retained for history.
 - [Architecture gap analysis](architecture/ARCHITECTURE_GAP_ANALYSIS.md) — prior production-readiness findings; verify status before relying on recommendations.
 - [Admin brief](architecture/AGENT_BRIEF_ADMIN.md) — admin feature context.
+- [RabbitMQ architecture](architecture/rabbitmq-architecture.md) — how RabbitMQ fits into the app, topology, retry flow, and code walkthrough.
 
 ## Runbooks
 
