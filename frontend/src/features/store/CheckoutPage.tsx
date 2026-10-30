@@ -4,6 +4,7 @@ import { ApiError } from '@/core/api/aiApi';
 import {
   createEsewaCheckout,
   createStripeCheckoutSession,
+  generateIdempotencyKey,
   requestPaymentQuote,
 } from '@/core/api/paymentApi';
 import type {
@@ -92,7 +93,7 @@ export function CheckoutPage(): JSX.Element {
       return checkoutAttemptRef.current.idempotencyKey;
     }
 
-    const idempotencyKey = crypto.randomUUID();
+    const idempotencyKey = generateIdempotencyKey();
     checkoutAttemptRef.current = { requestFingerprint, idempotencyKey };
     return idempotencyKey;
   }

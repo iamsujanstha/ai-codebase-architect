@@ -104,18 +104,38 @@ export function requestPaymentQuote(
   });
 }
 
+export function generateIdempotencyKey(): string {
+  if (
+    typeof window !== 'undefined' &&
+    window.crypto &&
+    typeof window.crypto.randomUUID === 'function'
+  ) {
+    return window.crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export function createStripeCheckoutSession(
   input: {
     items: CheckoutCartItemInput[];
     customer: CheckoutCustomerInput;
   },
-  idempotencyKey: string,
+  idempotencyKey?: string,
 ): Promise<CreateStripeCheckoutSessionResponse> {
+  const key =
+    idempotencyKey && idempotencyKey.trim().length >= 16
+      ? idempotencyKey.trim()
+      : generateIdempotencyKey();
+
   return requestJson<CreateStripeCheckoutSessionResponse>(
     '/payments/stripe/checkout-session',
     {
       method: 'POST',
-      headers: { 'Idempotency-Key': idempotencyKey },
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(input),
     },
     true, // requires auth
@@ -127,13 +147,18 @@ export function createEsewaCheckout(
     items: CheckoutCartItemInput[];
     customer: CheckoutCustomerInput;
   },
-  idempotencyKey: string,
+  idempotencyKey?: string,
 ): Promise<EsewaCheckoutResponse> {
+  const key =
+    idempotencyKey && idempotencyKey.trim().length >= 16
+      ? idempotencyKey.trim()
+      : generateIdempotencyKey();
+
   return requestJson<EsewaCheckoutResponse>(
     '/payments/esewa/initiate',
     {
       method: 'POST',
-      headers: { 'Idempotency-Key': idempotencyKey },
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(input),
     },
     true,

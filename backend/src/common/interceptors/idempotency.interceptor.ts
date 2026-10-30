@@ -56,7 +56,11 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const request = context
       .switchToHttp()
       .getRequest<AuthenticatedPaymentRequest>();
-    const idempotencyKey = request.header(IDEMPOTENCY_HEADER)?.trim();
+    const rawKey =
+      request.header(IDEMPOTENCY_HEADER) ??
+      (request.headers[IDEMPOTENCY_HEADER] as string | undefined) ??
+      (request.headers['idempotency-key'] as string | undefined);
+    const idempotencyKey = typeof rawKey === 'string' ? rawKey.trim() : undefined;
 
     if (!idempotencyKey || !this.isValidIdempotencyKey(idempotencyKey)) {
       throw new BadRequestException(
