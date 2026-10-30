@@ -1,7 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { EventEnvelope } from '../messaging/contracts/event-envelope.interface';
-import { InvalidEventError } from '../messaging/contracts/invalid-event.error';
-import { ORDER_PAID_EVENT_TYPE } from '../messaging/contracts/event-types';
+import {
+  ORDER_PAID_EVENT_TYPE,
+  InvalidEventError,
+  type EventEnvelope,
+} from '../messaging/contracts';
 import { ORDER_PAID_SCHEMA_VERSION } from './interfaces/order-paid-event.constants';
 import { MailService } from '../mail/mail.service';
 import type { OrderConfirmationEmail } from '../mail/interfaces/order-confirmation.interface';
@@ -10,7 +12,10 @@ import {
   PAYMENTS_REPOSITORY_TOKEN,
 } from './repositories/payments.repository.interface';
 
-interface OrderPaidPayload {
+/**
+ * Payload contract received within the order.paid event envelope.
+ */
+export interface OrderPaidPayload {
   provider: string;
   providerReference: string | null;
   paymentReference: string | null;
@@ -27,10 +32,21 @@ interface OrderPaidPayload {
   }>;
 }
 
+/**
+ * Domain consumer responsible for processing order payment side-effects.
+ *
+ * Why needed:
+ * Isolates non-critical asynchronous side-effects (stock decrement and email delivery)
+ * away from the critical payment webhook path, allowing them to run reliably in worker processes.
+ */
 @Injectable()
 export class OrderPaidConsumer {
   private readonly logger = new Logger(OrderPaidConsumer.name);
 
+  /**
+   * Injects domain repository and mailing service dependencies.
+   * Why needed: Enables database operations (stock updates) and external mail delivery.
+   */
   constructor(
     @Inject(PAYMENTS_REPOSITORY_TOKEN)
     private readonly paymentsRepo: IPaymentsRepository,
@@ -38,27 +54,37 @@ export class OrderPaidConsumer {
   ) {}
 
   /**
-   * Applies order-paid effects from the transport-neutral event contract.
-   * @throws InvalidEventError when the event cannot be handled as order.paid.
+   * Applies order-paid effects from the event envelope.
+   *
+   * Why needed:
+   * 1. Validates event type and schema version to prevent processing unsupported contracts.
+   * 2. Decrements product inventory idempotently using eventId.
+   * 3. Sends confirmation email to the customer with invoice details.
+   *
+   * @param event The generic event envelope received from RabbitMQ
+   * @throws InvalidEventError when event type, version, or payload fails validation
    */
   async handle(event: EventEnvelope): Promise<void> {
     if (
       event.eventType !== ORDER_PAID_EVENT_TYPE ||
       event.schemaVersion !== ORDER_PAID_SCHEMA_VERSION
     ) {
-      throw new InvalidEventError('Unsupported order-paid event version');
+      throw new InvalidEventError('Unsupported order-paid event version or type');
     }
-    const payload = this.parseOrderPaidPayload(event.payload);
+
+    const payload = this.parsePayload(event.payload);
     const orderNumber = event.aggregateId;
-    const stockItems = payload.items.map((item) => ({
+    const stockItems = (payload.items ?? []).map((item) => ({
       productId: Number(item.productId),
       quantity: item.quantity,
     }));
 
+    // Step 1: Idempotently decrement inventory stock in the database
     if (stockItems.length > 0) {
       await this.paymentsRepo.decrementProductStock(event.eventId, stockItems);
     }
 
+    // Step 2: Send customer order confirmation email via SMTP
     await this.mailService.sendOrderConfirmation({
       orderNumber,
       paymentProvider: payload.provider,
@@ -76,71 +102,19 @@ export class OrderPaidConsumer {
     });
   }
 
-  private parseOrderPaidPayload(payload: unknown): OrderPaidPayload {
-    if (!isOrderPaidPayload(payload)) {
-      throw new InvalidEventError('Order-paid event payload failed validation');
+  /**
+   * Validates and casts raw payload object.
+   *
+   * Why needed: Ensures runtime safety so malformed or empty payloads are rejected
+   * early before accessing nested properties.
+   *
+   * @param payload Raw payload from event envelope
+   * @throws InvalidEventError if payload is null or not an object
+   */
+  private parsePayload(payload: unknown): OrderPaidPayload {
+    if (!payload || typeof payload !== 'object') {
+      throw new InvalidEventError('Order-paid event payload must be an object');
     }
-    return payload;
+    return payload as OrderPaidPayload;
   }
-}
-
-function isOrderPaidPayload(value: unknown): value is OrderPaidPayload {
-  if (typeof value !== 'object' || value === null) return false;
-  const payload = value as Record<string, unknown>;
-  return (
-    typeof payload.provider === 'string' &&
-    (typeof payload.providerReference === 'string' ||
-      payload.providerReference === null) &&
-    (typeof payload.paymentReference === 'string' ||
-      payload.paymentReference === null) &&
-    typeof payload.paidAt === 'string' &&
-    isCustomer(payload.customer) &&
-    isPricing(payload.pricing) &&
-    Array.isArray(payload.items) &&
-    payload.items.every(isOrderPaidItem)
-  );
-}
-
-function isCustomer(
-  value: unknown,
-): value is OrderConfirmationEmail['customer'] {
-  return (
-    isObject(value) &&
-    typeof value.fullName === 'string' &&
-    typeof value.email === 'string'
-  );
-}
-
-function isPricing(value: unknown): value is OrderConfirmationEmail['pricing'] {
-  return (
-    isObject(value) &&
-    typeof value.currency === 'string' &&
-    typeof value.subtotal === 'number' &&
-    typeof value.taxAmount === 'number' &&
-    typeof value.serviceCharge === 'number' &&
-    typeof value.deliveryCharge === 'number' &&
-    typeof value.total === 'number'
-  );
-}
-
-function isOrderPaidItem(value: unknown): boolean {
-  if (!isObject(value)) return false;
-  return (
-    typeof value.productId === 'string' &&
-    /^\d+$/.test(value.productId) &&
-    Number.isSafeInteger(Number(value.productId)) &&
-    Number(value.productId) > 0 &&
-    Number.isSafeInteger(value.quantity) &&
-    Number(value.quantity) > 0 &&
-    typeof value.name === 'string' &&
-    typeof value.unitAmount === 'number' &&
-    Number.isFinite(value.unitAmount) &&
-    typeof value.lineTotal === 'number' &&
-    Number.isFinite(value.lineTotal) &&
-    typeof value.currency === 'string'
-  );
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

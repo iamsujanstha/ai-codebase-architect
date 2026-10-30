@@ -1,9 +1,9 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import {
   EVENT_CONSUMER_TOKEN,
-  IEventConsumer,
-} from '../messaging/contracts/event-consumer.interface';
-import { ORDER_PAID_EVENT_TYPE } from '../messaging/contracts/event-types';
+  ORDER_PAID_EVENT_TYPE,
+  type IEventConsumer,
+} from '../messaging/contracts';
 import { OrderPaidConsumer } from './order-paid.consumer';
 
 @Injectable()

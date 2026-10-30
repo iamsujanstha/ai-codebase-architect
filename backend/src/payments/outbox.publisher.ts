@@ -5,10 +5,12 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { EVENT_PUBLISHER_TOKEN } from '../messaging/contracts/event-publisher.interface';
-import type { IEventPublisher } from '../messaging/contracts/event-publisher.interface';
-import type { EventEnvelope } from '../messaging/contracts/event-envelope.interface';
-import { ORDER_PAID_EVENT_TYPE } from '../messaging/contracts/event-types';
+import {
+  EVENT_PUBLISHER_TOKEN,
+  ORDER_PAID_EVENT_TYPE,
+  type IEventPublisher,
+  type EventEnvelope,
+} from '../messaging/contracts';
 import { ORDER_PAID_SCHEMA_VERSION } from './interfaces/order-paid-event.constants';
 import {
   IPaymentsRepository,
