@@ -145,11 +145,11 @@ services:
     networks:
       - app-network
 
-  rabbitmq-worker:
+  backend-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: ["node", "dist/workers/rabbitmq-worker.main.js"]
+    command: ["node", "dist/workers/backend-worker.main.js"]
     restart: unless-stopped
     environment:
       NODE_ENV: production

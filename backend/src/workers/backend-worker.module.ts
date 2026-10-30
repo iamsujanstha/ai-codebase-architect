@@ -25,4 +25,4 @@ import { PAYMENTS_REPOSITORY_TOKEN } from '../payments/repositories/payments.rep
     },
   ],
 })
-export class RabbitMqWorkerModule {}
+export class BackendWorkerModule {}

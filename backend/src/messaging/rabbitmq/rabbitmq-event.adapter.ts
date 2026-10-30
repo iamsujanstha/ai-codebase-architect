@@ -201,13 +201,9 @@ export class RabbitMqEventAdapter
       RABBITMQ_TOPOLOGY.routingKeys.orderPaid,
     );
 
-    // 3. Assert Primary Order-Paid Queue with Dead-Letter configuration
+    // 3. Assert Primary Order-Paid Queue (matching existing broker queue declaration)
     await channel.assertQueue(RABBITMQ_TOPOLOGY.queues.orderPaid, {
       durable: true,
-      arguments: {
-        'x-dead-letter-exchange': RABBITMQ_TOPOLOGY.exchanges.deadLetter,
-        'x-dead-letter-routing-key': RABBITMQ_TOPOLOGY.routingKeys.orderPaid,
-      },
     });
 
     await channel.bindQueue(
@@ -263,7 +259,7 @@ export class RabbitMqEventAdapter
           eventType: event.eventType,
           messageId,
         });
-        channel.nack(message, false, false); // Route to Dead Letter Queue
+        await this.forwardToDeadLetter(channel, message);
         return;
       }
 
@@ -277,8 +273,44 @@ export class RabbitMqEventAdapter
         messageId,
         error: errorMessage,
       });
-      // nack without requeue triggers RabbitMQ native x-dead-letter-exchange
-      channel.nack(message, false, false);
+      await this.forwardToDeadLetter(channel, message);
+    }
+  }
+
+  /**
+   * Forwards failed or unroutable messages to the dead-letter exchange and ACKs the original message.
+   * Why needed: Routes failed messages into the dead-letter queue without requiring
+   * immutable x-dead-letter-exchange arguments on the existing queue.
+   *
+   * @param channel Active confirm channel
+   * @param message Raw consume message to forward
+   */
+  private async forwardToDeadLetter(
+    channel: ConfirmChannel,
+    message: ConsumeMessage,
+  ): Promise<void> {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        channel.publish(
+          RABBITMQ_TOPOLOGY.exchanges.deadLetter,
+          RABBITMQ_TOPOLOGY.routingKeys.orderPaid,
+          message.content,
+          {
+            persistent: true,
+            contentType: message.properties.contentType,
+            messageId: message.properties.messageId,
+            timestamp: Date.now(),
+          },
+          (err) => (err ? reject(err) : resolve()),
+        );
+      });
+    } catch (error: unknown) {
+      this.logger.error({
+        event: 'rabbitmq_dead_letter_publish_failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      channel.ack(message);
     }
   }
 

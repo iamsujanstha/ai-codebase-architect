@@ -5,7 +5,7 @@ This guide describes the implementation in ADR-017 and prepares you to reason ab
 ## Run the flow locally
 
 1. Set `POSTGRES_URL` and the usual application configuration in `.env`.
-2. Run `docker compose up --build`; Compose starts the API/outbox publisher and the separate `rabbitmq-worker` process.
+2. Run `docker compose up --build`; Compose starts the API/outbox publisher and the separate `backend-worker` process.
 3. Apply database migrations using the project's migration process.
 4. Make a successful test payment through the existing local payment flow.
 5. Open `http://localhost:15672` and sign in with the local `RABBITMQ_USER` and `RABBITMQ_PASSWORD` values.

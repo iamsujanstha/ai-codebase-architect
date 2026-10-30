@@ -187,7 +187,7 @@ sequenceDiagram
     participant API as Backend API Process
     participant Postgres as PostgreSQL (Neon)
     participant RMQ as RabbitMQ Broker
-    participant Worker as Worker Process (rabbitmq-worker)
+    participant Worker as Worker Process (backend-worker)
     actor Mail as Mail Server (SMTP)
 
     Customer->>Stripe: Completes checkout
@@ -233,7 +233,7 @@ Our codebase uses a **modular architecture** where the API and the Worker share 
                     ▼                                                 ▼
         ┌───────────────────────┐                         ┌───────────────────────┐
         │   Process 1: API      │                         │  Process 2: Worker    │
-        │  (main.ts)            │                         │  (rabbitmq-worker)    │
+        │  (main.ts)            │                         │  (backend-worker)     │
         ├───────────────────────┤                         ├───────────────────────┤
         │ • Listens on HTTP 3000│                         │ • No HTTP port        │
         │ • Serves REST/GraphQL │                         │ • Runs in background  │
@@ -243,8 +243,8 @@ Our codebase uses a **modular architecture** where the API and the Worker share 
 ```
 
 - **Boot API Server:** `npm run start:dev` (runs `src/main.ts`)
-- **Boot Background Worker:** `npx ts-node -r tsconfig-paths/register src/workers/rabbitmq-worker.main.ts`
-- **Docker Compose:** Handled automatically by the `backend` and `rabbitmq-worker` services in `docker-compose.yml`.
+- **Boot Background Worker:** `npx ts-node -r tsconfig-paths/register src/workers/backend-worker.main.ts`
+- **Docker Compose:** Handled automatically by the `backend` and `backend-worker` services in `docker-compose.yml`.
 
 ---
 
@@ -378,7 +378,7 @@ export class OrderShippedEventRegistration implements OnModuleInit {
 }
 ```
 
-Add your consumer and registration to [`rabbitmq-worker.module.ts`](file:///Users/mac/Developer/AI/ai-codebase-architect/backend/src/workers/rabbitmq-worker.module.ts). That's it!
+Add your consumer and registration to [`backend-worker.module.ts`](file:///Users/mac/Developer/AI/ai-codebase-architect/backend/src/workers/backend-worker.module.ts). That's it!
 
 ---
 
@@ -422,7 +422,7 @@ RabbitMQ includes a built-in web dashboard.
 
 | Tab | What to Inspect |
 |---|---|
-| **Connections** | Shows 2 connections: one from `backend` (API publisher) and one from `rabbitmq-worker` (consumer). |
+| **Connections** | Shows 2 connections: one from `backend` (API publisher) and one from `backend-worker` (consumer). |
 | **Channels** | Shows the active channels and prefetch limits (default: 5 concurrent messages). |
 | **Exchanges** | View `commerce.events` (topic routing), `commerce.retry`, and `commerce.dead`. |
 | **Queues** | Check `commerce.order-paid` for **Ready** (waiting to be processed) and **Unacked** (currently being worked on). If messages fail repeatedly, look inside `commerce.order-paid.dead`. |
@@ -440,6 +440,6 @@ RabbitMQ includes a built-in web dashboard.
 | [`rabbitmq.module.ts`](file:///Users/mac/Developer/AI/ai-codebase-architect/backend/src/messaging/rabbitmq/rabbitmq.module.ts) | NestJS module exporting `EVENT_PUBLISHER_TOKEN` and `EVENT_CONSUMER_TOKEN`. |
 | [`event-envelope.interface.ts`](file:///Users/mac/Developer/AI/ai-codebase-architect/backend/src/messaging/contracts/event-envelope.interface.ts) | Transport-neutral message shape (`eventId`, `eventType`, `payload`, etc.). |
 | [`outbox.publisher.ts`](file:///Users/mac/Developer/AI/ai-codebase-architect/backend/src/payments/outbox.publisher.ts) | API Poller: polls `outbox_events` table and publishes confirmed messages to RabbitMQ. |
-| [`rabbitmq-worker.main.ts`](file:///Users/mac/Developer/AI/ai-codebase-architect/backend/src/workers/rabbitmq-worker.main.ts) | Entry point for the independent background worker process. |
+| [`backend-worker.main.ts`](file:///Users/mac/Developer/AI/ai-codebase-architect/backend/src/workers/backend-worker.main.ts) | Entry point for the independent background worker process. |
 | [`order-paid.consumer.ts`](file:///Users/mac/Developer/AI/ai-codebase-architect/backend/src/payments/order-paid.consumer.ts) | Domain logic handler: decrements product stock and sends confirmation emails. |
 | [`017-rabbitmq-for-outbox-dispatch.md`](file:///Users/mac/Developer/AI/ai-codebase-architect/docs/ADRs/017-rabbitmq-for-outbox-dispatch.md) | Architecture Decision Record (ADR) detailing why RabbitMQ was chosen over Redis/BullMQ. |
