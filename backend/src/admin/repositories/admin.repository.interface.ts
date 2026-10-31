@@ -45,7 +45,9 @@ export interface IAdminRepository {
   }): Promise<{ orders: any[]; total: number }>;
   findOrderById(id: number): Promise<any | null>;
   updateOrderStatus(id: number, status: string): Promise<any>;
-  getCategoryCounts(): Promise<Array<{ id: string; name: string; count: number }>>;
+  getCategoryCounts(): Promise<
+    Array<{ id: string; name: string; count: number }>
+  >;
 }
 
 export const ADMIN_REPOSITORY_TOKEN = Symbol('IAdminRepository');

@@ -58,6 +58,9 @@ export class ChatThreadsService {
   /** Delete a thread — silently succeeds if it doesn't exist. */
   async deleteThread(userId: string, clientThreadId: string): Promise<void> {
     const numericUserId = parseInt(userId, 10) || 1;
-    await this.threadsRepo.deleteByClientThreadId(numericUserId, clientThreadId);
+    await this.threadsRepo.deleteByClientThreadId(
+      numericUserId,
+      clientThreadId,
+    );
   }
 }

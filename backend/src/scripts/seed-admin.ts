@@ -177,7 +177,15 @@ async function seedAdmin() {
         await pg.query(
           `INSERT INTO products (name, description, price, stock, category, status, sku, featured, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW(), NOW());`,
-          [p.title, p.description, p.price, p.stock, p.category, p.status, p.sku],
+          [
+            p.title,
+            p.description,
+            p.price,
+            p.stock,
+            p.category,
+            p.status,
+            p.sku,
+          ],
         );
       }
     }

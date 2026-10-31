@@ -163,8 +163,7 @@ export class EsewaProvider implements IEsewaProvider {
     } catch (error) {
       return {
         verified: false,
-        failureReason:
-          error instanceof Error ? error.message : String(error),
+        failureReason: error instanceof Error ? error.message : String(error),
       };
     }
 

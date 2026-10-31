@@ -17,4 +17,3 @@ import { ADMIN_REPOSITORY_TOKEN } from './repositories/admin.repository.interfac
   exports: [AdminService, ADMIN_REPOSITORY_TOKEN, PostgresAdminRepository],
 })
 export class AdminModule {}
-

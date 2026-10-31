@@ -1,9 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PostgresService } from '../postgres.service';
-import {
-  IHealthRepository,
-  SystemCounts,
-} from './health.repository.interface';
+import { IHealthRepository, SystemCounts } from './health.repository.interface';
 
 @Injectable()
 export class PostgresHealthRepository implements IHealthRepository {

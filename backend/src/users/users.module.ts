@@ -15,4 +15,3 @@ import { USERS_REPOSITORY_TOKEN } from './repositories/users.repository.interfac
   exports: [UsersService, USERS_REPOSITORY_TOKEN, PostgresUsersRepository],
 })
 export class UsersModule {}
-

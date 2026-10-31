@@ -1,9 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PostgresService } from '../../database/postgres.service';
-import {
-  AdminStatsData,
-  IAdminRepository,
-} from './admin.repository.interface';
+import { AdminStatsData, IAdminRepository } from './admin.repository.interface';
 
 @Injectable()
 export class PostgresAdminRepository implements IAdminRepository {
@@ -26,8 +23,12 @@ export class PostgresAdminRepository implements IAdminRepository {
       this.pg.query<{ count: number }>(
         "SELECT COUNT(*)::int AS count FROM products WHERE deleted_at IS NULL AND status != 'draft';",
       ),
-      this.pg.query<{ count: number }>('SELECT COUNT(*)::int AS count FROM users;'),
-      this.pg.query<{ count: number }>('SELECT COUNT(*)::int AS count FROM orders;'),
+      this.pg.query<{ count: number }>(
+        'SELECT COUNT(*)::int AS count FROM users;',
+      ),
+      this.pg.query<{ count: number }>(
+        'SELECT COUNT(*)::int AS count FROM orders;',
+      ),
       this.pg.query<{ total: string }>(
         `SELECT COALESCE(SUM(total_amount), 0) AS total
          FROM orders

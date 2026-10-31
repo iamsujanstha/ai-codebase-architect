@@ -30,8 +30,11 @@ const IDEMPOTENCY_TTL_MILLISECONDS =
   SECONDS_PER_MINUTE *
   MILLISECONDS_PER_SECOND;
 
-interface AuthenticatedPaymentRequest
-  extends Request<Record<string, string>, unknown, unknown> {
+interface AuthenticatedPaymentRequest extends Request<
+  Record<string, string>,
+  unknown,
+  unknown
+> {
   user?: { id?: number | string };
 }
 
@@ -60,7 +63,8 @@ export class IdempotencyInterceptor implements NestInterceptor {
       request.header(IDEMPOTENCY_HEADER) ??
       (request.headers[IDEMPOTENCY_HEADER] as string | undefined) ??
       (request.headers['idempotency-key'] as string | undefined);
-    const idempotencyKey = typeof rawKey === 'string' ? rawKey.trim() : undefined;
+    const idempotencyKey =
+      typeof rawKey === 'string' ? rawKey.trim() : undefined;
 
     if (!idempotencyKey || !this.isValidIdempotencyKey(idempotencyKey)) {
       throw new BadRequestException(

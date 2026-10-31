@@ -18,9 +18,7 @@ export class AppController {
     // WHY: Orchestrators use HTTP status to keep unready instances out of rotation.
     const health = await this.appService.getHealth();
     const statusCode =
-      health.status === 'ok'
-        ? HttpStatus.OK
-        : HttpStatus.SERVICE_UNAVAILABLE;
+      health.status === 'ok' ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
 
     response.status(statusCode).json(health);
   }

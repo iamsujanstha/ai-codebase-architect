@@ -17,10 +17,9 @@ export async function applyMigration(
 
   try {
     await client.query(migrationSql);
-    await client.query(
-      'INSERT INTO schema_migrations (version) VALUES ($1);',
-      [version],
-    );
+    await client.query('INSERT INTO schema_migrations (version) VALUES ($1);', [
+      version,
+    ]);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
