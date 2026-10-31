@@ -10,6 +10,11 @@ export const RABBITMQ_TOPOLOGY = {
   },
   queues: {
     orderPaid: 'commerce.order-paid',
+    orderPaidRetries: [
+      { name: 'commerce.order-paid.retry.5s', delayMs: 5_000 },
+      { name: 'commerce.order-paid.retry.30s', delayMs: 30_000 },
+      { name: 'commerce.order-paid.retry.5m', delayMs: 300_000 },
+    ],
     orderPaidDeadLetter: 'commerce.order-paid.dead',
   },
   routingKeys: {
@@ -22,6 +27,7 @@ export const RABBITMQ_TOPOLOGY = {
  */
 export const RABBITMQ_DEFAULTS = {
   prefetch: 5,
-  maxDeliveryAttempts: 3,
+  maxDeliveryAttempts: 5,
+  maxMessageBytes: 1_048_576,
   reconnectDelayMs: 5_000,
 } as const;

@@ -69,7 +69,17 @@ export class OrderPaidConsumer {
       event.eventType !== ORDER_PAID_EVENT_TYPE ||
       event.schemaVersion !== ORDER_PAID_SCHEMA_VERSION
     ) {
-      throw new InvalidEventError('Unsupported order-paid event version or type');
+      throw new InvalidEventError(
+        'Unsupported order-paid event version or type',
+      );
+    }
+
+    // Local failure injection verifies RabbitMQ dead-letter handling before any side effects run.
+    if (
+      process.env.NODE_ENV === 'development' &&
+      process.env.FORCE_ORDER_PAID_CONSUMER_FAILURE === 'true'
+    ) {
+      throw new Error('LOCAL_TEST_FORCED_FAILURE');
     }
 
     const payload = this.parsePayload(event.payload);
